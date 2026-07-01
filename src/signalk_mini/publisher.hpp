@@ -1,0 +1,46 @@
+#pragma once
+
+#include <stddef.h>
+#include <stdint.h>
+#include <async_event_loop.hpp>
+#include "config.hpp"
+#include "json/signalk_delta_writer.hpp"
+#include "model_store.hpp"
+#include "signalk_mapper.hpp"
+
+namespace signalk_mini {
+
+template<typename Real>
+class SignalKPublisher {
+public:
+    SignalKPublisher(ModelStore<Real>& store, const SignalKMiniConfig& config)
+        : store_(store), config_(config) {}
+
+    template<typename ClientRegistry>
+    void publish_pending(ClientRegistry& clients) {
+        SignalKMapper<Real> mapper;
+        SignalKDeltaWriter<Real> writer;
+        ModelChange change;
+        size_t emitted = 0;
+        while (emitted < max_changes_per_tick && store_.changes().pop(change)) {
+            SignalKMappedValue<Real> mapped;
+            if (!mapper.map_change(store_.model(), change, mapped) || !mapped.path) continue;
+            char json[json_buffer_size];
+            const int len = writer.write_mapped(json, sizeof(json), config_.source_label, mapped);
+            if (len <= 0 || static_cast<size_t>(len) >= sizeof(json)) continue;
+            clients.for_each([&](async_event_loop::ITcpConnection& peer) {
+                peer.write(reinterpret_cast<const uint8_t*>(json), static_cast<size_t>(len));
+            });
+            ++emitted;
+        }
+    }
+
+    static constexpr size_t json_buffer_size = 512;
+    static constexpr size_t max_changes_per_tick = 32;
+
+private:
+    ModelStore<Real>& store_;
+    const SignalKMiniConfig& config_;
+};
+
+} // namespace signalk_mini
