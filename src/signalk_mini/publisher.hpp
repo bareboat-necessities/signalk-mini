@@ -28,7 +28,7 @@ public:
             char json[512];
             const int len = writer.write_mapped(json, sizeof(json), config_.source_label, mapped);
             if (len <= 0 || static_cast<size_t>(len) >= sizeof(json)) continue;
-            clients.for_each([&](async_event_loop::ITcpConnection& peer) {
+            clients.for_each_tx([&](async_event_loop::ITcpConnection& peer) {
                 peer.write(reinterpret_cast<const uint8_t*>(json), static_cast<size_t>(len));
             });
             ++emitted;
