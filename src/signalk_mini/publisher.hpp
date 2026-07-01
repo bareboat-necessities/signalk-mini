@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <async_event_loop.hpp>
 #include "config.hpp"
-#include "json/signalk_delta_writer.hpp"
+#include "signalk_delta_writer.hpp"
 #include "model_store.hpp"
 #include "signalk_mapper.hpp"
 
@@ -28,8 +28,8 @@ public:
             char json[512];
             const int len = writer.write_mapped(json, sizeof(json), config_.source_label, mapped);
             if (len <= 0 || static_cast<size_t>(len) >= sizeof(json)) continue;
-            clients.for_each_tx([&](async_event_loop::ITcpConnection& peer) {
-                peer.write(reinterpret_cast<const uint8_t*>(json), static_cast<size_t>(len));
+            clients.for_each_tx([&](async_event_loop::ITcpConnection& connection) {
+                connection.write(reinterpret_cast<const uint8_t*>(json), static_cast<size_t>(len));
             });
             ++emitted;
         }
