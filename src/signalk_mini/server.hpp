@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stddef.h>
+
 #if defined(ARDUINO)
 #define ASYNC_EVENT_LOOP_ENABLE_ARDUINO_WIFI_TCP
 #endif
@@ -23,15 +25,9 @@ public:
 
     bool begin() {
         if (!loop_.valid()) return false;
-        if (cfg_.enable_signalk_tcp && !listen(sk_server_, sk_lines_, cfg_.host, cfg_.signalk_port)) return false;
-        if (cfg_.enable_nmea0183_tcp_server && !listen(nmea_server_, nmea_lines_, cfg_.nmea0183_tcp_server_host, cfg_.nmea0183_tcp_server_port)) return false;
-        if (cfg_.enable_nmea0183_tcp_client) {
-            async_event_loop::TcpConnectOptions o;
-            o.host = cfg_.nmea0183_tcp_client_host;
-            o.port = cfg_.nmea0183_tcp_client_port;
-            nmea_client_.connect(o, nmea_client_cb_);
-        }
-        timer_ = loop_.on_repeat_us(cfg_.publish_interval_us, [this]() { publish(); });
+        if (!listen(sk_server_, sk_lines_, cfg_.signalk.host, cfg_.signalk.port)) return false;
+        start_configured_connectors();
+        timer_ = loop_.on_repeat_us(cfg_.publisher.interval_us, [this]() { publish(); });
         return static_cast<bool>(timer_);
     }
 
@@ -59,9 +55,29 @@ private:
         return s.listen(o, h);
     }
 
+    void start_configured_connectors() {
+        const size_t count = cfg_.connector_count <= max_connector_configs ? cfg_.connector_count : max_connector_configs;
+        for (size_t i = 0; i < count; ++i) {
+            const ConnectorConfig& c = cfg_.connectors[i];
+            if (!c.enabled) continue;
+            if (c.kind == ConnectorKind::Nmea0183TcpClient && !nmea_client_started_) {
+                nmea_client_flags_ = ConnectionFlags{c.allow_rx, c.allow_tx};
+                async_event_loop::TcpConnectOptions o;
+                o.host = c.host;
+                o.port = c.port;
+                nmea_client_.connect(o, nmea_client_cb_);
+                nmea_client_started_ = true;
+            } else if (c.kind == ConnectorKind::Nmea0183TcpServer && !nmea_server_started_) {
+                nmea_server_flags_ = ConnectionFlags{c.allow_rx, c.allow_tx};
+                nmea_server_started_ = listen(nmea_server_, nmea_lines_, c.host, c.port);
+            }
+        }
+    }
+
     void handle_nmea_line(const char* text, SourceId source_id) {
         if (nmea_.feed_line(text, source_id, loop_.clock().micros())) publish();
     }
+
     void publish() { publisher_.publish_pending(sk_.clients); }
 
     struct SkHandler : async_event_loop::ITcpLineServerHandler {
@@ -69,7 +85,7 @@ private:
         MiniSignalKServer& owner;
         ConnectionRegistry<MaxSignalKClients> clients;
         void on_accept(async_event_loop::ITcpConnection& c, const async_event_loop::TcpPeerInfo&) override {
-            ConnectionFlags flags{owner.cfg_.signalk_tcp_allow_rx, owner.cfg_.signalk_tcp_allow_tx};
+            ConnectionFlags flags{owner.cfg_.signalk.allow_rx, owner.cfg_.signalk.allow_tx};
             if (!clients.add(c, flags)) c.close();
         }
         void on_line(async_event_loop::ITcpConnection& c, async_event_loop::LineView) override {
@@ -86,8 +102,7 @@ private:
         MiniSignalKServer& owner;
         ConnectionRegistry<MaxNmeaSources> sources;
         void on_accept(async_event_loop::ITcpConnection& c, const async_event_loop::TcpPeerInfo&) override {
-            ConnectionFlags flags{owner.cfg_.nmea0183_tcp_server_allow_rx, owner.cfg_.nmea0183_tcp_server_allow_tx};
-            if (!sources.add(c, flags)) c.close();
+            if (!sources.add(c, owner.nmea_server_flags_)) c.close();
         }
         void on_line(async_event_loop::ITcpConnection& c, async_event_loop::LineView line) override {
             if (!sources.allow_rx(c)) return;
@@ -104,7 +119,7 @@ private:
         explicit NmeaClientHandler(MiniSignalKServer& o) : owner(o) {}
         MiniSignalKServer& owner;
         void on_data(async_event_loop::ITcpConnection& c) override {
-            if (!owner.cfg_.nmea0183_tcp_client_allow_rx) return;
+            if (!owner.nmea_client_flags_.allow_rx) return;
             char text[160];
             while (c.read_line(text, sizeof(text))) owner.handle_nmea_line(text, SourceId(2));
         }
@@ -125,6 +140,10 @@ private:
     NmeaClientHandler nmea_client_cb_;
     async_event_loop::TcpLineServerHandler<256, MaxSignalKClients> sk_lines_;
     async_event_loop::TcpLineServerHandler<192, MaxNmeaSources> nmea_lines_;
+    ConnectionFlags nmea_server_flags_{true, false};
+    ConnectionFlags nmea_client_flags_{true, false};
+    bool nmea_server_started_ = false;
+    bool nmea_client_started_ = false;
     async_event_loop::EventHandle timer_{};
 };
 
