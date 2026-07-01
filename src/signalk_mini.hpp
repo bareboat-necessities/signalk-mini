@@ -1,54 +1,52 @@
 #pragma once
 
-#include <stddef.h>
 #include <stdint.h>
-#include <string.h>
+#include <stddef.h>
 
 #include <ship_data_model.hpp>
 #include <nmea0183_connector.hpp>
 
 namespace signalk_mini {
 
-enum class ModelFieldId : uint16_t {
-    unknown,
-    navigation_fix_lat_deg,
-    navigation_fix_lon_deg,
-    navigation_gps_speed_kn,
-    navigation_gps_track_deg,
-    navigation_heading_deg,
-    wind_apparent_direction_deg,
-    wind_apparent_speed_kn,
-    wind_true_direction_deg,
-    wind_true_speed_kn,
-    water_depth_m,
-    water_depth_offset_m
+using SourceId = uint16_t;
+
+enum class ModelField : uint16_t {
+    None = 0,
+    NavigationGpsFixLatDeg,
+    NavigationGpsFixLonDeg,
+    NavigationGpsSpeedKn,
+    NavigationGpsTrackDeg,
+    ImuHeadingDeg,
+    WindApparentDirectionDeg,
+    WindApparentSpeedKn,
+    WaterDepthM,
 };
 
 struct ModelChange {
-    ModelFieldId field = ModelFieldId::unknown;
-    uint16_t source_id = 0;
+    ModelField field = ModelField::None;
+    SourceId source_id = 0;
     uint64_t timestamp_us = 0;
     uint64_t sequence = 0;
 };
 
-template<size_t N>
+template<size_t Capacity>
 class ModelChangeQueue {
 public:
     bool push(const ModelChange& change) {
-        if (count_ == N) {
-            tail_ = (tail_ + 1u) % N;
+        if (count_ == Capacity) {
+            tail_ = (tail_ + 1) % Capacity;
             --count_;
         }
-        queue_[head_] = change;
-        head_ = (head_ + 1u) % N;
+        items_[head_] = change;
+        head_ = (head_ + 1) % Capacity;
         ++count_;
         return true;
     }
 
-    bool pop(ModelChange& out) {
+    bool pop(ModelChange& change) {
         if (count_ == 0) return false;
-        out = queue_[tail_];
-        tail_ = (tail_ + 1u) % N;
+        change = items_[tail_];
+        tail_ = (tail_ + 1) % Capacity;
         --count_;
         return true;
     }
@@ -56,45 +54,104 @@ public:
     size_t size() const { return count_; }
 
 private:
-    ModelChange queue_[N]{};
+    ModelChange items_[Capacity]{};
     size_t head_ = 0;
     size_t tail_ = 0;
     size_t count_ = 0;
 };
 
-template<typename Real, size_t ChangeCapacity = 128>
+template<typename Real, size_t QueueCapacity = 128>
 class ModelStore {
 public:
-    ship_data_model::DataModel<Real>& model() { return model_; }
-    const ship_data_model::DataModel<Real>& model() const { return model_; }
+    using Model = ship_data_model::DataModel<Real>;
 
-    ModelChangeQueue<ChangeCapacity>& changes() { return changes_; }
+    Model& model() { return model_; }
+    const Model& model() const { return model_; }
+
+    ModelChangeQueue<QueueCapacity>& changes() { return changes_; }
     uint64_t sequence() const { return sequence_; }
 
-    void mark_changed(ModelFieldId field, uint16_t source_id, uint64_t now_us) {
-        changes_.push(ModelChange{field, source_id, now_us, ++sequence_});
+    void mark_changed(ModelField field, SourceId source_id, uint64_t now_us) {
+        ModelChange change;
+        change.field = field;
+        change.source_id = source_id;
+        change.timestamp_us = now_us;
+        change.sequence = ++sequence_;
+        changes_.push(change);
     }
 
 private:
-    ship_data_model::DataModel<Real> model_{};
-    ModelChangeQueue<ChangeCapacity> changes_{};
+    Model model_{};
+    ModelChangeQueue<QueueCapacity> changes_{};
     uint64_t sequence_ = 0;
 };
 
 template<typename Real>
-constexpr Real pi_v() {
-    return static_cast<Real>(3.1415926535897932384626433832795L);
-}
+class Nmea0183Input {
+public:
+    explicit Nmea0183Input(ModelStore<Real>& store) : store_(store) {}
+
+    bool feed_line(const char* line, SourceId source_id, uint64_t now_us) {
+        nmea0183_connector::NmeaSentence sentence;
+        if (!parser_.parse_line(line, sentence)) return false;
+
+        const bool applied = rx_.apply_sentence(
+            sentence,
+            store_.model(),
+            now_us,
+            ship_data_model::SensorSource::serial
+        );
+        if (!applied) return false;
+
+        mark_changed_from_sentence(sentence, source_id, now_us);
+        return true;
+    }
+
+    const char* last_error() const { return rx_.last_error(); }
+
+private:
+    void mark_changed_from_sentence(const nmea0183_connector::NmeaSentence& sentence, SourceId source_id, uint64_t now_us) {
+        if (nmea0183_connector::sentence_is(sentence, "RMC") ||
+            nmea0183_connector::sentence_is(sentence, "GGA") ||
+            nmea0183_connector::sentence_is(sentence, "GLL")) {
+            store_.mark_changed(ModelField::NavigationGpsFixLatDeg, source_id, now_us);
+            store_.mark_changed(ModelField::NavigationGpsFixLonDeg, source_id, now_us);
+        }
+        if (nmea0183_connector::sentence_is(sentence, "RMC") ||
+            nmea0183_connector::sentence_is(sentence, "VTG")) {
+            store_.mark_changed(ModelField::NavigationGpsSpeedKn, source_id, now_us);
+            store_.mark_changed(ModelField::NavigationGpsTrackDeg, source_id, now_us);
+        }
+        if (nmea0183_connector::sentence_is(sentence, "HDT") ||
+            nmea0183_connector::sentence_is(sentence, "HDM") ||
+            nmea0183_connector::sentence_is(sentence, "HDG")) {
+            store_.mark_changed(ModelField::ImuHeadingDeg, source_id, now_us);
+        }
+        if (nmea0183_connector::sentence_is(sentence, "MWV") ||
+            nmea0183_connector::sentence_is(sentence, "MWD") ||
+            nmea0183_connector::sentence_is(sentence, "VWR")) {
+            store_.mark_changed(ModelField::WindApparentDirectionDeg, source_id, now_us);
+            store_.mark_changed(ModelField::WindApparentSpeedKn, source_id, now_us);
+        }
+        if (nmea0183_connector::sentence_is(sentence, "DBT") ||
+            nmea0183_connector::sentence_is(sentence, "DPT")) {
+            store_.mark_changed(ModelField::WaterDepthM, source_id, now_us);
+        }
+    }
+
+    ModelStore<Real>& store_;
+    nmea0183_connector::Nmea0183StreamParser parser_;
+    nmea0183_connector::Nmea0183RxConnector<Real> rx_;
+};
 
 template<typename Real>
-constexpr Real deg_to_rad(Real deg) {
-    return deg * pi_v<Real>() / static_cast<Real>(180);
-}
+constexpr Real pi_v() { return static_cast<Real>(3.1415926535897932384626433832795L); }
 
 template<typename Real>
-constexpr Real knots_to_mps(Real knots) {
-    return knots * static_cast<Real>(0.51444444444444444444L);
-}
+constexpr Real deg_to_rad(Real deg) { return deg * pi_v<Real>() / static_cast<Real>(180); }
+
+template<typename Real>
+constexpr Real knots_to_mps(Real knots) { return knots * static_cast<Real>(0.51444444444444444444L); }
 
 template<typename Real>
 struct SignalKMappedValue {
@@ -105,146 +162,55 @@ struct SignalKMappedValue {
 template<typename Real>
 class SignalKMapper {
 public:
-    bool map_change(
-        const ship_data_model::DataModel<Real>& model,
-        const ModelChange& change,
-        SignalKMappedValue<Real>& out
-    ) const {
+    bool map_change(const ship_data_model::DataModel<Real>& model, const ModelChange& change, SignalKMappedValue<Real>& out) const {
         switch (change.field) {
-        case ModelFieldId::navigation_gps_speed_kn:
-            if (!model.navigation.gps.speed_kn.valid) return false;
+        case ModelField::NavigationGpsFixLatDeg:
+            out.path = "navigation.position.value.latitude";
+            out.number = model.navigation.gps.fix_lat_deg.value;
+            return model.navigation.gps.fix_lat_deg.valid;
+        case ModelField::NavigationGpsFixLonDeg:
+            out.path = "navigation.position.value.longitude";
+            out.number = model.navigation.gps.fix_lon_deg.value;
+            return model.navigation.gps.fix_lon_deg.valid;
+        case ModelField::NavigationGpsSpeedKn:
             out.path = "navigation.speedOverGround";
             out.number = knots_to_mps<Real>(model.navigation.gps.speed_kn.value);
-            return true;
-        case ModelFieldId::navigation_gps_track_deg:
-            if (!model.navigation.gps.track_deg.valid) return false;
+            return model.navigation.gps.speed_kn.valid;
+        case ModelField::NavigationGpsTrackDeg:
             out.path = "navigation.courseOverGroundTrue";
             out.number = deg_to_rad<Real>(model.navigation.gps.track_deg.value);
-            return true;
-        case ModelFieldId::navigation_heading_deg:
-            if (!model.imu.heading_deg.valid) return false;
+            return model.navigation.gps.track_deg.valid;
+        case ModelField::ImuHeadingDeg:
             out.path = "navigation.headingTrue";
             out.number = deg_to_rad<Real>(model.imu.heading_deg.value);
-            return true;
-        case ModelFieldId::wind_apparent_direction_deg:
-            if (!model.wind.apparent.direction_deg.valid) return false;
+            return model.imu.heading_deg.valid;
+        case ModelField::WindApparentDirectionDeg:
             out.path = "environment.wind.angleApparent";
             out.number = deg_to_rad<Real>(model.wind.apparent.direction_deg.value);
-            return true;
-        case ModelFieldId::wind_apparent_speed_kn:
-            if (!model.wind.apparent.speed_kn.valid) return false;
+            return model.wind.apparent.direction_deg.valid;
+        case ModelField::WindApparentSpeedKn:
             out.path = "environment.wind.speedApparent";
             out.number = knots_to_mps<Real>(model.wind.apparent.speed_kn.value);
-            return true;
-        case ModelFieldId::wind_true_direction_deg:
-            if (!model.wind.truewind.direction_deg.valid) return false;
-            out.path = "environment.wind.angleTrueWater";
-            out.number = deg_to_rad<Real>(model.wind.truewind.direction_deg.value);
-            return true;
-        case ModelFieldId::wind_true_speed_kn:
-            if (!model.wind.truewind.speed_kn.valid) return false;
-            out.path = "environment.wind.speedTrue";
-            out.number = knots_to_mps<Real>(model.wind.truewind.speed_kn.value);
-            return true;
-        case ModelFieldId::water_depth_m:
-            if (!model.water.depth_m.valid) return false;
+            return model.wind.apparent.speed_kn.valid;
+        case ModelField::WaterDepthM:
             out.path = "environment.depth.belowTransducer";
             out.number = model.water.depth_m.value;
-            return true;
+            return model.water.depth_m.valid;
         default:
             return false;
         }
     }
 };
 
-template<typename Real>
-class Nmea0183Input {
+template<typename Real = float>
+class SignalKMiniApp {
 public:
-    explicit Nmea0183Input(ModelStore<Real>& store) : store_(store) {}
-
-    bool feed_line(const char* line, uint16_t source_id, uint64_t now_us) {
-        nmea0183_connector::NmeaSentence sentence;
-        if (!parser_.parse_line(line, sentence)) return false;
-        Snapshot before(store_.model());
-        bool ok = rx_.apply_sentence(sentence, store_.model(), now_us, ship_data_model::SensorSource::serial);
-        if (ok) record_changes(before, source_id, now_us);
-        return ok;
-    }
-
-    bool feed_byte(char c, uint16_t source_id, uint64_t now_us) {
-        nmea0183_connector::NmeaSentence sentence;
-        if (!parser_.push(c, sentence)) return false;
-        Snapshot before(store_.model());
-        bool ok = rx_.apply_sentence(sentence, store_.model(), now_us, ship_data_model::SensorSource::serial);
-        if (ok) record_changes(before, source_id, now_us);
-        return ok;
-    }
-
-    const char* last_error() const {
-        const char* rx_error = rx_.last_error();
-        if (rx_error && rx_error[0]) return rx_error;
-        return parser_.last_error();
-    }
-
+    using Store = ModelStore<Real>;
+    Store& store() { return store_; }
+    Nmea0183Input<Real>& nmea0183() { return nmea0183_; }
 private:
-    using Model = ship_data_model::DataModel<Real>;
-
-    struct StampState {
-        StampState() = default;
-        StampState(bool v, uint64_t t) : valid(v), last_update_us(t) {}
-        bool valid = false;
-        uint64_t last_update_us = 0;
-    };
-
-    struct Snapshot {
-        explicit Snapshot(const Model& m)
-            : lat(m.navigation.gps.fix_lat_deg.valid, m.navigation.gps.fix_lat_deg.last_update_us),
-              lon(m.navigation.gps.fix_lon_deg.valid, m.navigation.gps.fix_lon_deg.last_update_us),
-              speed(m.navigation.gps.speed_kn.valid, m.navigation.gps.speed_kn.last_update_us),
-              track(m.navigation.gps.track_deg.valid, m.navigation.gps.track_deg.last_update_us),
-              heading(m.imu.heading_deg.valid, m.imu.heading_deg.last_update_us),
-              wind_dir(m.wind.apparent.direction_deg.valid, m.wind.apparent.direction_deg.last_update_us),
-              wind_speed(m.wind.apparent.speed_kn.valid, m.wind.apparent.speed_kn.last_update_us),
-              true_wind_dir(m.wind.truewind.direction_deg.valid, m.wind.truewind.direction_deg.last_update_us),
-              true_wind_speed(m.wind.truewind.speed_kn.valid, m.wind.truewind.speed_kn.last_update_us),
-              depth(m.water.depth_m.valid, m.water.depth_m.last_update_us),
-              depth_offset(m.water.depth_offset_m.valid, m.water.depth_offset_m.last_update_us) {}
-
-        StampState lat;
-        StampState lon;
-        StampState speed;
-        StampState track;
-        StampState heading;
-        StampState wind_dir;
-        StampState wind_speed;
-        StampState true_wind_dir;
-        StampState true_wind_speed;
-        StampState depth;
-        StampState depth_offset;
-    };
-
-    static bool changed(const StampState& before, bool valid, uint64_t stamp) {
-        return valid && (!before.valid || before.last_update_us != stamp);
-    }
-
-    void record_changes(const Snapshot& before, uint16_t source_id, uint64_t now_us) {
-        const Model& m = store_.model();
-        if (changed(before.lat, m.navigation.gps.fix_lat_deg.valid, m.navigation.gps.fix_lat_deg.last_update_us)) store_.mark_changed(ModelFieldId::navigation_fix_lat_deg, source_id, now_us);
-        if (changed(before.lon, m.navigation.gps.fix_lon_deg.valid, m.navigation.gps.fix_lon_deg.last_update_us)) store_.mark_changed(ModelFieldId::navigation_fix_lon_deg, source_id, now_us);
-        if (changed(before.speed, m.navigation.gps.speed_kn.valid, m.navigation.gps.speed_kn.last_update_us)) store_.mark_changed(ModelFieldId::navigation_gps_speed_kn, source_id, now_us);
-        if (changed(before.track, m.navigation.gps.track_deg.valid, m.navigation.gps.track_deg.last_update_us)) store_.mark_changed(ModelFieldId::navigation_gps_track_deg, source_id, now_us);
-        if (changed(before.heading, m.imu.heading_deg.valid, m.imu.heading_deg.last_update_us)) store_.mark_changed(ModelFieldId::navigation_heading_deg, source_id, now_us);
-        if (changed(before.wind_dir, m.wind.apparent.direction_deg.valid, m.wind.apparent.direction_deg.last_update_us)) store_.mark_changed(ModelFieldId::wind_apparent_direction_deg, source_id, now_us);
-        if (changed(before.wind_speed, m.wind.apparent.speed_kn.valid, m.wind.apparent.speed_kn.last_update_us)) store_.mark_changed(ModelFieldId::wind_apparent_speed_kn, source_id, now_us);
-        if (changed(before.true_wind_dir, m.wind.truewind.direction_deg.valid, m.wind.truewind.direction_deg.last_update_us)) store_.mark_changed(ModelFieldId::wind_true_direction_deg, source_id, now_us);
-        if (changed(before.true_wind_speed, m.wind.truewind.speed_kn.valid, m.wind.truewind.speed_kn.last_update_us)) store_.mark_changed(ModelFieldId::wind_true_speed_kn, source_id, now_us);
-        if (changed(before.depth, m.water.depth_m.valid, m.water.depth_m.last_update_us)) store_.mark_changed(ModelFieldId::water_depth_m, source_id, now_us);
-        if (changed(before.depth_offset, m.water.depth_offset_m.valid, m.water.depth_offset_m.last_update_us)) store_.mark_changed(ModelFieldId::water_depth_offset_m, source_id, now_us);
-    }
-
-    ModelStore<Real>& store_;
-    nmea0183_connector::Nmea0183StreamParser parser_;
-    nmea0183_connector::Nmea0183RxConnector<Real> rx_;
+    Store store_{};
+    Nmea0183Input<Real> nmea0183_{store_};
 };
 
 } // namespace signalk_mini

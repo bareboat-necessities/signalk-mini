@@ -1,39 +1,25 @@
 # signalk-mini
 
-Lightweight low-latency C++ marine data server for Arduino and Linux.
+Lightweight low-latency C++ Signal K mini server for Arduino and Linux.
 
-This repository is organized around the planned architecture:
+This stage vendors the actual uploaded source modules as source copies under stable module names:
 
-- `modules/async-event-loop`: git submodule pointing to the full async event loop project.
-- `modules/data-model`: git submodule pointing to the full strongly typed marine/autopilot data model.
-- `modules/nmea0183`: git submodule pointing to the full NMEA0183 connector/parser/formatter project.
-- `src`: signalk-mini composition layer that owns model store, change queue, NMEA input adapter, and Signal K mapper scaffolding.
-- `linux`: first executable scaffold.
-- `tests`: signalk-mini integration stage test using realistic NMEA input.
+- `modules/async-event-loop/src`
+- `modules/nmea0183/src`
+- `modules/data-model/src`
 
-Core project rules:
+Only module sources are copied. The imported module tests, examples, docs, workflows, and package metadata are intentionally not copied into `modules/`.
 
-- The app is single-threaded. The event-loop thread owns and mutates the data model.
-- The internal store is a strongly typed `ship_data_model::DataModel<Real>`, not a Signal K JSON tree.
-- Signal K is an output adapter layer above the typed model.
-- Core code is parameterized as `template<typename Real>`; `float` is only a default instantiation.
-- Data model fields should be unit-explicit. The imported model already carries many suffixes such as `_deg`, `_kn`, `_m`, `_hz`, `_a`, and `_s`; the next data-model cleanup stage should normalize new canonical speed fields to `_mps` for signalk-mini output boundaries.
-- ArduinoJson v7.4.3 is configured as the JSON dependency for protocol boundary code.
-- NMEA0183 writes typed data-model fields and does not know Signal K paths.
+Project direction:
 
-The current signalk-mini wrapper uses the imported NMEA0183 connector and imported data model, and verifies RMC/HDT/MWV/DPT flow into the model plus Signal K mapping for the starter paths. The imported NMEA module already contains broader sentence support and module tests; the next stage should add realistic corpus/golden tests for the full sentence matrix.
+- single-threaded event-loop architecture
+- strongly typed internal data model, not Signal K as store
+- Signal K as an output adapter layer
+- `template<typename Real>` through core paths, with `float` as the default instantiation
+- unit suffixes preserved in data model field names
+- ArduinoJson v7 at the JSON/config/protocol boundary
 
-## Clone
-
-```bash
-git clone --recurse-submodules https://github.com/bareboat-necessities/signalk-mini.git
-```
-
-If already cloned:
-
-```bash
-git submodule update --init --recursive
-```
+Current smoke build verifies that NMEA0183 input updates the typed data model and that the Signal K mapper can map model changes to Signal K paths. It is not the final server implementation yet.
 
 ## Build
 
@@ -41,10 +27,4 @@ git submodule update --init --recursive
 cmake -S . -B build -DSIGNALK_MINI_FETCH_ARDUINOJSON=OFF
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
-```
-
-## First stdin prototype
-
-```bash
-./build/signalk-mini < fixtures/nmea0183/coastal_gps_wind_depth.nmea
 ```
