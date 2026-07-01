@@ -22,11 +22,11 @@ public:
         SignalKDeltaWriter<Real> writer;
         ModelChange change;
         size_t emitted = 0;
-        while (emitted < max_changes_per_tick && store_.changes().pop(change)) {
+        while (emitted < config_.publisher.max_changes_per_tick && store_.changes().pop(change)) {
             SignalKMappedValue<Real> mapped;
             if (!mapper.map_change(store_.model(), change, mapped) || !mapped.path) continue;
-            char json[json_buffer_size];
-            const int len = writer.write_mapped(json, sizeof(json), config_.source_label, mapped);
+            char json[512];
+            const int len = writer.write_mapped(json, sizeof(json), config_.publisher.source_label, mapped);
             if (len <= 0 || static_cast<size_t>(len) >= sizeof(json)) continue;
             clients.for_each([&](async_event_loop::ITcpConnection& peer) {
                 peer.write(reinterpret_cast<const uint8_t*>(json), static_cast<size_t>(len));
@@ -34,9 +34,6 @@ public:
             ++emitted;
         }
     }
-
-    static constexpr size_t json_buffer_size = 512;
-    static constexpr size_t max_changes_per_tick = 32;
 
 private:
     ModelStore<Real>& store_;
