@@ -1,9 +1,0 @@
-[submodule "modules/async-event-loop"]
-	path = modules/async-event-loop
-	url = https://github.com/bareboat-necessities/pypilot-event-loop.git
-[submodule "modules/data-model"]
-	path = modules/data-model
-	url = https://github.com/bareboat-necessities/pypilot-data-model.git
-[submodule "modules/nmea0183"]
-	path = modules/nmea0183
-	url = https://github.com/bareboat-necessities/pypilot-nmea0183-connector.git
