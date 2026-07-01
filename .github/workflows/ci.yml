@@ -1,17 +1,32 @@
 name: CI
-on: [push, pull_request]
+
+on:
+  push:
+  pull_request:
+
 jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-      - run: cmake --build build --parallel
-      - run: ctest --test-dir build --output-on-failure
-  core-no-fetch:
+        with:
+          submodules: recursive
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DSIGNALK_MINI_FETCH_ARDUINOJSON=OFF
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  linux-with-arduinojson:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: cmake -S . -B build-core -DSIGNALK_MINI_FETCH_ARDUINOJSON=OFF
-      - run: cmake --build build-core --parallel
-      - run: ctest --test-dir build-core --output-on-failure
+        with:
+          submodules: recursive
+      - name: Configure
+        run: cmake -S . -B build-json -DCMAKE_BUILD_TYPE=Debug -DSIGNALK_MINI_FETCH_ARDUINOJSON=ON -DSIGNALK_MINI_BUILD_MODULE_TESTS=OFF
+      - name: Build
+        run: cmake --build build-json --parallel
+      - name: Test
+        run: ctest --test-dir build-json --output-on-failure
