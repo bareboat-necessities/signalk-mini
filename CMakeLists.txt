@@ -9,10 +9,8 @@ include(FetchContent)
 FetchContent_Declare(ArduinoJson GIT_REPOSITORY https://github.com/bblanchon/ArduinoJson.git GIT_TAG v7.4.3)
 FetchContent_MakeAvailable(ArduinoJson)
 
-find_package(PkgConfig)
-if(PkgConfig_FOUND)
-  pkg_check_modules(LIBEVENT libevent)
-endif()
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBEVENT REQUIRED libevent)
 
 add_library(signalk_mini_core INTERFACE)
 target_include_directories(signalk_mini_core INTERFACE
@@ -20,17 +18,12 @@ target_include_directories(signalk_mini_core INTERFACE
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/async-event-loop/src
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/data-model/src
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/nmea0183/src
+  ${LIBEVENT_INCLUDE_DIRS}
 )
 target_compile_features(signalk_mini_core INTERFACE cxx_std_17)
-target_link_libraries(signalk_mini_core INTERFACE ArduinoJson)
-
-if(LIBEVENT_FOUND)
-  target_include_directories(signalk_mini_core INTERFACE ${LIBEVENT_INCLUDE_DIRS})
-  target_link_directories(signalk_mini_core INTERFACE ${LIBEVENT_LIBRARY_DIRS})
-  target_link_libraries(signalk_mini_core INTERFACE ${LIBEVENT_LIBRARIES})
-  target_compile_options(signalk_mini_core INTERFACE ${LIBEVENT_CFLAGS_OTHER})
-  target_compile_definitions(signalk_mini_core INTERFACE SIGNALK_MINI_ENABLE_NATIVE_TCP=1)
-endif()
+target_link_directories(signalk_mini_core INTERFACE ${LIBEVENT_LIBRARY_DIRS})
+target_link_libraries(signalk_mini_core INTERFACE ArduinoJson ${LIBEVENT_LIBRARIES})
+target_compile_options(signalk_mini_core INTERFACE ${LIBEVENT_CFLAGS_OTHER})
 
 add_executable(signalk-mini linux/main.cpp)
 target_link_libraries(signalk-mini PRIVATE signalk_mini_core)
