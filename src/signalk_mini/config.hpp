@@ -17,9 +17,15 @@ struct SignalKMiniConfig {
     const char* source_label = "signalk-mini";
     ServerIdentityConfig identity;
     bool enable_signalk_tcp = true;
+    bool signalk_tcp_allow_rx = true;
+    bool signalk_tcp_allow_tx = true;
     bool enable_nmea0183_tcp = true;
     bool enable_nmea0183_tcp_client = true;
+    bool nmea0183_tcp_client_allow_rx = true;
+    bool nmea0183_tcp_client_allow_tx = false;
     bool enable_nmea0183_tcp_server = false;
+    bool nmea0183_tcp_server_allow_rx = true;
+    bool nmea0183_tcp_server_allow_tx = false;
     const char* nmea0183_tcp_client_host = "127.0.0.1";
     uint16_t nmea0183_tcp_client_port = 10110;
     const char* nmea0183_tcp_server_host = "0.0.0.0";
