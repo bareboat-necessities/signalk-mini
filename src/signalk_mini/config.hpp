@@ -1,8 +1,11 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 namespace signalk_mini {
+
+static constexpr size_t max_connector_configs = 4;
 
 struct ServerIdentityConfig {
     const char* server_name = "signalk-mini";
@@ -10,29 +13,53 @@ struct ServerIdentityConfig {
     const char* self = "vessels.self";
 };
 
-struct SignalKMiniConfig {
+struct SignalKProtocolServerConfig {
     const char* host = "0.0.0.0";
-    uint16_t signalk_port = 20223;
-    uint16_t nmea0183_tcp_port = 20224;
-    const char* source_label = "signalk-mini";
-    ServerIdentityConfig identity;
-    bool enable_signalk_tcp = true;
-    bool signalk_tcp_allow_rx = true;
-    bool signalk_tcp_allow_tx = true;
-    bool enable_nmea0183_tcp = true;
-    bool enable_nmea0183_tcp_client = true;
-    bool nmea0183_tcp_client_allow_rx = true;
-    bool nmea0183_tcp_client_allow_tx = false;
-    bool enable_nmea0183_tcp_server = false;
-    bool nmea0183_tcp_server_allow_rx = true;
-    bool nmea0183_tcp_server_allow_tx = false;
-    const char* nmea0183_tcp_client_host = "127.0.0.1";
-    uint16_t nmea0183_tcp_client_port = 10110;
-    const char* nmea0183_tcp_server_host = "0.0.0.0";
-    uint16_t nmea0183_tcp_server_port = 20224;
-    uint32_t publish_interval_us = 10000;
+    uint16_t port = 20223;
+    uint16_t max_clients = 8;
+    bool allow_rx = true;
+    bool allow_tx = true;
+};
+
+struct PublisherConfig {
+    uint32_t interval_us = 10000;
     uint16_t max_changes_per_tick = 32;
     uint16_t json_buffer_size = 512;
+    const char* source_label = "signalk-mini";
+};
+
+enum class ConnectorKind : uint8_t {
+    None = 0,
+    Nmea0183TcpClient,
+    Nmea0183TcpServer,
+};
+
+struct ConnectorConfig {
+    bool enabled = false;
+    ConnectorKind kind = ConnectorKind::None;
+    const char* label = nullptr;
+    const char* host = "127.0.0.1";
+    uint16_t port = 0;
+    bool allow_rx = true;
+    bool allow_tx = false;
+};
+
+struct SignalKMiniConfig {
+    ServerIdentityConfig identity;
+
+    // The main Signal K protocol server is mandatory. It is always started.
+    SignalKProtocolServerConfig signalk;
+
+    PublisherConfig publisher;
+
+    // Optional connectors are added or removed by configuration.
+    ConnectorConfig connectors[max_connector_configs] = {
+        {true, ConnectorKind::Nmea0183TcpClient, "nmea0183-tcp-client", "127.0.0.1", 10110, true, false},
+        {},
+        {},
+        {}
+    };
+    size_t connector_count = 1;
 };
 
 } // namespace signalk_mini
