@@ -6,6 +6,7 @@
 
 #include <async_event_loop.hpp>
 #include "config.hpp"
+#include "connection_registry.hpp"
 #include "nmea0183_input.hpp"
 #include "publisher.hpp"
 
@@ -66,9 +67,14 @@ private:
     struct SkHandler : async_event_loop::ITcpLineServerHandler {
         explicit SkHandler(MiniSignalKServer& o) : owner(o) {}
         MiniSignalKServer& owner;
-        async_event_loop::TcpConnectionRegistry<MaxSignalKClients> clients;
-        void on_accept(async_event_loop::ITcpConnection& c, const async_event_loop::TcpPeerInfo&) override { if (!clients.add(c)) c.close(); }
-        void on_line(async_event_loop::ITcpConnection&, async_event_loop::LineView) override {}
+        ConnectionRegistry<MaxSignalKClients> clients;
+        void on_accept(async_event_loop::ITcpConnection& c, const async_event_loop::TcpPeerInfo&) override {
+            ConnectionFlags flags{owner.cfg_.signalk_tcp_allow_rx, owner.cfg_.signalk_tcp_allow_tx};
+            if (!clients.add(c, flags)) c.close();
+        }
+        void on_line(async_event_loop::ITcpConnection& c, async_event_loop::LineView) override {
+            if (!clients.allow_rx(c)) return;
+        }
         void on_backpressure(async_event_loop::ITcpConnection& c, const async_event_loop::TcpBackpressureInfo&) override { clients.remove(c); c.close(); }
         void on_close(async_event_loop::ITcpConnection& c) override { clients.remove(c); }
         void on_error(async_event_loop::ITcpConnection& c, int) override { clients.remove(c); }
@@ -78,9 +84,17 @@ private:
     struct NmeaServerHandler : async_event_loop::ITcpLineServerHandler {
         explicit NmeaServerHandler(MiniSignalKServer& o) : owner(o) {}
         MiniSignalKServer& owner;
-        async_event_loop::TcpConnectionRegistry<MaxNmeaSources> sources;
-        void on_accept(async_event_loop::ITcpConnection& c, const async_event_loop::TcpPeerInfo&) override { if (!sources.add(c)) c.close(); }
-        void on_line(async_event_loop::ITcpConnection&, async_event_loop::LineView line) override { char text[160]; async_event_loop::line_to_cstr(line, text); owner.handle_nmea_line(text, SourceId(1)); }
+        ConnectionRegistry<MaxNmeaSources> sources;
+        void on_accept(async_event_loop::ITcpConnection& c, const async_event_loop::TcpPeerInfo&) override {
+            ConnectionFlags flags{owner.cfg_.nmea0183_tcp_server_allow_rx, owner.cfg_.nmea0183_tcp_server_allow_tx};
+            if (!sources.add(c, flags)) c.close();
+        }
+        void on_line(async_event_loop::ITcpConnection& c, async_event_loop::LineView line) override {
+            if (!sources.allow_rx(c)) return;
+            char text[160];
+            async_event_loop::line_to_cstr(line, text);
+            owner.handle_nmea_line(text, SourceId(1));
+        }
         void on_close(async_event_loop::ITcpConnection& c) override { sources.remove(c); }
         void on_error(async_event_loop::ITcpConnection& c, int) override { sources.remove(c); }
         void on_too_many_connections(async_event_loop::ITcpConnection& c) override { c.close(); }
@@ -89,7 +103,11 @@ private:
     struct NmeaClientHandler : async_event_loop::ITcpClientHandler {
         explicit NmeaClientHandler(MiniSignalKServer& o) : owner(o) {}
         MiniSignalKServer& owner;
-        void on_data(async_event_loop::ITcpConnection& c) override { char text[160]; while (c.read_line(text, sizeof(text))) owner.handle_nmea_line(text, SourceId(2)); }
+        void on_data(async_event_loop::ITcpConnection& c) override {
+            if (!owner.cfg_.nmea0183_tcp_client_allow_rx) return;
+            char text[160];
+            while (c.read_line(text, sizeof(text))) owner.handle_nmea_line(text, SourceId(2));
+        }
         void on_close(async_event_loop::ITcpConnection&) override {}
         void on_error(int) override {}
     };
