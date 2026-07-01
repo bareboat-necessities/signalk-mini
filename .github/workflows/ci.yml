@@ -1,0 +1,17 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+      - run: cmake --build build --parallel
+      - run: ctest --test-dir build --output-on-failure
+  core-no-fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S . -B build-core -DSIGNALK_MINI_FETCH_ARDUINOJSON=OFF
+      - run: cmake --build build-core --parallel
+      - run: ctest --test-dir build-core --output-on-failure
