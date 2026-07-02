@@ -8,7 +8,6 @@
 #include "sentence_parser.hpp"
 #include "nmea_message_state.hpp"
 #include "nmea_dsc_message_state.hpp"
-#include "nmea_decode_model_view.hpp"
 
 namespace nmea0183_connector {
 
@@ -36,7 +35,7 @@ public:
     }
 
     bool apply_sentence(const NmeaSentence& sentence,
-                        ship_data_model::DataModel<Real>& root_model,
+                        ship_data_model::DataModel<Real>& model,
                         uint64_t now_us,
                         ship_data_model::SensorSource source) {
         last_error_ = "";
@@ -46,7 +45,6 @@ public:
         }
 
         update_multipart_message_state(sentence, now_us, source);
-        NmeaModelWriteView<Real> model(root_model);
 
 #define NMEA_APPLY(ID, FN) if (sentence_is(sentence, ID)) return FN(sentence, model, now_us, source)
 #define NMEA_APPLY_NO_SOURCE(ID, FN) if (sentence_is(sentence, ID)) return FN(sentence, model, now_us)
