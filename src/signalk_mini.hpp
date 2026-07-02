@@ -9,5 +9,5 @@
 #include "signalk_mini/signalk_mapper.hpp"
 #include "signalk_mini/signalk_delta_writer.hpp"
 #include "signalk_mini/publisher.hpp"
-#include "signalk_mini/server.hpp"
-#include "signalk_mini/app.hpp"
+#include "signalk_mini/server_impl.hpp"
+#include "signalk_mini/app2.hpp"
