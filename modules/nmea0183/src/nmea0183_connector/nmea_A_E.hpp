@@ -6,34 +6,6 @@ bool accept_unmodeled_sentence(const NmeaSentence&) {
     return true;
 }
 
-template<typename Record>
-bool apply_raw_sentence_record(const NmeaSentence& sentence,
-                               Record& record,
-                               const char* sentence_id,
-                               uint64_t now_us,
-                               ship_data_model::SensorSource source) {
-    nmea_copy_cstr(record.sentence_id, sizeof(record.sentence_id), sentence_id);
-    const uint8_t count = sentence.field_count < 16 ? sentence.field_count : 16;
-    record.truncated = sentence.field_count > count;
-    for (uint8_t index = 0; index < count; ++index) {
-        nmea_copy_span(record.field[index], sizeof(record.field[index]), sentence.field(index));
-    }
-    record.field_count.set(static_cast<int32_t>(count), now_us);
-    set_source(record.source, source);
-    record.last_update_us = now_us;
-    return true;
-}
-
-template<typename DscRecord>
-void copy_dsc_raw_fields(const NmeaSentence& sentence, DscRecord& record, uint64_t now_us) {
-    const uint8_t count = sentence.field_count < 16 ? sentence.field_count : 16;
-    record.truncated = sentence.field_count > count;
-    for (uint8_t index = 0; index < count; ++index) {
-        nmea_copy_span(record.raw_field[index], sizeof(record.raw_field[index]), sentence.field(index));
-    }
-    record.field_count.set(static_cast<int32_t>(count), now_us);
-}
-
 template<typename Model>
 bool apply_aam(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 5) {
@@ -406,7 +378,6 @@ bool apply_dsc(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     nmea_copy_span(dsc.field10, sizeof(dsc.field10), sentence.field(8));
     dsc.end_of_sequence = sentence.field(9)[0];
     if (sentence.field_count > 10) dsc.expansion_flag = sentence.field(10)[0];
-    copy_dsc_raw_fields(sentence, dsc, now_us);
     set_source(dsc.source, source);
     dsc.last_update_us = now_us;
     return true;
@@ -427,7 +398,6 @@ bool apply_dse(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     nmea_copy_span(dse.sender_mmsi, sizeof(dse.sender_mmsi), sentence.field(3));
     if (parse_int32(sentence.field(4), integer_value)) dse.expansion_specifier.set(integer_value, now_us);
     nmea_copy_span(dse.payload, sizeof(dse.payload), sentence.field(5));
-    copy_dsc_raw_fields(sentence, dse, now_us);
     set_source(dse.source, source);
     dse.last_update_us = now_us;
     return true;
@@ -435,14 +405,14 @@ bool apply_dse(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
 template<typename Model>
 bool apply_dsi(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    return apply_raw_sentence_record(sentence, dsc_state_.initiate, "DSI", now_us, source);
+    (void)model; (void)now_us; (void)source;
+    return accept_unmodeled_sentence(sentence);
 }
 
 template<typename Model>
 bool apply_dsr(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    return apply_raw_sentence_record(sentence, dsc_state_.response, "DSR", now_us, source);
+    (void)model; (void)now_us; (void)source;
+    return accept_unmodeled_sentence(sentence);
 }
 
 template<typename Model>
