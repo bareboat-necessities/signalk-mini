@@ -4,9 +4,9 @@
 
 namespace ship_data_model {
 
-static const uint8_t NMEA_RAW_MAX_FIELDS = 8;
+static const uint8_t NMEA_RAW_MAX_FIELDS = 16;
 static const uint8_t NMEA_RAW_FIELD_BYTES = 16;
-static const uint8_t NMEA_DSC_RAW_MAX_FIELDS = 12;
+static const uint8_t NMEA_DSC_RAW_MAX_FIELDS = 16;
 static const uint8_t NMEA_DSC_RAW_FIELD_BYTES = 16;
 static const uint8_t NMEA_MULTIPART_TEXT_BYTES = 96;
 static const uint8_t NMEA_MULTIPART_ID_BYTES = 16;
