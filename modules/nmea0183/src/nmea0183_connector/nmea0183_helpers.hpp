@@ -37,6 +37,14 @@ inline void nmea_copy_span(char* out, size_t out_size, NmeaSpan span) {
     out[n] = '\0';
 }
 
+inline void nmea_copy_cstr(char* out, size_t out_size, const char* text) {
+    if (!out || out_size == 0) return;
+    size_t n = text ? strlen(text) : 0;
+    if (n + 1 > out_size) n = out_size - 1;
+    if (n && text) memcpy(out, text, n);
+    out[n] = '\0';
+}
+
 inline uint8_t from_hex(char c) {
     if (c >= '0' && c <= '9') return static_cast<uint8_t>(c - '0');
     if (c >= 'A' && c <= 'F') return static_cast<uint8_t>(10 + c - 'A');
@@ -116,69 +124,6 @@ inline bool parse_char_field(const char* field, char& out) {
 
 inline bool parse_degrees(NmeaSpan field, float& out_deg) {
     return parse_real(field, out_deg);
-}
-
-inline bool parse_degrees(const char* field, float& out_deg) {
-    return parse_real(field, out_deg);
-}
-
-inline bool parse_knots(NmeaSpan value, NmeaSpan unit, float& out_kn) {
-    float v = 0.0f;
-    if (!parse_real(value, v)) return false;
-    char u = unit.empty() ? 'N' : unit[0];
-    if (u == 'N') out_kn = v;
-    else if (u == 'K') out_kn = v * 0.539956803f;
-    else if (u == 'M') out_kn = v * 1.94384449f;
-    else return false;
-    return true;
-}
-
-inline bool parse_knots(const char* value, const char* unit, float& out_kn) {
-    return parse_knots(NmeaSpan(value, value ? strlen(value) : 0), NmeaSpan(unit, unit ? strlen(unit) : 0), out_kn);
-}
-
-inline bool parse_lat_lon(NmeaSpan value, NmeaSpan hemi, float& out_deg) {
-    if (value.empty() || hemi.empty()) return false;
-    float raw = 0.0f;
-    if (!parse_real(value, raw)) return false;
-    int degrees = static_cast<int>(raw / 100.0f);
-    float minutes = raw - static_cast<float>(degrees * 100);
-    float deg = static_cast<float>(degrees) + minutes / 60.0f;
-    char h = hemi[0];
-    if (h == 'S' || h == 'W') deg = -deg;
-    else if (!(h == 'N' || h == 'E')) return false;
-    out_deg = deg;
-    return true;
-}
-
-inline bool parse_lat_lon(const char* value, const char* hemi, float& out_deg) {
-    return parse_lat_lon(NmeaSpan(value, value ? strlen(value) : 0), NmeaSpan(hemi, hemi ? strlen(hemi) : 0), out_deg);
-}
-
-inline bool parse_left_right_signed(NmeaSpan magnitude, NmeaSpan side, float& out) {
-    float v = 0.0f;
-    if (!parse_real(magnitude, v) || side.empty()) return false;
-    if (side[0] == 'L') out = -v;
-    else if (side[0] == 'R') out = v;
-    else return false;
-    return true;
-}
-
-inline bool parse_left_right_signed(const char* magnitude, const char* side, float& out) {
-    return parse_left_right_signed(NmeaSpan(magnitude, magnitude ? strlen(magnitude) : 0), NmeaSpan(side, side ? strlen(side) : 0), out);
-}
-
-inline bool parse_east_west_signed(NmeaSpan magnitude, NmeaSpan side, float& out) {
-    float v = 0.0f;
-    if (!parse_real(magnitude, v) || side.empty()) return false;
-    if (side[0] == 'E') out = v;
-    else if (side[0] == 'W') out = -v;
-    else return false;
-    return true;
-}
-
-inline bool parse_east_west_signed(const char* magnitude, const char* side, float& out) {
-    return parse_east_west_signed(NmeaSpan(magnitude, magnitude ? strlen(magnitude) : 0), NmeaSpan(side, side ? strlen(side) : 0), out);
 }
 
 } // namespace nmea0183_connector
