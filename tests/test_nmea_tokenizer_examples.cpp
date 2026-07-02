@@ -16,9 +16,11 @@ static std::string sentence(const char* body) {
     return std::string(out);
 }
 
-static const nmea0183_connector::NmeaToken* check_sentence_token(const char* raw,
-                                                                 nmea0183_connector::NmeaSentenceFamily family,
-                                                                 char start_char) {
+static void check_sentence_token(const char* raw,
+                                 nmea0183_connector::NmeaSentenceFamily family,
+                                 char start_char,
+                                 nmea0183_connector::NmeaTalkerId talker_id = nmea0183_connector::NmeaTalkerId::Unknown,
+                                 nmea0183_connector::NmeaGnssSystem gnss_system = nmea0183_connector::NmeaGnssSystem::Unknown) {
     const nmea0183_connector::NmeaTokenizeResult tokens = nmea0183_connector::tokenize_nmea_line(raw);
     const nmea0183_connector::NmeaToken* token = tokens.first_sentence();
     REQUIRE(token != nullptr);
@@ -27,7 +29,8 @@ static const nmea0183_connector::NmeaToken* check_sentence_token(const char* raw
     REQUIRE(token->text.length > 0);
     REQUIRE(token->text[0] == start_char);
     REQUIRE(token->has_checksum);
-    return token;
+    if (talker_id != nmea0183_connector::NmeaTalkerId::Unknown) REQUIRE(token->talker_id == talker_id);
+    if (gnss_system != nmea0183_connector::NmeaGnssSystem::Unknown) REQUIRE(token->gnss_system == gnss_system);
 }
 
 static void check_vendor(const char* body, nmea0183_connector::NmeaProprietaryVendor expected, const char* expected_code) {
@@ -50,17 +53,19 @@ static void check_vendor(const char* body, nmea0183_connector::NmeaProprietaryVe
 }
 
 int main() {
-    const nmea0183_connector::NmeaToken* gp = check_sentence_token("$GPGGA,002153.000,3342.6618,N,11751.3858,W,1,10,1.2,27.0,M,-34.2,M,,0000*5A", nmea0183_connector::NmeaSentenceFamily::Standard, '$');
-    REQUIRE(gp->talker_id == nmea0183_connector::NmeaTalkerId::Gps);
-    REQUIRE(gp->gnss_system == nmea0183_connector::NmeaGnssSystem::Gps);
+    check_sentence_token("$GPGGA,002153.000,3342.6618,N,11751.3858,W,1,10,1.2,27.0,M,-34.2,M,,0000*5A",
+                         nmea0183_connector::NmeaSentenceFamily::Standard, '$',
+                         nmea0183_connector::NmeaTalkerId::Gps,
+                         nmea0183_connector::NmeaGnssSystem::Gps);
 
-    const nmea0183_connector::NmeaToken* ai = check_sentence_token("!AIVDM,1,1,,A,13HOI:0P0000VOHLCnHQKwvL05Ip,0*23", nmea0183_connector::NmeaSentenceFamily::Ais, '!');
-    REQUIRE(ai->talker_id == nmea0183_connector::NmeaTalkerId::MobileAisStation);
+    check_sentence_token("!AIVDM,1,1,,A,13HOI:0P0000VOHLCnHQKwvL05Ip,0*23",
+                         nmea0183_connector::NmeaSentenceFamily::Ais, '!',
+                         nmea0183_connector::NmeaTalkerId::MobileAisStation);
 
     check_sentence_token("$STALK,84,56,e,0,0,0,0,0,8*0F", nmea0183_connector::NmeaSentenceFamily::SeaTalk, '$');
     const std::string dsc = sentence("CDDSC,12,3380405810,00,1234567890,72,1234567890,00,00,00,00,00,00,00");
-    const nmea0183_connector::NmeaToken* dsc_token = check_sentence_token(dsc.c_str(), nmea0183_connector::NmeaSentenceFamily::Dsc, '$');
-    REQUIRE(dsc_token->talker_id == nmea0183_connector::NmeaTalkerId::DigitalSelectiveCalling);
+    check_sentence_token(dsc.c_str(), nmea0183_connector::NmeaSentenceFamily::Dsc, '$',
+                         nmea0183_connector::NmeaTalkerId::DigitalSelectiveCalling);
 
     const std::string query = sentence("CCGPQ,GGA");
     check_sentence_token(query.c_str(), nmea0183_connector::NmeaSentenceFamily::Query, '$');
@@ -89,6 +94,7 @@ int main() {
 
     REQUIRE(nmea0183_connector::nmea_talker_id_from_span(nmea0183_connector::NmeaSpan("GL", 2)) == nmea0183_connector::NmeaTalkerId::Glonass);
     REQUIRE(nmea0183_connector::nmea_talker_id_from_span(nmea0183_connector::NmeaSpan("GN", 2)) == nmea0183_connector::NmeaTalkerId::CombinedGnss);
+    REQUIRE(nmea0183_connector::nmea_talker_id_from_span(nmea0183_connector::NmeaSpan("PQ", 2)) == nmea0183_connector::NmeaTalkerId::Qzss);
     REQUIRE(nmea0183_connector::nmea_talker_id_from_span(nmea0183_connector::NmeaSpan("U7", 2)) == nmea0183_connector::NmeaTalkerId::UserConfigured);
     REQUIRE(nmea0183_connector::nmea_faa_mode_from_char('R') == nmea0183_connector::NmeaFaaModeIndicator::RtkInteger);
     REQUIRE(nmea0183_connector::nmea_faa_mode_from_char('N') == nmea0183_connector::NmeaFaaModeIndicator::DataNotValid);
