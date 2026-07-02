@@ -62,42 +62,19 @@ struct SeaData {
     Stamped<Real> trawl_relative_bearing_deg;
     Stamped<Real> trawl_true_range_m;
     Stamped<Real> trawl_true_bearing_deg;
+    uint64_t last_update_us = 0;
+};
 
-    // Compatibility fields used by older NMEA handlers. New code should read env.* or wind.surface.*.
-    Stamped<Real> wind_speed_kn;
-    Stamped<Real> wind_speed_m_s;
-    Stamped<Real> wind_direction_deg;
-    Stamped<Real> wind_direction_magnetic_deg;
+template<typename Real = float>
+struct EnvData {
+    Setting<SensorSource> source;
     Stamped<Real> barometric_pressure_inhg;
     Stamped<Real> barometric_pressure_bar;
     Stamped<Real> air_temperature_c;
     Stamped<Real> relative_humidity_percent;
     Stamped<Real> absolute_humidity_percent;
     Stamped<Real> dew_point_c;
-
     uint64_t last_update_us = 0;
 };
-
-template<typename Real = float>
-struct EnvData {
-    Stamped<Real>& barometric_pressure_inhg;
-    Stamped<Real>& barometric_pressure_bar;
-    Stamped<Real>& air_temperature_c;
-    Stamped<Real>& relative_humidity_percent;
-    Stamped<Real>& absolute_humidity_percent;
-    Stamped<Real>& dew_point_c;
-
-    explicit EnvData(SeaData<Real>& sea)
-        : barometric_pressure_inhg(sea.barometric_pressure_inhg),
-          barometric_pressure_bar(sea.barometric_pressure_bar),
-          air_temperature_c(sea.air_temperature_c),
-          relative_humidity_percent(sea.relative_humidity_percent),
-          absolute_humidity_percent(sea.absolute_humidity_percent),
-          dew_point_c(sea.dew_point_c) {}
-};
-
-// Compatibility alias for old name. New code should use SeaData and DataModel::sea.
-template<typename Real = float>
-using WaterData = SeaData<Real>;
 
 } // namespace ship_data_model
