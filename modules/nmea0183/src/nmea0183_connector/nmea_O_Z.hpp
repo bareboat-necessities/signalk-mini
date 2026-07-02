@@ -189,6 +189,25 @@ bool apply_rot(const NmeaSentence& sentence, Model& model, uint64_t now_us) {
 }
 
 template<typename Model>
+bool apply_rpm(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 5 || sentence.field(4)[0] != 'A') {
+        last_error_ = "bad RPM";
+        return false;
+    }
+
+    int32_t number = 0;
+    float value = 0.0f;
+    model.navigation.revolutions.source_type = sentence.field(0)[0];
+    model.navigation.revolutions.status = sentence.field(4)[0];
+    if (parse_int32(sentence.field(1), number)) model.navigation.revolutions.number.set(number, now_us);
+    if (parse_real(sentence.field(2), value)) model.navigation.revolutions.speed_rpm.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(3), value)) model.navigation.revolutions.propeller_pitch_percent.set(static_cast<Real>(value), now_us);
+    set_source(model.navigation.revolutions.source, source);
+    model.navigation.revolutions.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
 bool apply_rsa(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     float angle_deg = 0.0f;
     if (sentence.field_count >= 2 && sentence.field(1)[0] == 'A' && parse_real(sentence.field(0), angle_deg)) {
@@ -202,6 +221,94 @@ bool apply_rsa(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
     set_source(model.rudder.source, source);
     model.rudder.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
+bool apply_rsd(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 12) {
+        last_error_ = "short RSD";
+        return false;
+    }
+
+    float value = 0.0f;
+    model.navigation.radar_system.range_units = sentence.field(11)[0];
+    if (parse_distance_nmi(sentence.field(0), sentence.field(11), value)) model.navigation.radar_system.origin_range_nmi[0].set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(1), value)) model.navigation.radar_system.origin_bearing_deg[0].set(static_cast<Real>(wrap_360_deg(value)), now_us);
+    if (parse_distance_nmi(sentence.field(2), sentence.field(11), value)) model.navigation.radar_system.variable_range_marker_nmi[0].set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(3), value)) model.navigation.radar_system.electronic_bearing_line_deg[0].set(static_cast<Real>(wrap_360_deg(value)), now_us);
+    if (parse_distance_nmi(sentence.field(4), sentence.field(11), value)) model.navigation.radar_system.origin_range_nmi[1].set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(5), value)) model.navigation.radar_system.origin_bearing_deg[1].set(static_cast<Real>(wrap_360_deg(value)), now_us);
+    if (parse_distance_nmi(sentence.field(6), sentence.field(11), value)) model.navigation.radar_system.variable_range_marker_nmi[1].set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(7), value)) model.navigation.radar_system.electronic_bearing_line_deg[1].set(static_cast<Real>(wrap_360_deg(value)), now_us);
+    if (parse_distance_nmi(sentence.field(8), sentence.field(11), value)) model.navigation.radar_system.cursor_range_nmi.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(9), value)) model.navigation.radar_system.cursor_bearing_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
+    if (parse_distance_nmi(sentence.field(10), sentence.field(11), value)) model.navigation.radar_system.range_scale_nmi.set(static_cast<Real>(value), now_us);
+    set_source(model.navigation.radar_system.source, source);
+    model.navigation.radar_system.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
+bool apply_rte(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 4) {
+        last_error_ = "short RTE";
+        return false;
+    }
+
+    int32_t integer_value = 0;
+    if (parse_int32(sentence.field(0), integer_value)) model.navigation.active_route.total_messages.set(integer_value, now_us);
+    if (parse_int32(sentence.field(1), integer_value)) model.navigation.active_route.message_number.set(integer_value, now_us);
+    model.navigation.active_route.mode = sentence.field(2)[0];
+    const uint8_t count = static_cast<uint8_t>((sentence.field_count - 3) < 16 ? (sentence.field_count - 3) : 16);
+    for (uint8_t index = 0; index < count; ++index) {
+        nmea_copy_span(model.navigation.active_route.waypoint_id[index],
+                       sizeof(model.navigation.active_route.waypoint_id[index]),
+                       sentence.field(static_cast<uint8_t>(3 + index)));
+    }
+    model.navigation.active_route.waypoint_count.set(static_cast<int32_t>(count), now_us);
+    set_source(model.navigation.active_route.source, source);
+    model.navigation.active_route.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
+bool apply_sfi(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 4) {
+        last_error_ = "short SFI";
+        return false;
+    }
+
+    int32_t integer_value = 0;
+    float value = 0.0f;
+    if (parse_int32(sentence.field(0), integer_value)) model.navigation.scanning_frequency.total_messages.set(integer_value, now_us);
+    if (parse_int32(sentence.field(1), integer_value)) model.navigation.scanning_frequency.message_number.set(integer_value, now_us);
+    for (uint8_t index = 0; index < 6; ++index) {
+        const uint8_t base = static_cast<uint8_t>(2 + index * 2);
+        if (base >= sentence.field_count) break;
+        if (parse_real(sentence.field(base), value)) model.navigation.scanning_frequency.frequency_hz[index].set(static_cast<Real>(value), now_us);
+        if (base + 1 < sentence.field_count) model.navigation.scanning_frequency.mode[index] = sentence.field(base + 1)[0];
+    }
+    set_source(model.navigation.scanning_frequency.source, source);
+    model.navigation.scanning_frequency.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
+bool apply_stn(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 1) {
+        last_error_ = "short STN";
+        return false;
+    }
+
+    int32_t value = 0;
+    if (!parse_int32(sentence.field(0), value)) {
+        last_error_ = "bad STN";
+        return false;
+    }
+    model.navigation.multiple_data_id.talker_id_number.set(value, now_us);
+    set_source(model.navigation.multiple_data_id.source, source);
+    model.navigation.multiple_data_id.last_update_us = now_us;
     return true;
 }
 
