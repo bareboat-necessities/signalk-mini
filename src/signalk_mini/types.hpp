@@ -16,6 +16,8 @@ enum class ModelField : uint16_t {
     WindApparentDirectionDeg,
     WindApparentSpeedKn,
     WaterDepthM,
+    WaterDepthBelowKeelM,
+    WaterDepthBelowSurfaceM,
 };
 
 } // namespace signalk_mini
