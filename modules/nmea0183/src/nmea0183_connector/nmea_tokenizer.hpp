@@ -85,6 +85,11 @@ inline bool nmea_token_body_starts_with(NmeaSpan token, const char* prefix) {
     return true;
 }
 
+inline bool nmea_token_sentence_is(NmeaSpan token, const char* sentence) {
+    if (!token.data || !sentence || token.length < 6) return false;
+    return token.data[3] == sentence[0] && token.data[4] == sentence[1] && token.data[5] == sentence[2];
+}
+
 inline bool nmea_token_is_query(NmeaSpan token) {
     return token.data && token.length > 6 && token[0] == '$' && token.data[5] == 'Q';
 }
@@ -105,6 +110,9 @@ inline NmeaSentenceFamily nmea_classify_token_span(NmeaSpan token) {
     if (nmea_token_body_starts_with(token, "DSC") || nmea_token_body_starts_with(token, "DSE") ||
         nmea_token_body_starts_with(token, "DSI") || nmea_token_body_starts_with(token, "CDDSC")) {
         return NmeaSentenceFamily::Dsc;
+    }
+    if (nmea_token_sentence_is(token, "NRM") || nmea_token_sentence_is(token, "NRX")) {
+        return static_cast<NmeaSentenceFamily>(5);
     }
     if (nmea_token_body_starts_with(token, "CSSM") || nmea_token_body_starts_with(token, "PINM") ||
         nmea_token_body_starts_with(token, "INM")) {
