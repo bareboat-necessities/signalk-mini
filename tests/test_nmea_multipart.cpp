@@ -17,9 +17,23 @@ static std::string sentence(const char* body) {
     return std::string(out);
 }
 
+static std::string encapsulated_sentence(const char* body) {
+    char out[192];
+    const uint8_t cs = nmea0183_connector::nmea_checksum_body(body);
+    std::snprintf(out, sizeof(out), "!%s*%c%c", body,
+                  nmea0183_connector::to_hex((cs >> 4) & 0x0f),
+                  nmea0183_connector::to_hex(cs & 0x0f));
+    return std::string(out);
+}
+
 static void feed(signalk_mini::SignalKMiniApp<float>& app, const char* body, uint64_t& now_us) {
     now_us += 1000;
     const std::string line = sentence(body);
+    REQUIRE(app.nmea0183().feed_line(line.c_str(), 1, now_us));
+}
+
+static void feed_raw(signalk_mini::SignalKMiniApp<float>& app, const std::string& line, uint64_t& now_us) {
+    now_us += 1000;
     REQUIRE(app.nmea0183().feed_line(line.c_str(), 1, now_us));
 }
 
@@ -60,10 +74,18 @@ int main() {
     REQUIRE(app.store().model().nmea_extensions.navtex_message.complete);
     REQUIRE(std::strcmp(app.store().model().nmea_extensions.navtex_message.text, "NAV TEX") == 0);
 
+    feed_raw(app, encapsulated_sentence("AIVDM,2,1,3,A,ABC,0"), now_us);
+    REQUIRE(app.store().model().nmea_extensions.ais_message.in_progress);
+    REQUIRE(app.store().model().nmea_extensions.ais_message.received_mask == 0x0001);
+    REQUIRE(std::strcmp(app.store().model().nmea_extensions.ais_message.message_id, "3") == 0);
+    feed_raw(app, encapsulated_sentence("AIVDM,2,2,3,A,DEF,0"), now_us);
+    REQUIRE(app.store().model().nmea_extensions.ais_message.complete);
+    REQUIRE(std::strcmp(app.store().model().nmea_extensions.ais_message.text, "ABCDEF") == 0);
+
     nmea0183_connector::Nmea0183StreamParser parser;
     nmea0183_connector::NmeaSentence parsed;
-    const std::string ais = "!AIVDM,2,1,3,A,55NBsv02;P?ITpN?N20EHE:0@F22222222220t4p,0*1E";
-    REQUIRE(parser.parse_line(ais.c_str(), parsed, false));
+    const std::string ais = encapsulated_sentence("AIVDM,2,1,3,A,55NBsv02;P?ITpN?N20EHE:0@F22222222220t4p,0");
+    REQUIRE(parser.parse_line(ais.c_str(), parsed));
     REQUIRE(parsed.family == nmea0183_connector::NmeaSentenceFamily::Ais);
     REQUIRE(parsed.fragment.is_fragmented);
     REQUIRE(parsed.fragment.total == 2);
