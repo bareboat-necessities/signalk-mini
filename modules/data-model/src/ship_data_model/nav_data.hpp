@@ -25,6 +25,8 @@ struct GpsData {
     Stamped<Real> fix_lon_deg;
     Stamped<Real> fix_alt_m;
     Stamped<int32_t> fix_quality;
+    char fix_mode_indicator[8] = {0};
+    char navigational_status = 0;
     Stamped<int32_t> satellites_used;
     Stamped<Real> hdop;
     Stamped<Real> geoidal_separation_m;
@@ -234,6 +236,16 @@ struct BeaconReceiverStatusData {
 };
 
 template<typename Real = float>
+struct ReturnLinkMessageData {
+    Setting<SensorSource> source;
+    char beacon_id[24] = {0};
+    Stamped<Real> reception_time_s;
+    char message_code = 0;
+    char message_body[64] = {0};
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
 struct OmegaLaneNumbersData {
     Setting<SensorSource> source;
     char pair[3][16] = {{0}, {0}, {0}};
@@ -311,6 +323,9 @@ template<typename Real = float>
 struct TrackedTargetData {
     Setting<SensorSource> source;
     Stamped<int32_t> target_number;
+    Stamped<Real> latitude_deg;
+    Stamped<Real> longitude_deg;
+    Stamped<Real> utc_time_s;
     Stamped<Real> distance_nmi;
     Stamped<Real> bearing_deg;
     char bearing_reference = 0;
@@ -323,6 +338,9 @@ struct TrackedTargetData {
     char target_name[24] = {0};
     char target_status = 0;
     char reference_target = 0;
+    Stamped<int32_t> label_target_number[8];
+    char label[8][24] = {{0}};
+    Stamped<int32_t> label_count;
     uint64_t last_update_us = 0;
 };
 
@@ -418,6 +436,7 @@ struct NavigationData {
     HeadingSteeringCommandData<Real> heading_steering_command;
     BeaconReceiverControlData<Real> beacon_control;
     BeaconReceiverStatusData<Real> beacon_status;
+    ReturnLinkMessageData<Real> return_link_message;
     OmegaLaneNumbersData<Real> omega_lane_numbers;
     OwnShipData<Real> own_ship;
     ActiveRouteData<Real> active_route;
