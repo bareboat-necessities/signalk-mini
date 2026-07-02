@@ -361,8 +361,8 @@ bool apply_ttm(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
 template<typename Model>
 bool apply_txt(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    return apply_raw_sentence_record(sentence, state_.text_sentence, "TXT", now_us, source);
+    (void)model; (void)now_us; (void)source;
+    return accept_unmodeled_sentence(sentence);
 }
 
 template<typename Model>
@@ -457,14 +457,14 @@ bool apply_wcv(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
 template<typename Model>
 bool apply_wdc(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    return apply_raw_sentence_record(sentence, state_.waypoint_distance_great_circle, "WDC", now_us, source);
+    (void)model; (void)now_us; (void)source;
+    return accept_unmodeled_sentence(sentence);
 }
 
 template<typename Model>
 bool apply_wdr(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    return apply_raw_sentence_record(sentence, state_.waypoint_distance_rhumb, "WDR", now_us, source);
+    (void)model; (void)now_us; (void)source;
+    return accept_unmodeled_sentence(sentence);
 }
 
 template<typename Model>
@@ -545,15 +545,8 @@ bool apply_zda(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
 template<typename Model>
 bool apply_zdl(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    if (sentence.field_count < 3) { last_error_ = "short ZDL"; return false; }
-    float v = 0.0f;
-    if (parse_utc_time_of_day_s(sentence.field(0), v) || parse_real(sentence.field(0), v)) { state_.variable_point.time_to_point_s = v; state_.variable_point.has_time = true; }
-    if (parse_distance_nmi(sentence.field(1), sentence.field_count > 2 ? sentence.field(2) : NmeaSpan(), v)) { state_.variable_point.distance_to_point_nmi = v; state_.variable_point.has_distance = true; }
-    if (sentence.field_count > 3) nmea_copy_span(state_.variable_point.point_id, sizeof(state_.variable_point.point_id), sentence.field(3));
-    set_source(state_.variable_point.source, source);
-    state_.variable_point.last_update_us = now_us;
-    return true;
+    (void)model; (void)now_us; (void)source;
+    return sentence.field_count >= 3 ? accept_unmodeled_sentence(sentence) : (last_error_ = "short ZDL", false);
 }
 
 template<typename Model>
