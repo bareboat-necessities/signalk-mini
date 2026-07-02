@@ -69,7 +69,13 @@ public:
         if (sentence_is(sentence, "HDG")) return apply_hdg(sentence, model, now_us);
         if (sentence_is(sentence, "HDM")) return apply_hdm(sentence, model, now_us);
         if (sentence_is(sentence, "HDT")) return apply_hdt(sentence, model, now_us);
+        if (sentence_is(sentence, "HFB")) return apply_hfb(sentence, model, now_us, source);
+        if (sentence_is(sentence, "HSC")) return apply_hsc(sentence, model, now_us, source);
+        if (sentence_is(sentence, "ITS")) return apply_its(sentence, model, now_us, source);
         if (sentence_is(sentence, "LWY")) return apply_lwy(sentence, model, now_us, source);
+        if (sentence_is(sentence, "MSK")) return apply_msk(sentence, model, now_us, source);
+        if (sentence_is(sentence, "MSS")) return apply_mss(sentence, model, now_us, source);
+        if (sentence_is(sentence, "MTW")) return apply_mtw(sentence, model, now_us, source);
         if (sentence_is(sentence, "MWD")) return apply_mwd(sentence, model, now_us, source);
         if (sentence_is(sentence, "MWV")) return apply_mwv(sentence, model, now_us, source);
         if (sentence_is(sentence, "RMB")) return apply_rmb(sentence, model, now_us, source);
