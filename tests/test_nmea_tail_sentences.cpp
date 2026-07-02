@@ -38,7 +38,7 @@ int main() {
     NEAR(app.store().model().env.barometric_pressure_inhg.value, 29.91f, 0.001f);
     NEAR(app.store().model().env.air_temperature_c.value, 18.2f, 0.001f);
     NEAR(app.store().model().sea.temperature_c.value, 16.7f, 0.001f);
-    NEAR(app.store().model().sea.wind_speed_kn.value, 7.8f, 0.001f);
+    NEAR(app.store().model().wind.surface.speed_kn.value, 7.8f, 0.001f);
 
     feed(app, "IITFI,0,1,2", now_us);
     REQUIRE(app.store().model().sea.trawl_catch_sensor_status[0].value == 0);
