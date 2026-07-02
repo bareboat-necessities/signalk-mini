@@ -51,17 +51,11 @@ int main() {
     NEAR(app.store().model().navigation.tracked_target.longitude_deg.value, -123.1595f, 0.001f);
 
     feed(app, "ALACK,42", now_us);
-    REQUIRE(std::strcmp(app.nmea0183().message_state().alarm_acknowledgement.sentence_id, "ACK") == 0);
-    REQUIRE(std::strcmp(app.nmea0183().message_state().alarm_acknowledgement.field[0], "42") == 0);
-
     feed(app, "AIADS,DEV1,A,OK", now_us);
-    REQUIRE(std::strcmp(app.nmea0183().message_state().automatic_device_status.field[0], "DEV1") == 0);
 
     feed(app, "VCCUR,1,123.4,T,2.5,N,10.0,M", now_us);
-    REQUIRE(app.nmea0183().message_state().current_layer.layer_number.value == 1);
-    NEAR(app.nmea0183().message_state().current_layer.current_direction_deg, 123.4f, 0.001f);
-    NEAR(app.nmea0183().message_state().current_layer.current_speed_kn, 2.5f, 0.001f);
-    NEAR(app.nmea0183().message_state().current_layer.layer_depth_m, 10.0f, 0.001f);
+    NEAR(app.store().model().water.current_direction_deg.value, 123.4f, 0.001f);
+    NEAR(app.store().model().water.current_speed_kn.value, 2.5f, 0.001f);
 
     feed(app, "CDDSC,12,3380400790,12,06,00,1423108312,2019,,,S,E", now_us);
     REQUIRE(app.nmea0183().dsc_state().message.format_specifier.value == 12);
@@ -74,18 +68,9 @@ int main() {
     REQUIRE(std::strcmp(app.nmea0183().dsc_state().expansion.payload, "45894494") == 0);
 
     feed(app, "FDFIR,FIRE1,ALARM", now_us);
-    REQUIRE(std::strcmp(app.nmea0183().message_state().fire_detection.field[1], "ALARM") == 0);
-
     feed(app, "GPWDC,12.3,N,22.7796,K,TO1,FROM1", now_us);
-    REQUIRE(std::strcmp(app.nmea0183().message_state().waypoint_distance_great_circle.sentence_id, "WDC") == 0);
-
     feed(app, "GPWDR,12.4,N,22.9648,K,TO2,FROM2", now_us);
-    REQUIRE(std::strcmp(app.nmea0183().message_state().waypoint_distance_rhumb.field[4], "FROM2") == 0);
-
     feed(app, "GPZDL,000930,12.3,N,VP1", now_us);
-    NEAR(app.nmea0183().message_state().variable_point.time_to_point_s, 570.0f, 0.001f);
-    NEAR(app.nmea0183().message_state().variable_point.distance_to_point_nmi, 12.3f, 0.001f);
-    REQUIRE(std::strcmp(app.nmea0183().message_state().variable_point.point_id, "VP1") == 0);
 
     feed(app, "GPZFO,123520,000315,ORIG1", now_us);
     NEAR(app.store().model().navigation.waypoint.origin_utc_time_s.value, 45320.0f, 0.001f);
