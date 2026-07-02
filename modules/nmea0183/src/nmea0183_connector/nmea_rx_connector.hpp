@@ -26,6 +26,15 @@ inline bool parse_int32(NmeaSpan field, int32_t& out) {
     return true;
 }
 
+inline bool parse_north_south_signed(NmeaSpan magnitude, NmeaSpan side, float& out) {
+    float v = 0.0f;
+    if (!parse_real(magnitude, v) || side.empty()) return false;
+    if (side[0] == 'N') out = v;
+    else if (side[0] == 'S') out = -v;
+    else return false;
+    return true;
+}
+
 inline bool parse_utc_time_of_day_s(NmeaSpan utc_time, float& out_s) {
     if (utc_time.length < 6) return false;
     int hour = (utc_time[0]-'0')*10 + (utc_time[1]-'0');
@@ -116,7 +125,11 @@ public:
         if (sentence_is(s, "DBK")) return apply_depth_below_keel(s, model, now_us, source);
         if (sentence_is(s, "DBS")) return apply_depth_below_surface(s, model, now_us, source);
         if (sentence_is(s, "DBT")) return apply_dbt(s, model, now_us, source);
+        if (sentence_is(s, "DCN")) return apply_dcn(s, model, now_us, source);
         if (sentence_is(s, "DPT")) return apply_dpt(s, model, now_us, source);
+        if (sentence_is(s, "DTM")) return apply_dtm(s, model, now_us, source);
+        if (sentence_is(s, "FSI")) return apply_fsi(s, model, now_us, source);
+        if (sentence_is(s, "GBS")) return apply_gbs(s, model, now_us, source);
         if (sentence_is(s, "RMC")) return apply_rmc(s, model, now_us, source);
         if (sentence_is(s, "GGA")) return apply_gga(s, model, now_us, source);
         if (sentence_is(s, "GLL")) return apply_gll(s, model, now_us, source);
@@ -184,6 +197,78 @@ private:
         if (parse_real(s.field(14), v)) model.navigation.gps_almanac.clock_f1_s_s.set(static_cast<Real>(v), now_us);
         set_source(model.navigation.gps_almanac.source, source);
         model.navigation.gps_almanac.last_update_us = now_us;
+        return true;
+    }
+
+    template<typename Model>
+    bool apply_dcn(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+        if (s.field_count < 16) { last_error_ = "short DCN"; return false; }
+        float v = 0;
+        int32_t i = 0;
+        nmea_copy_span(model.navigation.decca.chain_id, sizeof(model.navigation.decca.chain_id), s.field(0));
+        nmea_copy_span(model.navigation.decca.red_zone, sizeof(model.navigation.decca.red_zone), s.field(1));
+        if (parse_real(s.field(2), v)) model.navigation.decca.red_line_of_position.set(static_cast<Real>(v), now_us);
+        model.navigation.decca.red_master_status = s.field(3)[0];
+        nmea_copy_span(model.navigation.decca.green_zone, sizeof(model.navigation.decca.green_zone), s.field(4));
+        if (parse_real(s.field(5), v)) model.navigation.decca.green_line_of_position.set(static_cast<Real>(v), now_us);
+        model.navigation.decca.green_master_status = s.field(6)[0];
+        nmea_copy_span(model.navigation.decca.purple_zone, sizeof(model.navigation.decca.purple_zone), s.field(7));
+        if (parse_real(s.field(8), v)) model.navigation.decca.purple_line_of_position.set(static_cast<Real>(v), now_us);
+        model.navigation.decca.purple_master_status = s.field(9)[0];
+        model.navigation.decca.red_line_navigation_use = s.field(10)[0];
+        model.navigation.decca.green_line_navigation_use = s.field(11)[0];
+        model.navigation.decca.purple_line_navigation_use = s.field(12)[0];
+        if (parse_distance_nmi(s.field(13), s.field(14), v)) model.navigation.decca.position_uncertainty_nmi.set(static_cast<Real>(v), now_us);
+        if (parse_int32(s.field(15), i)) model.navigation.decca.fix_data_basis.set(i, now_us);
+        set_source(model.navigation.decca.source, source);
+        model.navigation.decca.last_update_us = now_us;
+        return true;
+    }
+
+    template<typename Model>
+    bool apply_dtm(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+        if (s.field_count < 8) { last_error_ = "short DTM"; return false; }
+        float v = 0;
+        nmea_copy_span(model.navigation.datum.local_datum_code, sizeof(model.navigation.datum.local_datum_code), s.field(0));
+        nmea_copy_span(model.navigation.datum.local_datum_subcode, sizeof(model.navigation.datum.local_datum_subcode), s.field(1));
+        if (parse_north_south_signed(s.field(2), s.field(3), v)) model.navigation.datum.latitude_offset_min.set(static_cast<Real>(v), now_us);
+        if (parse_east_west_signed(s.field(4), s.field(5), v)) model.navigation.datum.longitude_offset_min.set(static_cast<Real>(v), now_us);
+        if (parse_real(s.field(6), v)) model.navigation.datum.altitude_offset_m.set(static_cast<Real>(v), now_us);
+        nmea_copy_span(model.navigation.datum.reference_datum_code, sizeof(model.navigation.datum.reference_datum_code), s.field(7));
+        set_source(model.navigation.datum.source, source);
+        model.navigation.datum.last_update_us = now_us;
+        return true;
+    }
+
+    template<typename Model>
+    bool apply_fsi(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+        if (s.field_count < 4) { last_error_ = "short FSI"; return false; }
+        float v = 0;
+        int32_t i = 0;
+        if (parse_real(s.field(0), v)) model.navigation.radio_frequency_set.transmitting_frequency_hz.set(static_cast<Real>(v), now_us);
+        if (parse_real(s.field(1), v)) model.navigation.radio_frequency_set.receiving_frequency_hz.set(static_cast<Real>(v), now_us);
+        model.navigation.radio_frequency_set.communication_mode = s.field(2)[0];
+        if (parse_int32(s.field(3), i)) model.navigation.radio_frequency_set.power_level.set(i, now_us);
+        set_source(model.navigation.radio_frequency_set.source, source);
+        model.navigation.radio_frequency_set.last_update_us = now_us;
+        return true;
+    }
+
+    template<typename Model>
+    bool apply_gbs(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+        if (s.field_count < 8) { last_error_ = "short GBS"; return false; }
+        float v = 0;
+        int32_t i = 0;
+        if (parse_utc_time_of_day_s(s.field(0), v)) model.navigation.gps_fault.utc_time_s.set(static_cast<Real>(v), now_us);
+        if (parse_real(s.field(1), v)) model.navigation.gps_fault.expected_error_lat_m.set(static_cast<Real>(v), now_us);
+        if (parse_real(s.field(2), v)) model.navigation.gps_fault.expected_error_lon_m.set(static_cast<Real>(v), now_us);
+        if (parse_real(s.field(3), v)) model.navigation.gps_fault.expected_error_alt_m.set(static_cast<Real>(v), now_us);
+        if (parse_int32(s.field(4), i)) model.navigation.gps_fault.failed_satellite_prn.set(i, now_us);
+        if (parse_real(s.field(5), v)) model.navigation.gps_fault.missed_detection_probability.set(static_cast<Real>(v), now_us);
+        if (parse_real(s.field(6), v)) model.navigation.gps_fault.failed_satellite_bias_m.set(static_cast<Real>(v), now_us);
+        if (parse_real(s.field(7), v)) model.navigation.gps_fault.failed_satellite_bias_stddev_m.set(static_cast<Real>(v), now_us);
+        set_source(model.navigation.gps_fault.source, source);
+        model.navigation.gps_fault.last_update_us = now_us;
         return true;
     }
 
