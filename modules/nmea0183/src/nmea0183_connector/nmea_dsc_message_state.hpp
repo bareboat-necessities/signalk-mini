@@ -5,6 +5,18 @@
 
 namespace nmea0183_connector {
 
+static const uint8_t NMEA_DSC_RAW_MAX_FIELDS = 16;
+static const uint8_t NMEA_DSC_RAW_FIELD_BYTES = 16;
+
+struct NmeaDscRawMessageRecord {
+    NmeaMessageSource source;
+    char sentence_id[4] = {0};
+    NmeaMessageStampedInt field_count;
+    bool truncated = false;
+    char field[NMEA_DSC_RAW_MAX_FIELDS][NMEA_DSC_RAW_FIELD_BYTES] = {{0}};
+    uint64_t last_update_us = 0;
+};
+
 struct NmeaDscMessageRecord {
     NmeaMessageSource source;
     NmeaMessageStampedInt format_specifier;
@@ -24,7 +36,7 @@ struct NmeaDscMessageRecord {
     char expansion_flag = 0;
     NmeaMessageStampedInt field_count;
     bool truncated = false;
-    char raw_field[NMEA_MESSAGE_RAW_MAX_FIELDS][NMEA_MESSAGE_RAW_FIELD_BYTES] = {{0}};
+    char raw_field[NMEA_DSC_RAW_MAX_FIELDS][NMEA_DSC_RAW_FIELD_BYTES] = {{0}};
     uint64_t last_update_us = 0;
 };
 
@@ -38,15 +50,15 @@ struct NmeaDscExpansionRecord {
     char payload[64] = {0};
     NmeaMessageStampedInt field_count;
     bool truncated = false;
-    char raw_field[NMEA_MESSAGE_RAW_MAX_FIELDS][NMEA_MESSAGE_RAW_FIELD_BYTES] = {{0}};
+    char raw_field[NMEA_DSC_RAW_MAX_FIELDS][NMEA_DSC_RAW_FIELD_BYTES] = {{0}};
     uint64_t last_update_us = 0;
 };
 
 struct NmeaDscMessageState {
     NmeaDscMessageRecord message;
     NmeaDscExpansionRecord expansion;
-    NmeaRawMessageRecord initiate;
-    NmeaRawMessageRecord response;
+    NmeaDscRawMessageRecord initiate;
+    NmeaDscRawMessageRecord response;
     NmeaMultipartMessageRecord multipart;
 };
 
