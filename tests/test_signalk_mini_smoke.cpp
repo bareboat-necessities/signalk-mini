@@ -19,6 +19,17 @@ static std::string sentence(const char* body) {
 
 int main() {
     using Real = float;
+
+    signalk_mini::SignalKMiniConfig default_config;
+    REQUIRE(default_config.connector_count == 1);
+    REQUIRE(default_config.connectors != nullptr);
+    REQUIRE(default_config.connectors[0].enabled);
+    REQUIRE(default_config.connectors[0].protocol.kind == signalk_mini::ConnectorProtocol::Nmea0183);
+    REQUIRE(default_config.connectors[0].transport.kind == signalk_mini::ConnectorTransport::Udp);
+    REQUIRE(std::strcmp(default_config.connectors[0].transport.udp.listen_host, "0.0.0.0") == 0);
+    REQUIRE(default_config.connectors[0].transport.udp.listen_port == 10110);
+    REQUIRE(default_config.connectors[0].protocol.nmea0183.validate_checksum == false);
+
     signalk_mini::SignalKMiniApp<Real> app;
     const char* bodies[] = {
         "GPRMC,142533.00,A,4042.6142,N,07400.4168,W,5.4,083.2,010726,13.1,W,A",
