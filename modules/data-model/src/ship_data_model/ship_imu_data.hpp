@@ -40,6 +40,10 @@ struct ShipImuData {
     Stamped<Real> heading_rate_rate_lowpass_deg_s2;
 
     Stamped<Real> heading_deg;
+    Stamped<Real> heading_true_deg;
+    Stamped<Real> heading_magnetic_deg;
+    Stamped<Real> magnetic_deviation_deg;
+    Stamped<Real> magnetic_variation_deg;
     Stamped<Real> heading_lowpass_deg;
     Stamped<Quat<Real>> fusion_q_pose;
 
