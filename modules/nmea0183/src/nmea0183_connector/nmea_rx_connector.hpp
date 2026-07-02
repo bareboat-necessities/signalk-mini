@@ -41,6 +41,8 @@ public:
             return false;
         }
 
+        update_multipart_model(sentence, model, now_us, source);
+
         if (sentence_is(sentence, "AAM")) return apply_aam(sentence, model, now_us, source);
         if (sentence_is(sentence, "ACK")) return apply_ack(sentence, model, now_us, source);
         if (sentence_is(sentence, "ADS")) return apply_ads(sentence, model, now_us, source);
@@ -122,6 +124,7 @@ public:
         if (sentence_is(sentence, "TPT")) return apply_tpt(sentence, model, now_us, source);
         if (sentence_is(sentence, "TRF")) return apply_trf(sentence, model, now_us, source);
         if (sentence_is(sentence, "TTM")) return apply_ttm(sentence, model, now_us, source);
+        if (sentence_is(sentence, "TXT")) return apply_txt(sentence, model, now_us, source);
         if (sentence_is(sentence, "VBW")) return apply_vbw(sentence, model, now_us, source);
         if (sentence_is(sentence, "VDR")) return apply_vdr(sentence, model, now_us, source);
         if (sentence_is(sentence, "VHW")) return apply_vhw(sentence, model, now_us, source);
@@ -157,6 +160,71 @@ private:
         if (source != ship_data_model::SensorSource::none) setting.value = source;
     }
 
+    template<typename Multipart>
+    void reset_multipart_record(Multipart& record) {
+        record.received_mask = 0;
+        record.in_progress = false;
+        record.complete = false;
+        record.overflow = false;
+        record.text[0] = '\0';
+    }
+
+    template<typename Multipart>
+    void update_multipart_record(const NmeaSentence& sentence,
+                                 Multipart& record,
+                                 uint64_t now_us,
+                                 ship_data_model::SensorSource source) {
+        if (!sentence.fragment.is_fragmented) return;
+        if (sentence.fragment.is_first() || !record.in_progress || record.complete) {
+            reset_multipart_record(record);
+            nmea_copy_span(record.sentence_id, sizeof(record.sentence_id), sentence.sentence);
+            nmea_copy_span(record.message_id, sizeof(record.message_id), sentence.fragment.message_id);
+            record.in_progress = true;
+        }
+        record.total_fragments.set(static_cast<int32_t>(sentence.fragment.total), now_us);
+        record.last_fragment_number.set(static_cast<int32_t>(sentence.fragment.number), now_us);
+        if (sentence.fragment.number <= 16) {
+            record.received_mask = static_cast<uint16_t>(record.received_mask | (1u << (sentence.fragment.number - 1u)));
+        }
+
+        size_t current = strlen(record.text);
+        const size_t capacity = ship_data_model::NMEA_MULTIPART_TEXT_BYTES;
+        size_t append = sentence.fragment.payload.length;
+        if (current + append + 1u > capacity) {
+            append = current < capacity ? capacity - current - 1u : 0u;
+            record.overflow = true;
+        }
+        if (append > 0u && sentence.fragment.payload.data) {
+            memcpy(record.text + current, sentence.fragment.payload.data, append);
+            record.text[current + append] = '\0';
+            current += append;
+        }
+        record.text_length.set(static_cast<int32_t>(current), now_us);
+
+        const uint16_t expected = sentence.fragment.total >= 16
+            ? 0xffffu
+            : static_cast<uint16_t>((1u << sentence.fragment.total) - 1u);
+        record.complete = sentence.fragment.total > 0 && (record.received_mask & expected) == expected;
+        if (record.complete) record.in_progress = false;
+        set_source(record.source, source);
+        record.last_update_us = now_us;
+    }
+
+    template<typename Model>
+    void update_multipart_model(const NmeaSentence& sentence,
+                                Model& model,
+                                uint64_t now_us,
+                                ship_data_model::SensorSource source) {
+        if (!sentence.fragment.is_fragmented) return;
+        if (sentence_is(sentence, "TXT")) update_multipart_record(sentence, model.nmea_extensions.text_message, now_us, source);
+        else if (sentence.family == NmeaSentenceFamily::Ais) update_multipart_record(sentence, model.nmea_extensions.ais_message, now_us, source);
+        else if (sentence.family == NmeaSentenceFamily::NavTex) update_multipart_record(sentence, model.nmea_extensions.navtex_message, now_us, source);
+        else if (sentence.family == NmeaSentenceFamily::Dsc) update_multipart_record(sentence, model.nmea_extensions.dsc.multipart, now_us, source);
+        else if (sentence.family == NmeaSentenceFamily::SeaTalk) update_multipart_record(sentence, model.nmea_extensions.seatalk_message, now_us, source);
+        else if (sentence.family == NmeaSentenceFamily::Inmarsat) update_multipart_record(sentence, model.nmea_extensions.inmarsat_message, now_us, source);
+        else update_multipart_record(sentence, model.nmea_extensions.generic_multipart_message, now_us, source);
+    }
+
 #include "nmea_A_E.hpp"
 #include "nmea_F_G.hpp"
 #include "nmea_H_N.hpp"
@@ -165,6 +233,11 @@ private:
     template<typename Model>
     bool apply_fir(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
         return apply_raw_sentence_record(sentence, model.nmea_extensions.fire_detection, "FIR", now_us, source);
+    }
+
+    template<typename Model>
+    bool apply_txt(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+        return apply_raw_sentence_record(sentence, model.nmea_extensions.text_sentence, "TXT", now_us, source);
     }
 
     template<typename Model>
