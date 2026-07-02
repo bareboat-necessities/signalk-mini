@@ -48,7 +48,8 @@ int main() {
     check_sentence_token("$GPGGA,002153.000,3342.6618,N,11751.3858,W,1,10,1.2,27.0,M,-34.2,M,,0000*5A", nmea0183_connector::NmeaSentenceFamily::Standard, '$');
     check_sentence_token("!AIVDM,1,1,,A,13HOI:0P0000VOHLCnHQKwvL05Ip,0*23", nmea0183_connector::NmeaSentenceFamily::Ais, '!');
     check_sentence_token("$STALK,84,56,e,0,0,0,0,0,8*0F", nmea0183_connector::NmeaSentenceFamily::SeaTalk, '$');
-    check_sentence_token("$DSC,12,3380405810,00,1234567890,72,1234567890,00,00,00,00,00,00,00*3B", nmea0183_connector::NmeaSentenceFamily::Dsc, '$');
+    const std::string dsc = sentence("CDDSC,12,3380405810,00,1234567890,72,1234567890,00,00,00,00,00,00,00");
+    check_sentence_token(dsc.c_str(), nmea0183_connector::NmeaSentenceFamily::Dsc, '$');
 
     const std::string query = sentence("CCGPQ,GGA");
     check_sentence_token(query.c_str(), nmea0183_connector::NmeaSentenceFamily::Query, '$');
