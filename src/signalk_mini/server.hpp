@@ -72,6 +72,7 @@ private:
             if (!connector.enabled) continue;
             if (connector.protocol == ConnectorProtocol::Nmea0183 && connector.transport == ConnectorTransport::TcpClient && !nmea_tcp_client_connector_started_) {
                 nmea_tcp_client_connection_flags_ = ConnectionFlags{connector.allow_rx, connector.allow_tx};
+                nmea_tcp_client_validate_checksum_ = connector.nmea0183.validate_checksum;
                 async_event_loop::TcpConnectOptions options;
                 options.host = connector.host;
                 options.port = connector.port;
@@ -79,6 +80,7 @@ private:
                 nmea_tcp_client_connector_started_ = true;
             } else if (connector.protocol == ConnectorProtocol::Nmea0183 && connector.transport == ConnectorTransport::TcpServer && !nmea_tcp_server_connector_started_) {
                 nmea_tcp_server_connection_flags_ = ConnectionFlags{connector.allow_rx, connector.allow_tx};
+                nmea_tcp_server_validate_checksum_ = connector.nmea0183.validate_checksum;
                 nmea_tcp_server_connector_started_ = listen(nmea_tcp_server_, nmea_line_handler_, connector.host, connector.port);
             } else if (connector.protocol == ConnectorProtocol::Nmea0183 && connector.transport == ConnectorTransport::Serial && !nmea_serial_connector_started_) {
                 nmea_serial_connector_started_ = start_nmea_serial_connector(connector);
@@ -88,6 +90,7 @@ private:
 
     bool start_nmea_serial_connector(const ConnectorConfig& connector) {
         nmea_serial_connection_flags_ = ConnectionFlags{connector.allow_rx, connector.allow_tx};
+        nmea_serial_validate_checksum_ = connector.nmea0183.validate_checksum;
 #if defined(ARDUINO)
         Serial.begin(connector.baud);
 #else
@@ -104,15 +107,15 @@ private:
         return static_cast<bool>(nmea_serial_event_);
     }
 
-    void handle_nmea_line(const char* text, SourceId source_id) {
-        if (nmea_.feed_line(text, source_id, loop_.clock().micros())) publish();
+    void handle_nmea_line(const char* text, SourceId source_id, bool validate_checksum) {
+        if (nmea_.feed_line(text, source_id, loop_.clock().micros(), validate_checksum)) publish();
     }
 
     void handle_nmea_serial_line(async_event_loop::LineView line) {
         if (!nmea_serial_connection_flags_.allow_rx) return;
         char text[160];
         async_event_loop::line_to_cstr(line, text);
-        handle_nmea_line(text, SourceId(3));
+        handle_nmea_line(text, SourceId(3), nmea_serial_validate_checksum_);
     }
 
     void publish() { publisher_.publish_pending(signalk_connections_.connections); }
@@ -148,7 +151,7 @@ private:
             if (!connections.allow_rx(connection)) return;
             char text[160];
             async_event_loop::line_to_cstr(line, text);
-            owner.handle_nmea_line(text, SourceId(1));
+            owner.handle_nmea_line(text, SourceId(1), owner.nmea_tcp_server_validate_checksum_);
         }
         void on_close(async_event_loop::ITcpConnection& connection) override { connections.remove(connection); }
         void on_error(async_event_loop::ITcpConnection& connection, int) override { connections.remove(connection); }
@@ -161,7 +164,7 @@ private:
         void on_data(async_event_loop::ITcpConnection& connection) override {
             if (!owner.nmea_tcp_client_connection_flags_.allow_rx) return;
             char text[160];
-            while (connection.read_line(text, sizeof(text))) owner.handle_nmea_line(text, SourceId(2));
+            while (connection.read_line(text, sizeof(text))) owner.handle_nmea_line(text, SourceId(2), owner.nmea_tcp_client_validate_checksum_);
         }
         void on_close(async_event_loop::ITcpConnection&) override {}
         void on_error(int) override {}
@@ -185,6 +188,9 @@ private:
     ConnectionFlags nmea_tcp_server_connection_flags_{true, false};
     ConnectionFlags nmea_tcp_client_connection_flags_{true, false};
     ConnectionFlags nmea_serial_connection_flags_{true, false};
+    bool nmea_tcp_server_validate_checksum_ = false;
+    bool nmea_tcp_client_validate_checksum_ = false;
+    bool nmea_serial_validate_checksum_ = true;
     bool nmea_tcp_server_connector_started_ = false;
     bool nmea_tcp_client_connector_started_ = false;
     bool nmea_serial_connector_started_ = false;
