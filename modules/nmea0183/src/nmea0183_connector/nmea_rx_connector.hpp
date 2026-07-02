@@ -78,6 +78,10 @@ public:
         if (sentence_is(sentence, "MTW")) return apply_mtw(sentence, model, now_us, source);
         if (sentence_is(sentence, "MWD")) return apply_mwd(sentence, model, now_us, source);
         if (sentence_is(sentence, "MWV")) return apply_mwv(sentence, model, now_us, source);
+        if (sentence_is(sentence, "OLN")) return apply_oln(sentence, model, now_us, source);
+        if (sentence_is(sentence, "OSD")) return apply_osd(sentence, model, now_us, source);
+        if (sentence_is(sentence, "R00")) return apply_r00(sentence, model, now_us, source);
+        if (sentence_is(sentence, "RMA")) return apply_rma(sentence, model, now_us, source);
         if (sentence_is(sentence, "RMB")) return apply_rmb(sentence, model, now_us, source);
         if (sentence_is(sentence, "RMC")) return apply_rmc(sentence, model, now_us, source);
         if (sentence_is(sentence, "ROT")) return apply_rot(sentence, model, now_us);
