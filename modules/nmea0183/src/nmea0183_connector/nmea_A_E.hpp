@@ -387,7 +387,7 @@ bool apply_dsc(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
         last_error_ = "short DSC";
         return false;
     }
-    auto& dsc = state_.dsc.message;
+    auto& dsc = dsc_state_.message;
     int32_t integer_value = 0;
     float value = 0.0f;
     if (parse_int32(sentence.field(0), integer_value)) dsc.format_specifier.set(integer_value, now_us);
@@ -424,7 +424,7 @@ bool apply_dse(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
         last_error_ = "short DSE";
         return false;
     }
-    auto& dse = state_.dsc.expansion;
+    auto& dse = dsc_state_.expansion;
     int32_t integer_value = 0;
     if (parse_int32(sentence.field(0), integer_value)) dse.total_messages.set(integer_value, now_us);
     if (parse_int32(sentence.field(1), integer_value)) dse.message_number.set(integer_value, now_us);
@@ -441,13 +441,13 @@ bool apply_dse(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 template<typename Model>
 bool apply_dsi(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     (void)model;
-    return apply_raw_sentence_record(sentence, state_.dsc.initiate, "DSI", now_us, source);
+    return apply_raw_sentence_record(sentence, dsc_state_.initiate, "DSI", now_us, source);
 }
 
 template<typename Model>
 bool apply_dsr(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     (void)model;
-    return apply_raw_sentence_record(sentence, state_.dsc.response, "DSR", now_us, source);
+    return apply_raw_sentence_record(sentence, dsc_state_.response, "DSR", now_us, source);
 }
 
 template<typename Model>
