@@ -2,6 +2,10 @@
 
 // Included inside Nmea0183RxConnector.
 
+bool accept_unmodeled_sentence(const NmeaSentence&) {
+    return true;
+}
+
 template<typename Record>
 bool apply_raw_sentence_record(const NmeaSentence& sentence,
                                Record& record,
@@ -53,26 +57,26 @@ bool apply_aam(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
 template<typename Model>
 bool apply_ack(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    return apply_raw_sentence_record(sentence, state_.alarm_acknowledgement, "ACK", now_us, source);
+    (void)model; (void)now_us; (void)source;
+    return accept_unmodeled_sentence(sentence);
 }
 
 template<typename Model>
 bool apply_ads(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    return apply_raw_sentence_record(sentence, state_.automatic_device_status, "ADS", now_us, source);
+    (void)model; (void)now_us; (void)source;
+    return accept_unmodeled_sentence(sentence);
 }
 
 template<typename Model>
 bool apply_akd(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    return apply_raw_sentence_record(sentence, state_.acknowledge_detail_alarm, "AKD", now_us, source);
+    (void)model; (void)now_us; (void)source;
+    return accept_unmodeled_sentence(sentence);
 }
 
 template<typename Model>
 bool apply_ala(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    return apply_raw_sentence_record(sentence, state_.set_detail_alarm, "ALA", now_us, source);
+    (void)model; (void)now_us; (void)source;
+    return accept_unmodeled_sentence(sentence);
 }
 
 template<typename Model>
@@ -182,14 +186,14 @@ bool apply_apb(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
 template<typename Model>
 bool apply_asd(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    return apply_raw_sentence_record(sentence, state_.autopilot_system, "ASD", now_us, source);
+    (void)model; (void)now_us; (void)source;
+    return accept_unmodeled_sentence(sentence);
 }
 
 template<typename Model>
 bool apply_bec(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    return apply_raw_sentence_record(sentence, state_.bearing_distance_dead_reckoning, "BEC", now_us, source);
+    (void)model; (void)now_us; (void)source;
+    return accept_unmodeled_sentence(sentence);
 }
 
 template<typename Model>
@@ -235,41 +239,32 @@ bool apply_bwc_bwr(const NmeaSentence& sentence, Model& model, uint64_t now_us, 
 
 template<typename Model>
 bool apply_cek(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    return apply_raw_sentence_record(sentence, state_.encryption_key_command, "CEK", now_us, source);
+    (void)model; (void)now_us; (void)source;
+    return accept_unmodeled_sentence(sentence);
 }
 
 template<typename Model>
 bool apply_cop(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    return apply_raw_sentence_record(sentence, state_.operational_period_command, "COP", now_us, source);
+    (void)model; (void)now_us; (void)source;
+    return accept_unmodeled_sentence(sentence);
 }
 
 template<typename Model>
 bool apply_cur(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
     if (sentence.field_count < 4) {
         last_error_ = "short CUR";
         return false;
     }
-    int32_t layer = 0;
     float value = 0.0f;
-    if (parse_int32(sentence.field(0), layer)) state_.current_layer.layer_number.set(layer, now_us);
     if (parse_real(sentence.field(1), value)) {
-        state_.current_layer.current_direction_deg = wrap_360_deg(value);
-        state_.current_layer.has_direction = true;
+        if (sentence.field(2)[0] == 'M') model.water.current_direction_magnetic_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
+        else model.water.current_direction_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
     }
-    state_.current_layer.direction_reference = sentence.field(2)[0];
     if (parse_knots(sentence.field(3), sentence.field_count > 4 ? sentence.field(4) : NmeaSpan(), value)) {
-        state_.current_layer.current_speed_kn = value;
-        state_.current_layer.has_speed = true;
+        model.water.current_speed_kn.set(static_cast<Real>(value), now_us);
     }
-    if (sentence.field_count > 6 && parse_depth_m(sentence.field(5), sentence.field(6), value)) {
-        state_.current_layer.layer_depth_m = value;
-        state_.current_layer.has_depth = true;
-    }
-    set_source(state_.current_layer.source, source);
-    state_.current_layer.last_update_us = now_us;
+    set_source(model.water.source, source);
+    model.water.last_update_us = now_us;
     return true;
 }
 
@@ -348,20 +343,20 @@ bool apply_dcn(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
 template<typename Model>
 bool apply_dcr(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    return apply_raw_sentence_record(sentence, state_.device_capability_report, "DCR", now_us, source);
+    (void)model; (void)now_us; (void)source;
+    return accept_unmodeled_sentence(sentence);
 }
 
 template<typename Model>
 bool apply_ddc(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    return apply_raw_sentence_record(sentence, state_.display_dimming_control, "DDC", now_us, source);
+    (void)model; (void)now_us; (void)source;
+    return accept_unmodeled_sentence(sentence);
 }
 
 template<typename Model>
 bool apply_dor(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    return apply_raw_sentence_record(sentence, state_.door_status, "DOR", now_us, source);
+    (void)model; (void)now_us; (void)source;
+    return accept_unmodeled_sentence(sentence);
 }
 
 template<typename Model>
@@ -475,12 +470,12 @@ bool apply_dtm(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
 template<typename Model>
 bool apply_etl(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    return apply_raw_sentence_record(sentence, state_.engine_telegraph, "ETL", now_us, source);
+    (void)model; (void)now_us; (void)source;
+    return accept_unmodeled_sentence(sentence);
 }
 
 template<typename Model>
 bool apply_eve(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    return apply_raw_sentence_record(sentence, state_.event_message, "EVE", now_us, source);
+    (void)model; (void)now_us; (void)source;
+    return accept_unmodeled_sentence(sentence);
 }
