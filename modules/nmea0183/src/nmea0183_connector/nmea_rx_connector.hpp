@@ -110,6 +110,9 @@ public:
         if (sentence_is(sentence, "XDR")) return apply_xdr(sentence, model, now_us);
         if (sentence_is(sentence, "XTE")) return apply_xte(sentence, model, now_us, source);
         if (sentence_is(sentence, "XTR")) return apply_xtr(sentence, model, now_us, source);
+        if (sentence_is(sentence, "ZDA")) return apply_zda(sentence, model, now_us, source);
+        if (sentence_is(sentence, "ZFO")) return apply_zfo(sentence, model, now_us, source);
+        if (sentence_is(sentence, "ZTG")) return apply_ztg(sentence, model, now_us, source);
 
         last_error_ = "unsupported sentence";
         return false;
