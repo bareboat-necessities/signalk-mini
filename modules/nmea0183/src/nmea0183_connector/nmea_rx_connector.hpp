@@ -85,7 +85,12 @@ public:
         if (sentence_is(sentence, "RMB")) return apply_rmb(sentence, model, now_us, source);
         if (sentence_is(sentence, "RMC")) return apply_rmc(sentence, model, now_us, source);
         if (sentence_is(sentence, "ROT")) return apply_rot(sentence, model, now_us);
+        if (sentence_is(sentence, "RPM")) return apply_rpm(sentence, model, now_us, source);
         if (sentence_is(sentence, "RSA")) return apply_rsa(sentence, model, now_us, source);
+        if (sentence_is(sentence, "RSD")) return apply_rsd(sentence, model, now_us, source);
+        if (sentence_is(sentence, "RTE")) return apply_rte(sentence, model, now_us, source);
+        if (sentence_is(sentence, "SFI")) return apply_sfi(sentence, model, now_us, source);
+        if (sentence_is(sentence, "STN")) return apply_stn(sentence, model, now_us, source);
         if (sentence_is(sentence, "VHW")) return apply_vhw(sentence, model, now_us, source);
         if (sentence_is(sentence, "VTG")) return apply_vtg(sentence, model, now_us, source);
         if (sentence_is(sentence, "VWR")) return apply_vwr(sentence, model, now_us, source, false);
