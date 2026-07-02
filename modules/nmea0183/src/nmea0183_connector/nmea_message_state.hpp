@@ -5,8 +5,6 @@
 
 namespace nmea0183_connector {
 
-static const uint8_t NMEA_MESSAGE_RAW_MAX_FIELDS = 16;
-static const uint8_t NMEA_MESSAGE_RAW_FIELD_BYTES = 16;
 static const uint8_t NMEA_MESSAGE_MULTIPART_TEXT_BYTES = 96;
 static const uint8_t NMEA_MESSAGE_MULTIPART_ID_BYTES = 16;
 
@@ -22,15 +20,6 @@ struct NmeaMessageStampedInt {
         value = next;
         last_update_us = now_us;
     }
-};
-
-struct NmeaRawMessageRecord {
-    NmeaMessageSource source;
-    char sentence_id[4] = {0};
-    NmeaMessageStampedInt field_count;
-    bool truncated = false;
-    char field[NMEA_MESSAGE_RAW_MAX_FIELDS][NMEA_MESSAGE_RAW_FIELD_BYTES] = {{0}};
-    uint64_t last_update_us = 0;
 };
 
 struct NmeaMultipartMessageRecord {
