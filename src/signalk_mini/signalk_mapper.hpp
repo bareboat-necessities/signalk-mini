@@ -17,22 +17,22 @@ class SignalKMapper {
 public:
     bool map_change(const ship_data_model::DataModel<Real>& model, const ModelChange& change, SignalKMappedValue<Real>& out) const {
         switch (change.field) {
-        case ModelField::NavigationGpsFixLatDeg:
+        case ModelField::GnssFixLatDeg:
             out.path = "navigation.position.value.latitude";
-            out.number = model.navigation.gps.fix_lat_deg.value;
-            return model.navigation.gps.fix_lat_deg.valid;
-        case ModelField::NavigationGpsFixLonDeg:
+            out.number = model.gnss.fix.fix_lat_deg.value;
+            return model.gnss.fix.fix_lat_deg.valid;
+        case ModelField::GnssFixLonDeg:
             out.path = "navigation.position.value.longitude";
-            out.number = model.navigation.gps.fix_lon_deg.value;
-            return model.navigation.gps.fix_lon_deg.valid;
-        case ModelField::NavigationGpsSpeedKn:
+            out.number = model.gnss.fix.fix_lon_deg.value;
+            return model.gnss.fix.fix_lon_deg.valid;
+        case ModelField::GnssSpeedKn:
             out.path = "navigation.speedOverGround";
-            out.number = knots_to_mps<Real>(model.navigation.gps.speed_kn.value);
-            return model.navigation.gps.speed_kn.valid;
-        case ModelField::NavigationGpsTrackDeg:
+            out.number = knots_to_mps<Real>(model.gnss.fix.speed_kn.value);
+            return model.gnss.fix.speed_kn.valid;
+        case ModelField::GnssTrackDeg:
             out.path = "navigation.courseOverGroundTrue";
-            out.number = deg_to_rad<Real>(model.navigation.gps.track_deg.value);
-            return model.navigation.gps.track_deg.valid;
+            out.number = deg_to_rad<Real>(model.gnss.fix.track_deg.value);
+            return model.gnss.fix.track_deg.valid;
         case ModelField::ImuHeadingDeg:
             out.path = "navigation.headingTrue";
             out.number = deg_to_rad<Real>(model.imu.heading_deg.value);
@@ -45,10 +45,10 @@ public:
             out.path = "environment.wind.speedApparent";
             out.number = knots_to_mps<Real>(model.wind.apparent.speed_kn.value);
             return model.wind.apparent.speed_kn.valid;
-        case ModelField::WaterDepthM:
+        case ModelField::SeaDepthM:
             out.path = "environment.depth.belowTransducer";
-            out.number = model.water.depth_m.value;
-            return model.water.depth_m.valid;
+            out.number = model.sea.depth_m.value;
+            return model.sea.depth_m.valid;
         default:
             return false;
         }
