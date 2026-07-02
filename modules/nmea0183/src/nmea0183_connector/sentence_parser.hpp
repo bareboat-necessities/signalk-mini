@@ -96,6 +96,7 @@ inline NmeaSentenceFamily classify_nmea_sentence(const NmeaSentence& s) {
     if (nmea_is_ais_sentence(s)) return NmeaSentenceFamily::Ais;
     if (nmea_is_seatalk_sentence(s)) return NmeaSentenceFamily::SeaTalk;
     if (nmea_is_dsc_sentence(s)) return NmeaSentenceFamily::Dsc;
+    if (sentence_is_any(s, "NRM", "NRX")) return static_cast<NmeaSentenceFamily>(5);
     if (nmea_is_inmarsat_sentence(s)) return NmeaSentenceFamily::Inmarsat;
     if (nmea_is_proprietary_sentence(s)) return NmeaSentenceFamily::Proprietary;
     if (s.start_char == '!') return NmeaSentenceFamily::UnknownEncapsulation;
