@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <ship_data_model.hpp>
 
 namespace nmea0183_connector {
 
@@ -8,6 +9,10 @@ static const uint8_t NMEA_RX_RAW_MAX_FIELDS = 16;
 static const uint8_t NMEA_RX_RAW_FIELD_BYTES = 16;
 static const uint8_t NMEA_RX_MULTIPART_TEXT_BYTES = 96;
 static const uint8_t NMEA_RX_MULTIPART_ID_BYTES = 16;
+
+struct NmeaRxSource {
+    ship_data_model::SensorSource value = ship_data_model::SensorSource::none;
+};
 
 struct NmeaRxStampedInt {
     int32_t value = 0;
@@ -20,6 +25,7 @@ struct NmeaRxStampedInt {
 };
 
 struct NmeaRxRawSentenceRecord {
+    NmeaRxSource source;
     char sentence_id[4] = {0};
     NmeaRxStampedInt field_count;
     bool truncated = false;
@@ -28,6 +34,7 @@ struct NmeaRxRawSentenceRecord {
 };
 
 struct NmeaRxMultipartRecord {
+    NmeaRxSource source;
     char sentence_id[4] = {0};
     char message_id[NMEA_RX_MULTIPART_ID_BYTES] = {0};
     NmeaRxStampedInt total_fragments;
@@ -42,6 +49,7 @@ struct NmeaRxMultipartRecord {
 };
 
 struct NmeaRxDscMessageRecord {
+    NmeaRxSource source;
     NmeaRxStampedInt format_specifier;
     char sender_mmsi[16] = {0};
     NmeaRxStampedInt category;
@@ -64,6 +72,7 @@ struct NmeaRxDscMessageRecord {
 };
 
 struct NmeaRxDscExpansionRecord {
+    NmeaRxSource source;
     NmeaRxStampedInt total_messages;
     NmeaRxStampedInt message_number;
     char query_flag = 0;
@@ -77,6 +86,7 @@ struct NmeaRxDscExpansionRecord {
 };
 
 struct NmeaRxCurrentLayerRecord {
+    NmeaRxSource source;
     NmeaRxStampedInt layer_number;
     float current_direction_deg = 0.0f;
     char direction_reference = 0;
@@ -89,6 +99,7 @@ struct NmeaRxCurrentLayerRecord {
 };
 
 struct NmeaRxVariablePointRecord {
+    NmeaRxSource source;
     float time_to_point_s = 0.0f;
     float distance_to_point_nmi = 0.0f;
     char point_id[16] = {0};
