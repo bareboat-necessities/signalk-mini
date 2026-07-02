@@ -5,8 +5,8 @@
 
 #include <ship_data_model.hpp>
 
-#include "nmea_rx_helpers.hpp"
 #include "sentence_parser.hpp"
+#include "nmea_rx_helpers.hpp"
 
 namespace nmea0183_connector {
 
