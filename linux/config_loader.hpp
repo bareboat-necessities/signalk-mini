@@ -134,35 +134,117 @@ private:
             config_setting_t* connector_setting = config_setting_get_elem(connector_list, i);
             if (!connector_setting) continue;
             signalk_mini::ConnectorConfig connector;
-            const char* value = nullptr;
-            read_bool(connector_setting, "enabled", connector.enabled);
-            if (config_setting_lookup_string(connector_setting, "protocol", &value)) connector.protocol = protocol_from_string(value);
-            if (config_setting_lookup_string(connector_setting, "transport", &value)) connector.transport = transport_from_string(value);
-            if (config_setting_lookup_string(connector_setting, "label", &value)) connector.label = keep(value);
-            if (config_setting_lookup_string(connector_setting, "host", &value)) connector.host = keep(value);
-            read_u16(connector_setting, "port", connector.port);
-            if (config_setting_lookup_string(connector_setting, "device", &value)) connector.device = keep(value);
-            read_u32(connector_setting, "baud", connector.baud);
-            read_u8(connector_setting, "pin", connector.pin);
-            read_u8(connector_setting, "i2c_bus", connector.i2c_bus);
-            read_u8(connector_setting, "i2c_address", connector.i2c_address);
-            read_bool(connector_setting, "allow_rx", connector.allow_rx);
-            read_bool(connector_setting, "allow_tx", connector.allow_tx);
-            load_nmea0183_protocol(connector_setting, connector);
+            load_connector(connector_setting, connector);
             connectors_.push_back(connector);
         }
         config.connectors = connectors_.empty() ? nullptr : connectors_.data();
         config.connector_count = connectors_.size();
     }
 
+    void load_connector(config_setting_t* connector_setting, signalk_mini::ConnectorConfig& connector) {
+        const char* value = nullptr;
+        read_bool(connector_setting, "enabled", connector.enabled);
+        if (config_setting_lookup_string(connector_setting, "label", &value)) connector.label = keep(value);
+        if (config_setting_lookup_string(connector_setting, "protocol", &value)) connector.protocol.kind = protocol_from_string(value);
+        if (config_setting_lookup_string(connector_setting, "transport", &value)) connector.transport.kind = transport_from_string(value);
+        load_connector_access(connector_setting, connector);
+        load_nmea0183_protocol(connector_setting, connector);
+        load_transport(connector_setting, connector);
+    }
+
+    void load_connector_access(config_setting_t* connector_setting, signalk_mini::ConnectorConfig& connector) {
+        config_setting_t* access = config_setting_lookup(connector_setting, "access");
+        if (access) {
+            read_bool(access, "allow_rx", connector.access.allow_rx);
+            read_bool(access, "allow_tx", connector.access.allow_tx);
+            return;
+        }
+        read_bool(connector_setting, "allow_rx", connector.access.allow_rx);
+        read_bool(connector_setting, "allow_tx", connector.access.allow_tx);
+    }
+
     void load_nmea0183_protocol(config_setting_t* connector_setting, signalk_mini::ConnectorConfig& connector) {
-        if (connector.protocol != signalk_mini::ConnectorProtocol::Nmea0183) return;
+        if (connector.protocol.kind != signalk_mini::ConnectorProtocol::Nmea0183) return;
         config_setting_t* nmea0183 = config_setting_lookup(connector_setting, "nmea0183");
         if (nmea0183) {
-            if (read_bool(nmea0183, "validate_checksum", connector.nmea0183.validate_checksum)) connector.nmea0183.validate_checksum_configured = true;
-        } else if (read_bool(connector_setting, "validate_checksum", connector.nmea0183.validate_checksum)) {
-            connector.nmea0183.validate_checksum_configured = true;
+            if (read_bool(nmea0183, "validate_checksum", connector.protocol.nmea0183.validate_checksum)) connector.protocol.nmea0183.validate_checksum_configured = true;
+        } else if (read_bool(connector_setting, "validate_checksum", connector.protocol.nmea0183.validate_checksum)) {
+            connector.protocol.nmea0183.validate_checksum_configured = true;
         }
+    }
+
+    void load_transport(config_setting_t* connector_setting, signalk_mini::ConnectorConfig& connector) {
+        switch (connector.transport.kind) {
+        case signalk_mini::ConnectorTransport::TcpClient:
+            load_tcp_client(connector_setting, connector);
+            break;
+        case signalk_mini::ConnectorTransport::TcpServer:
+            load_tcp_server(connector_setting, connector);
+            break;
+        case signalk_mini::ConnectorTransport::Serial:
+            load_serial(connector_setting, connector);
+            break;
+        case signalk_mini::ConnectorTransport::Udp:
+            load_udp(connector_setting, connector);
+            break;
+        case signalk_mini::ConnectorTransport::I2c:
+            load_i2c(connector_setting, connector);
+            break;
+        case signalk_mini::ConnectorTransport::DigitalPin:
+            load_pin(connector_setting, "digital_pin", connector.transport.digital_pin);
+            break;
+        case signalk_mini::ConnectorTransport::AnalogPin:
+            load_pin(connector_setting, "analog_pin", connector.transport.analog_pin);
+            break;
+        default:
+            break;
+        }
+    }
+
+    void load_tcp_client(config_setting_t* connector_setting, signalk_mini::ConnectorConfig& connector) {
+        const char* value = nullptr;
+        config_setting_t* s = config_setting_lookup(connector_setting, "tcp_client");
+        if (!s) s = connector_setting;
+        if (config_setting_lookup_string(s, "host", &value)) connector.transport.tcp_client.host = keep(value);
+        read_u16(s, "port", connector.transport.tcp_client.port);
+    }
+
+    void load_tcp_server(config_setting_t* connector_setting, signalk_mini::ConnectorConfig& connector) {
+        const char* value = nullptr;
+        config_setting_t* s = config_setting_lookup(connector_setting, "tcp_server");
+        if (!s) s = connector_setting;
+        if (config_setting_lookup_string(s, "host", &value)) connector.transport.tcp_server.host = keep(value);
+        read_u16(s, "port", connector.transport.tcp_server.port);
+    }
+
+    void load_serial(config_setting_t* connector_setting, signalk_mini::ConnectorConfig& connector) {
+        const char* value = nullptr;
+        config_setting_t* s = config_setting_lookup(connector_setting, "serial");
+        if (!s) s = connector_setting;
+        if (config_setting_lookup_string(s, "device", &value)) connector.transport.serial.device = keep(value);
+        read_u32(s, "baud", connector.transport.serial.baud);
+    }
+
+    void load_udp(config_setting_t* connector_setting, signalk_mini::ConnectorConfig& connector) {
+        const char* value = nullptr;
+        config_setting_t* s = config_setting_lookup(connector_setting, "udp");
+        if (!s) s = connector_setting;
+        if (config_setting_lookup_string(s, "host", &value)) connector.transport.udp.host = keep(value);
+        read_u16(s, "port", connector.transport.udp.port);
+        read_u16(s, "local_port", connector.transport.udp.local_port);
+    }
+
+    void load_i2c(config_setting_t* connector_setting, signalk_mini::ConnectorConfig& connector) {
+        config_setting_t* s = config_setting_lookup(connector_setting, "i2c");
+        if (!s) s = connector_setting;
+        read_u8(s, "bus", connector.transport.i2c.bus);
+        read_u8(s, "address", connector.transport.i2c.address);
+    }
+
+    void load_pin(config_setting_t* connector_setting, const char* block_name, signalk_mini::PinTransportConfig& pin) {
+        config_setting_t* s = config_setting_lookup(connector_setting, block_name);
+        if (!s) s = connector_setting;
+        read_u8(s, "pin", pin.pin);
     }
 
     std::deque<std::string> strings_;
