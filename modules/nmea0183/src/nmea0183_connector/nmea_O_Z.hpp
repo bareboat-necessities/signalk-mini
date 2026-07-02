@@ -537,6 +537,62 @@ bool apply_vwr(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 }
 
 template<typename Model>
+bool apply_wcv(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 3) {
+        last_error_ = "short WCV";
+        return false;
+    }
+
+    float value = 0.0f;
+    if (!parse_knots(sentence.field(0), sentence.field(1), value)) {
+        last_error_ = "bad WCV";
+        return false;
+    }
+    model.navigation.rmb.closing_velocity_kn.set(static_cast<Real>(value), now_us);
+    nmea_copy_span(model.navigation.rmb.destination_id, sizeof(model.navigation.rmb.destination_id), sentence.field(2));
+    nmea_copy_span(model.navigation.waypoint.to_waypoint_id, sizeof(model.navigation.waypoint.to_waypoint_id), sentence.field(2));
+    set_source(model.navigation.rmb.source, source);
+    set_source(model.navigation.waypoint.source, source);
+    model.navigation.rmb.last_update_us = now_us;
+    model.navigation.waypoint.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
+bool apply_wnc(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 6) {
+        last_error_ = "short WNC";
+        return false;
+    }
+
+    float value = 0.0f;
+    if (parse_distance_nmi(sentence.field(0), sentence.field(1), value) || parse_distance_nmi(sentence.field(2), sentence.field(3), value)) {
+        model.navigation.waypoint.distance_nmi.set(static_cast<Real>(value), now_us);
+    }
+    nmea_copy_span(model.navigation.waypoint.to_waypoint_id, sizeof(model.navigation.waypoint.to_waypoint_id), sentence.field(4));
+    nmea_copy_span(model.navigation.waypoint.from_waypoint_id, sizeof(model.navigation.waypoint.from_waypoint_id), sentence.field(5));
+    set_source(model.navigation.waypoint.source, source);
+    model.navigation.waypoint.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
+bool apply_wpl(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 5) {
+        last_error_ = "short WPL";
+        return false;
+    }
+
+    float value = 0.0f;
+    if (parse_lat_lon(sentence.field(0), sentence.field(1), value)) model.navigation.waypoint.latitude_deg.set(static_cast<Real>(value), now_us);
+    if (parse_lat_lon(sentence.field(2), sentence.field(3), value)) model.navigation.waypoint.longitude_deg.set(static_cast<Real>(value), now_us);
+    nmea_copy_span(model.navigation.waypoint.to_waypoint_id, sizeof(model.navigation.waypoint.to_waypoint_id), sentence.field(4));
+    set_source(model.navigation.waypoint.source, source);
+    model.navigation.waypoint.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
 bool apply_xdr(const NmeaSentence& sentence, Model& model, uint64_t now_us) {
     bool any = false;
     float value = 0.0f;
@@ -571,5 +627,22 @@ bool apply_xte(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     model.navigation.apb.xte_nmi.set(static_cast<Real>(xte_nmi), now_us);
     set_source(model.navigation.apb.source, source);
     model.navigation.apb.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
+bool apply_xtr(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    float xte_nmi = 0.0f;
+    if (sentence.field_count < 3 || sentence.field(2)[0] != 'N' || !parse_left_right_signed(sentence.field(0), sentence.field(1), xte_nmi)) {
+        last_error_ = "bad XTR";
+        return false;
+    }
+
+    model.navigation.apb.xte_nmi.set(static_cast<Real>(xte_nmi), now_us);
+    model.navigation.rmb.xte_nmi.set(static_cast<Real>(xte_nmi), now_us);
+    set_source(model.navigation.apb.source, source);
+    set_source(model.navigation.rmb.source, source);
+    model.navigation.apb.last_update_us = now_us;
+    model.navigation.rmb.last_update_us = now_us;
     return true;
 }
