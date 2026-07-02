@@ -35,7 +35,7 @@ public:
     }
 
     bool apply_sentence(const NmeaSentence& sentence,
-                        ship_data_model::DataModel<Real>& model,
+                        ship_data_model::DataModel<Real>& root_model,
                         uint64_t now_us,
                         ship_data_model::SensorSource source) {
         last_error_ = "";
@@ -45,10 +45,10 @@ public:
         }
 
         update_multipart_message_state(sentence, now_us, source);
-        NmeaModelWriteView model_view(model);
+        NmeaModelWriteView model(root_model);
 
-#define NMEA_APPLY(ID, FN) if (sentence_is(sentence, ID)) return FN(sentence, model_view, now_us, source)
-#define NMEA_APPLY_NO_SOURCE(ID, FN) if (sentence_is(sentence, ID)) return FN(sentence, model_view, now_us)
+#define NMEA_APPLY(ID, FN) if (sentence_is(sentence, ID)) return FN(sentence, model, now_us, source)
+#define NMEA_APPLY_NO_SOURCE(ID, FN) if (sentence_is(sentence, ID)) return FN(sentence, model, now_us)
         NMEA_APPLY("AAM", apply_aam);
         NMEA_APPLY("ACK", apply_ack);
         NMEA_APPLY("ADS", apply_ads);
@@ -59,10 +59,10 @@ public:
         NMEA_APPLY("APB", apply_apb);
         NMEA_APPLY("ASD", apply_asd);
         NMEA_APPLY("BEC", apply_bec);
-        if (sentence_is(sentence, "BOD")) return apply_bod_bww(sentence, model_view, now_us, source);
-        if (sentence_is(sentence, "BWC")) return apply_bwc_bwr(sentence, model_view, now_us, source);
-        if (sentence_is(sentence, "BWR")) return apply_bwc_bwr(sentence, model_view, now_us, source);
-        if (sentence_is(sentence, "BWW")) return apply_bod_bww(sentence, model_view, now_us, source);
+        if (sentence_is(sentence, "BOD")) return apply_bod_bww(sentence, model, now_us, source);
+        if (sentence_is(sentence, "BWC")) return apply_bwc_bwr(sentence, model, now_us, source);
+        if (sentence_is(sentence, "BWR")) return apply_bwc_bwr(sentence, model, now_us, source);
+        if (sentence_is(sentence, "BWW")) return apply_bod_bww(sentence, model, now_us, source);
         NMEA_APPLY("CEK", apply_cek);
         NMEA_APPLY("COP", apply_cop);
         NMEA_APPLY("CUR", apply_cur);
@@ -137,8 +137,8 @@ public:
         NMEA_APPLY("VLW", apply_vlw);
         NMEA_APPLY("VPW", apply_vpw);
         NMEA_APPLY("VTG", apply_vtg);
-        if (sentence_is(sentence, "VWR")) return apply_vwr(sentence, model_view, now_us, source, false);
-        if (sentence_is(sentence, "VWT")) return apply_vwr(sentence, model_view, now_us, source, true);
+        if (sentence_is(sentence, "VWR")) return apply_vwr(sentence, model, now_us, source, false);
+        if (sentence_is(sentence, "VWT")) return apply_vwr(sentence, model, now_us, source, true);
         NMEA_APPLY("WCV", apply_wcv);
         NMEA_APPLY("WDC", apply_wdc);
         NMEA_APPLY("WDR", apply_wdr);
@@ -367,9 +367,10 @@ private:
         NmeaWaterWriteView water;
         ship_data_model::WindData<Real>& wind;
         ship_data_model::ShipImuData<Real>& imu;
+        ship_data_model::RudderData<Real>& rudder;
 
         explicit NmeaModelWriteView(ship_data_model::DataModel<Real>& model)
-            : navigation(model), water(model), wind(model.wind), imu(model.imu) {}
+            : navigation(model), water(model), wind(model.wind), imu(model.imu), rudder(model.steering.rudder) {}
     };
 
     const char* last_error_;
