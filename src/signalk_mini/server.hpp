@@ -14,21 +14,19 @@
 
 namespace signalk_mini {
 
-template<typename Real, size_t MaxSignalKConnections = 8, size_t MaxNmeaSourceConnections = 4>
+template<typename Real, size_t MaxSignalKConnections = 8, size_t MaxConnectionsPerConnector = 4>
 class MiniSignalKServer {
 public:
     explicit MiniSignalKServer(const SignalKMiniConfig& config = SignalKMiniConfig{})
-        : config_(config), signalk_tcp_server_(loop_.scheduler()), nmea_tcp_server_(loop_.scheduler()),
-          nmea_tcp_client_(loop_.scheduler()),
-#if defined(ARDUINO)
-          nmea_serial_stream_(Serial),
-#else
-          nmea_serial_stream_(),
-#endif
-          nmea_serial_reader_(nmea_serial_stream_, async_event_loop::LineProtocolOptions{}, [this](async_event_loop::LineView line) { handle_nmea_serial_line(line); }),
-          publisher_(store_, config_), signalk_connections_(*this),
-          nmea_server_connections_(*this), nmea_client_connection_(*this),
-          signalk_line_handler_(signalk_connections_, signalk_options()), nmea_line_handler_(nmea_server_connections_) {}
+        : config_(config),
+          signalk_tcp_server_(loop_.scheduler()),
+          publisher_(store_, config_),
+          signalk_connections_(*this),
+          signalk_line_handler_(signalk_connections_, signalk_options()),
+          connector0_(*this, 0),
+          connector1_(*this, 1),
+          connector2_(*this, 2),
+          connector3_(*this, 3) {}
 
     bool begin() {
         if (!loop_.valid()) return false;
@@ -65,65 +63,11 @@ private:
         return server.listen(options, handler);
     }
 
-    void start_configured_connectors() {
-        const size_t count = config_.connector_count <= max_connector_configs ? config_.connector_count : max_connector_configs;
-        for (size_t i = 0; i < count; ++i) {
-            const ConnectorConfig& connector = config_.connectors[i];
-            if (!connector.enabled) continue;
-            if (connector.protocol == ConnectorProtocol::Nmea0183 && connector.transport == ConnectorTransport::TcpClient && !nmea_tcp_client_connector_started_) {
-                nmea_tcp_client_connection_flags_ = ConnectionFlags{connector.allow_rx, connector.allow_tx};
-                nmea_tcp_client_validate_checksum_ = connector.nmea0183.validate_checksum;
-                async_event_loop::TcpConnectOptions options;
-                options.host = connector.host;
-                options.port = connector.port;
-                nmea_tcp_client_.connect(options, nmea_client_connection_);
-                nmea_tcp_client_connector_started_ = true;
-            } else if (connector.protocol == ConnectorProtocol::Nmea0183 && connector.transport == ConnectorTransport::TcpServer && !nmea_tcp_server_connector_started_) {
-                nmea_tcp_server_connection_flags_ = ConnectionFlags{connector.allow_rx, connector.allow_tx};
-                nmea_tcp_server_validate_checksum_ = connector.nmea0183.validate_checksum;
-                nmea_tcp_server_connector_started_ = listen(nmea_tcp_server_, nmea_line_handler_, connector.host, connector.port);
-            } else if (connector.protocol == ConnectorProtocol::Nmea0183 && connector.transport == ConnectorTransport::Serial && !nmea_serial_connector_started_) {
-                nmea_serial_connector_started_ = start_nmea_serial_connector(connector);
-            }
-        }
-    }
-
-    bool start_nmea_serial_connector(const ConnectorConfig& connector) {
-        nmea_serial_connection_flags_ = ConnectionFlags{connector.allow_rx, connector.allow_tx};
-        nmea_serial_validate_checksum_ = connector.nmea0183.validate_checksum;
-#if defined(ARDUINO)
-        Serial.begin(connector.baud);
-#else
-        if (!nmea_serial_stream_.open(connector.device, connector.baud)) {
-            return false;
-        }
-#endif
-        if (!connector.allow_rx) {
-            return true;
-        }
-        nmea_serial_event_ = loop_.on_bytes_ready(nmea_serial_stream_, [this]() {
-            nmea_serial_reader_.poll(loop_.clock().micros());
-        });
-        return static_cast<bool>(nmea_serial_event_);
-    }
-
-    void handle_nmea_line(const char* text, SourceId source_id, bool validate_checksum) {
-        if (nmea_.feed_line(text, source_id, loop_.clock().micros(), validate_checksum)) publish();
-    }
-
-    void handle_nmea_serial_line(async_event_loop::LineView line) {
-        if (!nmea_serial_connection_flags_.allow_rx) return;
-        char text[160];
-        async_event_loop::line_to_cstr(line, text);
-        handle_nmea_line(text, SourceId(3), nmea_serial_validate_checksum_);
-    }
-
-    void publish() { publisher_.publish_pending(signalk_connections_.connections); }
-
     struct SignalKConnectionHandler : async_event_loop::ITcpLineServerHandler {
         explicit SignalKConnectionHandler(MiniSignalKServer& owner_ref) : owner(owner_ref) {}
         MiniSignalKServer& owner;
         ConnectionRegistry<MaxSignalKConnections> connections;
+
         void on_accept(async_event_loop::ITcpConnection& connection, const async_event_loop::TcpPeerInfo&) override {
             ConnectionFlags flags{owner.config_.signalk.allow_rx, owner.config_.signalk.allow_tx};
             if (!connections.add(connection, flags)) connection.close();
@@ -140,61 +84,172 @@ private:
         void on_too_many_connections(async_event_loop::ITcpConnection& connection) override { connection.close(); }
     };
 
-    struct NmeaTcpServerConnectionHandler : async_event_loop::ITcpLineServerHandler {
-        explicit NmeaTcpServerConnectionHandler(MiniSignalKServer& owner_ref) : owner(owner_ref) {}
+    struct ConnectorTcpServerHandler : async_event_loop::ITcpLineServerHandler {
+        ConnectorTcpServerHandler(MiniSignalKServer& owner_ref, size_t connector_index)
+            : owner(owner_ref), index(connector_index) {}
+
         MiniSignalKServer& owner;
-        ConnectionRegistry<MaxNmeaSourceConnections> connections;
+        size_t index;
+        ConnectionRegistry<MaxConnectionsPerConnector> connections;
+
         void on_accept(async_event_loop::ITcpConnection& connection, const async_event_loop::TcpPeerInfo&) override {
-            if (!connections.add(connection, owner.nmea_tcp_server_connection_flags_)) connection.close();
+            if (!connections.add(connection, owner.connector_slot(index).connection_flags)) connection.close();
         }
         void on_line(async_event_loop::ITcpConnection& connection, async_event_loop::LineView line) override {
             if (!connections.allow_rx(connection)) return;
             char text[160];
             async_event_loop::line_to_cstr(line, text);
-            owner.handle_nmea_line(text, SourceId(1), owner.nmea_tcp_server_validate_checksum_);
+            owner.handle_connector_nmea_line(index, text);
         }
         void on_close(async_event_loop::ITcpConnection& connection) override { connections.remove(connection); }
         void on_error(async_event_loop::ITcpConnection& connection, int) override { connections.remove(connection); }
         void on_too_many_connections(async_event_loop::ITcpConnection& connection) override { connection.close(); }
     };
 
-    struct NmeaTcpClientConnectionHandler : async_event_loop::ITcpClientHandler {
-        explicit NmeaTcpClientConnectionHandler(MiniSignalKServer& owner_ref) : owner(owner_ref) {}
+    struct ConnectorTcpClientHandler : async_event_loop::ITcpClientHandler {
+        ConnectorTcpClientHandler(MiniSignalKServer& owner_ref, size_t connector_index)
+            : owner(owner_ref), index(connector_index) {}
+
         MiniSignalKServer& owner;
+        size_t index;
+
         void on_data(async_event_loop::ITcpConnection& connection) override {
-            if (!owner.nmea_tcp_client_connection_flags_.allow_rx) return;
+            const ConnectorRuntimeSlot& slot = owner.connector_slot(index);
+            if (!slot.connection_flags.allow_rx) return;
             char text[160];
-            while (connection.read_line(text, sizeof(text))) owner.handle_nmea_line(text, SourceId(2), owner.nmea_tcp_client_validate_checksum_);
+            while (connection.read_line(text, sizeof(text))) owner.handle_connector_nmea_line(index, text);
         }
         void on_close(async_event_loop::ITcpConnection&) override {}
         void on_error(int) override {}
     };
 
+    struct ConnectorRuntimeSlot {
+        ConnectorRuntimeSlot(MiniSignalKServer& owner_ref, size_t connector_index)
+            : owner(owner_ref),
+              index(connector_index),
+              tcp_server(owner_ref.loop_.scheduler()),
+              tcp_client(owner_ref.loop_.scheduler()),
+#if defined(ARDUINO)
+              serial_stream(Serial),
+#else
+              serial_stream(),
+#endif
+              serial_reader(serial_stream, async_event_loop::LineProtocolOptions{}, [this](async_event_loop::LineView line) { owner.handle_connector_serial_line(index, line); }),
+              tcp_server_handler(owner_ref, connector_index),
+              tcp_client_handler(owner_ref, connector_index),
+              tcp_line_handler(tcp_server_handler) {}
+
+        MiniSignalKServer& owner;
+        size_t index = 0;
+        ConnectorConfig config;
+        ConnectionFlags connection_flags{true, false};
+        bool nmea0183_validate_checksum = false;
+        bool started = false;
+
+        async_event_loop::NativeTcpServer tcp_server;
+        async_event_loop::NativeTcpClient tcp_client;
+        async_event_loop::NativeSerialStream serial_stream;
+        async_event_loop::LineProtocolReader<192> serial_reader;
+        ConnectorTcpServerHandler tcp_server_handler;
+        ConnectorTcpClientHandler tcp_client_handler;
+        async_event_loop::TcpLineServerHandler<192, MaxConnectionsPerConnector> tcp_line_handler;
+        async_event_loop::EventHandle serial_event{};
+    };
+
+    ConnectorRuntimeSlot& connector_slot(size_t index) {
+        switch (index) {
+        case 0: return connector0_;
+        case 1: return connector1_;
+        case 2: return connector2_;
+        default: return connector3_;
+        }
+    }
+
+    const ConnectorRuntimeSlot& connector_slot(size_t index) const {
+        switch (index) {
+        case 0: return connector0_;
+        case 1: return connector1_;
+        case 2: return connector2_;
+        default: return connector3_;
+        }
+    }
+
+    void start_configured_connectors() {
+        const size_t count = config_.connector_count <= max_connector_configs ? config_.connector_count : max_connector_configs;
+        for (size_t i = 0; i < count; ++i) {
+            const ConnectorConfig& connector = config_.connectors[i];
+            ConnectorRuntimeSlot& slot = connector_slot(i);
+            slot.config = connector;
+            slot.connection_flags = ConnectionFlags{connector.allow_rx, connector.allow_tx};
+            slot.nmea0183_validate_checksum = connector.protocol == ConnectorProtocol::Nmea0183
+                ? effective_nmea0183_validate_checksum(connector.nmea0183, connector.transport)
+                : false;
+
+            if (!connector.enabled) continue;
+            if (connector.protocol == ConnectorProtocol::Nmea0183) {
+                slot.started = start_nmea0183_connector(slot);
+            }
+        }
+    }
+
+    bool start_nmea0183_connector(ConnectorRuntimeSlot& slot) {
+        switch (slot.config.transport) {
+        case ConnectorTransport::TcpClient: {
+            async_event_loop::TcpConnectOptions options;
+            options.host = slot.config.host;
+            options.port = slot.config.port;
+            return slot.tcp_client.connect(options, slot.tcp_client_handler);
+        }
+        case ConnectorTransport::TcpServer:
+            return listen(slot.tcp_server, slot.tcp_line_handler, slot.config.host, slot.config.port);
+        case ConnectorTransport::Serial:
+            return start_nmea0183_serial_connector(slot);
+        default:
+            return false;
+        }
+    }
+
+    bool start_nmea0183_serial_connector(ConnectorRuntimeSlot& slot) {
+#if defined(ARDUINO)
+        Serial.begin(slot.config.baud);
+#else
+        if (!slot.serial_stream.open(slot.config.device, slot.config.baud)) return false;
+#endif
+        if (!slot.connection_flags.allow_rx) return true;
+        slot.serial_event = loop_.on_bytes_ready(slot.serial_stream, [&slot]() {
+            slot.serial_reader.poll(0);
+        });
+        return static_cast<bool>(slot.serial_event);
+    }
+
+    void handle_connector_serial_line(size_t index, async_event_loop::LineView line) {
+        ConnectorRuntimeSlot& slot = connector_slot(index);
+        if (!slot.connection_flags.allow_rx) return;
+        char text[160];
+        async_event_loop::line_to_cstr(line, text);
+        handle_connector_nmea_line(index, text);
+    }
+
+    void handle_connector_nmea_line(size_t index, const char* text) {
+        const ConnectorRuntimeSlot& slot = connector_slot(index);
+        const SourceId source_id = static_cast<SourceId>(10 + index);
+        if (nmea_.feed_line(text, source_id, loop_.clock().micros(), slot.nmea0183_validate_checksum)) publish();
+    }
+
+    void publish() { publisher_.publish_pending(signalk_connections_.connections); }
+
     SignalKMiniConfig config_;
     async_event_loop::EventLoop<> loop_;
     async_event_loop::NativeTcpServer signalk_tcp_server_;
-    async_event_loop::NativeTcpServer nmea_tcp_server_;
-    async_event_loop::NativeTcpClient nmea_tcp_client_;
-    async_event_loop::NativeSerialStream nmea_serial_stream_;
-    async_event_loop::LineProtocolReader<192> nmea_serial_reader_;
     ModelStore<Real> store_{};
     Nmea0183Input<Real> nmea_{store_};
     SignalKPublisher<Real> publisher_;
     SignalKConnectionHandler signalk_connections_;
-    NmeaTcpServerConnectionHandler nmea_server_connections_;
-    NmeaTcpClientConnectionHandler nmea_client_connection_;
     async_event_loop::TcpLineServerHandler<256, MaxSignalKConnections> signalk_line_handler_;
-    async_event_loop::TcpLineServerHandler<192, MaxNmeaSourceConnections> nmea_line_handler_;
-    ConnectionFlags nmea_tcp_server_connection_flags_{true, false};
-    ConnectionFlags nmea_tcp_client_connection_flags_{true, false};
-    ConnectionFlags nmea_serial_connection_flags_{true, false};
-    bool nmea_tcp_server_validate_checksum_ = false;
-    bool nmea_tcp_client_validate_checksum_ = false;
-    bool nmea_serial_validate_checksum_ = true;
-    bool nmea_tcp_server_connector_started_ = false;
-    bool nmea_tcp_client_connector_started_ = false;
-    bool nmea_serial_connector_started_ = false;
-    async_event_loop::EventHandle nmea_serial_event_{};
+    ConnectorRuntimeSlot connector0_;
+    ConnectorRuntimeSlot connector1_;
+    ConnectorRuntimeSlot connector2_;
+    ConnectorRuntimeSlot connector3_;
     async_event_loop::EventHandle timer_{};
 };
 
