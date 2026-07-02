@@ -30,6 +30,7 @@ public:
     }
 
     const char* last_error() const { return rx_.last_error(); }
+    const nmea0183_connector::Nmea0183RxState& state() const { return rx_.state(); }
 
 private:
     void mark_changed_from_sentence(const nmea0183_connector::NmeaSentence& sentence, SourceId source_id, uint64_t now_us) {
