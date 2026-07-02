@@ -1,0 +1,62 @@
+name: Repair Server
+
+on:
+  push:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.ref == 'refs/heads/codex/initial-signalk-mini-stage'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch server connector handler
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/signalk_mini/server.hpp')
+          s = p.read_text()
+          old = '''        void on_data(async_event_loop::ITcpConnection& connection) override {
+            const ConnectorRuntimeSlot& slot = owner.connector_slot(index);
+            if (!slot.connection_flags.allow_rx) return;
+            char text[160];
+            while (connection.read_line(text, sizeof(text))) owner.handle_connector_nmea_line(index, text);
+        }
+'''
+          new = '''        void on_data(async_event_loop::ITcpConnection& connection) override {
+            if (!owner.connector_allow_rx(index)) return;
+            char text[160];
+            while (connection.read_line(text, sizeof(text))) owner.handle_connector_nmea_line(index, text);
+        }
+'''
+          s = s.replace(old, new)
+          needle = '''    const ConnectorRuntimeSlot& connector_slot(size_t index) const {
+        switch (index) {
+        case 0: return connector0_;
+        case 1: return connector1_;
+        case 2: return connector2_;
+        default: return connector3_;
+        }
+    }
+'''
+          addition = needle + '''
+    const ConnectionFlags& connector_connection_flags(size_t index) const {
+        return connector_slot(index).connection_flags;
+    }
+
+    bool connector_allow_rx(size_t index) const {
+        return connector_slot(index).connection_flags.allow_rx;
+    }
+'''
+          if 'connector_connection_flags(size_t index)' not in s:
+              s = s.replace(needle, addition)
+          p.write_text(s)
+          Path('.github/workflows/repair-server.yml').unlink()
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/signalk_mini/server.hpp .github/workflows/repair-server.yml
+          git commit -m "repair connector runtime handler compile path"
+          git push
