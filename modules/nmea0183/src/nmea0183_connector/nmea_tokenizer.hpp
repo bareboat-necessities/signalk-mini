@@ -22,6 +22,8 @@ struct NmeaTokenFragmentInfo {
 struct NmeaToken {
     NmeaSpan text;
     NmeaSentenceFamily family = NmeaSentenceFamily::Standard;
+    NmeaTalkerId talker_id = NmeaTalkerId::Unknown;
+    NmeaGnssSystem gnss_system = NmeaGnssSystem::Unknown;
     NmeaSpan proprietary_vendor_code;
     NmeaProprietaryVendor proprietary_vendor = NmeaProprietaryVendor::Unknown;
     NmeaTokenFragmentInfo fragment;
@@ -204,6 +206,8 @@ inline void nmea_add_token(NmeaTokenizeResult& result, NmeaSpan text, NmeaSenten
     NmeaToken& token = result.tokens[result.count++];
     token.text = text;
     token.family = family;
+    token.talker_id = nmea_talker_id_from_token(text);
+    token.gnss_system = nmea_gnss_system_from_talker(token.talker_id);
     token.proprietary_vendor_code = nmea_proprietary_vendor_code_from_token(text);
     token.proprietary_vendor = nmea_proprietary_vendor_from_code(token.proprietary_vendor_code);
     token.fragment = NmeaTokenFragmentInfo{};
