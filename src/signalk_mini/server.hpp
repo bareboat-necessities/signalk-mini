@@ -144,29 +144,39 @@ private:
             const ConnectorConfig& connector = config_.connectors[i];
             std::unique_ptr<ConnectorRuntimeSlot> slot(new ConnectorRuntimeSlot(*this, i));
             slot->config = connector;
-            slot->connection_flags = ConnectionFlags{connector.allow_rx, connector.allow_tx};
-            slot->nmea0183_validate_checksum = connector.protocol == ConnectorProtocol::Nmea0183 ? effective_nmea0183_validate_checksum(connector.nmea0183, connector.transport) : false;
+            slot->connection_flags = ConnectionFlags{connector.access.allow_rx, connector.access.allow_tx};
+            slot->nmea0183_validate_checksum = connector.protocol.kind == ConnectorProtocol::Nmea0183
+                ? effective_nmea0183_validate_checksum(connector.protocol.nmea0183, connector.transport.kind)
+                : false;
             connector_slots_.push_back(std::move(slot));
             ConnectorRuntimeSlot& runtime = *connector_slots_.back();
             if (!connector.enabled) continue;
-            if (connector.protocol == ConnectorProtocol::Nmea0183) runtime.started = start_nmea0183_connector(runtime);
+            if (connector.protocol.kind == ConnectorProtocol::Nmea0183) runtime.started = start_nmea0183_connector(runtime);
         }
     }
 
     bool start_nmea0183_connector(ConnectorRuntimeSlot& slot) {
-        switch (slot.config.transport) {
-        case ConnectorTransport::TcpClient: { async_event_loop::TcpConnectOptions options; options.host = slot.config.host; options.port = slot.config.port; return slot.tcp_client.connect(options, slot.tcp_client_handler); }
-        case ConnectorTransport::TcpServer: return listen(slot.tcp_server, slot.tcp_line_handler, slot.config.host, slot.config.port);
-        case ConnectorTransport::Serial: return start_nmea0183_serial_connector(slot);
-        default: return false;
+        switch (slot.config.transport.kind) {
+        case ConnectorTransport::TcpClient: {
+            async_event_loop::TcpConnectOptions options;
+            options.host = slot.config.transport.tcp_client.host;
+            options.port = slot.config.transport.tcp_client.port;
+            return slot.tcp_client.connect(options, slot.tcp_client_handler);
+        }
+        case ConnectorTransport::TcpServer:
+            return listen(slot.tcp_server, slot.tcp_line_handler, slot.config.transport.tcp_server.host, slot.config.transport.tcp_server.port);
+        case ConnectorTransport::Serial:
+            return start_nmea0183_serial_connector(slot);
+        default:
+            return false;
         }
     }
 
     bool start_nmea0183_serial_connector(ConnectorRuntimeSlot& slot) {
 #if defined(ARDUINO)
-        Serial.begin(slot.config.baud);
+        Serial.begin(slot.config.transport.serial.baud);
 #else
-        if (!slot.serial_stream.open(slot.config.device, slot.config.baud)) return false;
+        if (!slot.serial_stream.open(slot.config.transport.serial.device, slot.config.transport.serial.baud)) return false;
 #endif
         if (!slot.connection_flags.allow_rx) return true;
         const size_t connector_index = slot.index;
