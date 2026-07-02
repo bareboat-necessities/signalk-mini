@@ -4,12 +4,31 @@
 
 namespace ship_data_model {
 
+static const uint8_t NMEA_MULTIPART_TEXT_BYTES = 96;
+static const uint8_t NMEA_MULTIPART_ID_BYTES = 16;
+
 template<typename Real = float>
 struct NmeaRawSentenceData {
     Setting<SensorSource> source;
     char sentence_id[4] = {0};
     Stamped<int32_t> field_count;
     char field[16][32] = {{0}};
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct NmeaMultipartMessageData {
+    Setting<SensorSource> source;
+    char sentence_id[4] = {0};
+    char message_id[NMEA_MULTIPART_ID_BYTES] = {0};
+    Stamped<int32_t> total_fragments;
+    Stamped<int32_t> last_fragment_number;
+    uint16_t received_mask = 0;
+    bool in_progress = false;
+    bool complete = false;
+    bool overflow = false;
+    char text[NMEA_MULTIPART_TEXT_BYTES] = {0};
+    Stamped<int32_t> text_length;
     uint64_t last_update_us = 0;
 };
 
@@ -54,6 +73,7 @@ struct NmeaDscData {
     NmeaDscExpansionData<Real> expansion;
     NmeaRawSentenceData<Real> initiate;
     NmeaRawSentenceData<Real> response;
+    NmeaMultipartMessageData<Real> multipart;
 };
 
 template<typename Real = float>
@@ -97,6 +117,14 @@ struct NmeaExtensionsData {
     NmeaRawSentenceData<Real> waypoint_distance_rhumb;
     NmeaRawSentenceData<Real> waypoint_distance_great_circle;
     NmeaVariablePointData<Real> variable_point;
+
+    NmeaRawSentenceData<Real> text_sentence;
+    NmeaMultipartMessageData<Real> text_message;
+    NmeaMultipartMessageData<Real> ais_message;
+    NmeaMultipartMessageData<Real> navtex_message;
+    NmeaMultipartMessageData<Real> seatalk_message;
+    NmeaMultipartMessageData<Real> inmarsat_message;
+    NmeaMultipartMessageData<Real> generic_multipart_message;
 };
 
 } // namespace ship_data_model
