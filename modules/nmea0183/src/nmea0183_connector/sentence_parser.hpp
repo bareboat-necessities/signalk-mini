@@ -26,6 +26,8 @@ struct NmeaSentence {
     NmeaSpan query_requester_talker;
     NmeaSpan query_target_talker;
     NmeaSpan query_requested_sentence;
+    NmeaSpan proprietary_vendor_code;
+    NmeaProprietaryVendor proprietary_vendor;
 
     void clear() {
         raw[0] = '\0';
@@ -40,6 +42,8 @@ struct NmeaSentence {
         query_requester_talker = NmeaSpan();
         query_target_talker = NmeaSpan();
         query_requested_sentence = NmeaSpan();
+        proprietary_vendor_code = NmeaSpan();
+        proprietary_vendor = NmeaProprietaryVendor::Unknown;
         for (uint8_t i = 0; i < NMEA_MAX_FIELDS; ++i) fields[i] = NmeaSpan();
     }
 
@@ -184,6 +188,8 @@ public:
             out.query_requester_talker = NmeaSpan(out.body.data, 2);
             out.query_target_talker = NmeaSpan(out.body.data + 2, 2);
         }
+        out.proprietary_vendor_code = nmea_proprietary_vendor_code_from_body(out.body);
+        out.proprietary_vendor = nmea_proprietary_vendor_from_code(out.proprietary_vendor_code);
 
         const char* field_begin = out.body.data;
         const char* body_end = out.body.data + out.body.length;
