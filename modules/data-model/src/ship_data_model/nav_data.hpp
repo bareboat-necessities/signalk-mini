@@ -223,6 +223,49 @@ struct BeaconReceiverStatusData {
 };
 
 template<typename Real = float>
+struct OmegaLaneNumbersData {
+    Setting<SensorSource> source;
+    char pair[3][16] = {{0}, {0}, {0}};
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct OwnShipData {
+    Setting<SensorSource> source;
+    Stamped<Real> heading_true_deg;
+    char heading_status = 0;
+    Stamped<Real> course_deg;
+    char course_reference = 0;
+    Stamped<Real> speed_kn;
+    char speed_reference = 0;
+    Stamped<Real> set_true_deg;
+    Stamped<Real> drift_speed_kn;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct ActiveRouteData {
+    Setting<SensorSource> source;
+    char waypoint_id[16][16] = {{0}};
+    Stamped<int32_t> waypoint_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct RmaData {
+    Setting<SensorSource> source;
+    char status = 0;
+    Stamped<Real> latitude_deg;
+    Stamped<Real> longitude_deg;
+    Stamped<Real> time_difference_a_us;
+    Stamped<Real> time_difference_b_us;
+    Stamped<Real> speed_kn;
+    Stamped<Real> track_deg;
+    Stamped<Real> magnetic_variation_deg;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
 struct WaypointArrivalData {
     Setting<SensorSource> source;
     Setting<bool> arrival_circle_entered;
@@ -296,6 +339,10 @@ struct NavigationData {
     HeadingSteeringCommandData<Real> heading_steering_command;
     BeaconReceiverControlData<Real> beacon_control;
     BeaconReceiverStatusData<Real> beacon_status;
+    OmegaLaneNumbersData<Real> omega_lane_numbers;
+    OwnShipData<Real> own_ship;
+    ActiveRouteData<Real> active_route;
+    RmaData<Real> rma;
     WaypointArrivalData<Real> waypoint_arrival;
     WaypointNavigationData<Real> waypoint;
     ApbData<Real> apb;
