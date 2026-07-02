@@ -10,7 +10,7 @@ This stage vendors only source trees from the uploaded modules:
 
 The main project code is split under `src/signalk_mini/`.
 
-The mini server base is in `signalk_mini/server.hpp`. It has one event loop, one mandatory main Signal K TCP server, configurable connectors, fixed connection registries, backpressure handling, NMEA line input, typed model updates, and Signal K delta publishing.
+The mini server base is in `signalk_mini/server.hpp`. It has one event loop, one mandatory main Signal K TCP server, connector configuration, runtime connection registries, backpressure handling, NMEA line input, typed model updates, and Signal K delta publishing.
 
 Project direction:
 
@@ -20,6 +20,12 @@ Project direction:
 - unit suffixes preserved in data model field names
 - ArduinoJson v7 at the JSON/protocol boundary
 - Linux daemon configuration uses libconfig `.conf`, not JSON
+
+## Naming
+
+Connectors are configuration entries. They describe a protocol plus transport, such as `nmea0183` over `tcp_client`.
+
+Connections are runtime objects. One connector can create zero, one, or many runtime connections. For example, one TCP server connector can accept many TCP connections.
 
 ## Linux config
 
