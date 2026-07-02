@@ -4,6 +4,10 @@
 
 namespace ship_data_model {
 
+static const uint8_t NMEA_RAW_MAX_FIELDS = 8;
+static const uint8_t NMEA_RAW_FIELD_BYTES = 16;
+static const uint8_t NMEA_DSC_RAW_MAX_FIELDS = 12;
+static const uint8_t NMEA_DSC_RAW_FIELD_BYTES = 16;
 static const uint8_t NMEA_MULTIPART_TEXT_BYTES = 96;
 static const uint8_t NMEA_MULTIPART_ID_BYTES = 16;
 
@@ -12,7 +16,8 @@ struct NmeaRawSentenceData {
     Setting<SensorSource> source;
     char sentence_id[4] = {0};
     Stamped<int32_t> field_count;
-    char field[16][32] = {{0}};
+    bool truncated = false;
+    char field[NMEA_RAW_MAX_FIELDS][NMEA_RAW_FIELD_BYTES] = {{0}};
     uint64_t last_update_us = 0;
 };
 
@@ -45,11 +50,12 @@ struct NmeaDscMessageData {
     Stamped<Real> longitude_deg;
     Stamped<Real> utc_time_s;
     char address_or_distress_mmsi[16] = {0};
-    char field10[32] = {0};
+    char field10[16] = {0};
     char end_of_sequence = 0;
     char expansion_flag = 0;
     Stamped<int32_t> field_count;
-    char raw_field[16][32] = {{0}};
+    bool truncated = false;
+    char raw_field[NMEA_DSC_RAW_MAX_FIELDS][NMEA_DSC_RAW_FIELD_BYTES] = {{0}};
     uint64_t last_update_us = 0;
 };
 
@@ -63,7 +69,8 @@ struct NmeaDscExpansionData {
     Stamped<int32_t> expansion_specifier;
     char payload[64] = {0};
     Stamped<int32_t> field_count;
-    char raw_field[16][32] = {{0}};
+    bool truncated = false;
+    char raw_field[NMEA_DSC_RAW_MAX_FIELDS][NMEA_DSC_RAW_FIELD_BYTES] = {{0}};
     uint64_t last_update_us = 0;
 };
 
