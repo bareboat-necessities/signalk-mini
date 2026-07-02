@@ -13,9 +13,9 @@ class Nmea0183Input {
 public:
     explicit Nmea0183Input(ModelStore<Real>& store) : store_(store) {}
 
-    bool feed_line(const char* line, SourceId source_id, uint64_t now_us) {
+    bool feed_line(const char* line, SourceId source_id, uint64_t now_us, bool validate_checksum = true) {
         nmea0183_connector::NmeaSentence sentence;
-        if (!parser_.parse_line(line, sentence)) return false;
+        if (!parser_.parse_line(line, sentence, validate_checksum)) return false;
         const bool applied = rx_.apply_sentence(sentence, store_.model(), now_us, ship_data_model::SensorSource::serial);
         if (!applied) return false;
         mark_changed_from_sentence(sentence, source_id, now_us);
