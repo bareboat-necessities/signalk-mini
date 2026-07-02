@@ -42,19 +42,38 @@ public:
         }
 
         if (sentence_is(sentence, "AAM")) return apply_aam(sentence, model, now_us, source);
+        if (sentence_is(sentence, "ACK")) return apply_ack(sentence, model, now_us, source);
+        if (sentence_is(sentence, "ADS")) return apply_ads(sentence, model, now_us, source);
+        if (sentence_is(sentence, "AKD")) return apply_akd(sentence, model, now_us, source);
+        if (sentence_is(sentence, "ALA")) return apply_ala(sentence, model, now_us, source);
         if (sentence_is(sentence, "ALM")) return apply_alm(sentence, model, now_us, source);
         if (sentence_is(sentence, "APA")) return apply_apa(sentence, model, now_us, source);
         if (sentence_is(sentence, "APB")) return apply_apb(sentence, model, now_us, source);
+        if (sentence_is(sentence, "ASD")) return apply_asd(sentence, model, now_us, source);
+        if (sentence_is(sentence, "BEC")) return apply_bec(sentence, model, now_us, source);
         if (sentence_is(sentence, "BOD")) return apply_bod_bww(sentence, model, now_us, source);
         if (sentence_is(sentence, "BWC")) return apply_bwc_bwr(sentence, model, now_us, source);
         if (sentence_is(sentence, "BWR")) return apply_bwc_bwr(sentence, model, now_us, source);
         if (sentence_is(sentence, "BWW")) return apply_bod_bww(sentence, model, now_us, source);
+        if (sentence_is(sentence, "CEK")) return apply_cek(sentence, model, now_us, source);
+        if (sentence_is(sentence, "COP")) return apply_cop(sentence, model, now_us, source);
+        if (sentence_is(sentence, "CUR")) return apply_cur(sentence, model, now_us, source);
         if (sentence_is(sentence, "DBK")) return apply_depth_below_keel(sentence, model, now_us, source);
         if (sentence_is(sentence, "DBS")) return apply_depth_below_surface(sentence, model, now_us, source);
         if (sentence_is(sentence, "DBT")) return apply_dbt(sentence, model, now_us, source);
         if (sentence_is(sentence, "DCN")) return apply_dcn(sentence, model, now_us, source);
+        if (sentence_is(sentence, "DCR")) return apply_dcr(sentence, model, now_us, source);
+        if (sentence_is(sentence, "DDC")) return apply_ddc(sentence, model, now_us, source);
+        if (sentence_is(sentence, "DOR")) return apply_dor(sentence, model, now_us, source);
         if (sentence_is(sentence, "DPT")) return apply_dpt(sentence, model, now_us, source);
+        if (sentence_is(sentence, "DSC")) return apply_dsc(sentence, model, now_us, source);
+        if (sentence_is(sentence, "DSE")) return apply_dse(sentence, model, now_us, source);
+        if (sentence_is(sentence, "DSI")) return apply_dsi(sentence, model, now_us, source);
+        if (sentence_is(sentence, "DSR")) return apply_dsr(sentence, model, now_us, source);
         if (sentence_is(sentence, "DTM")) return apply_dtm(sentence, model, now_us, source);
+        if (sentence_is(sentence, "ETL")) return apply_etl(sentence, model, now_us, source);
+        if (sentence_is(sentence, "EVE")) return apply_eve(sentence, model, now_us, source);
+        if (sentence_is(sentence, "FIR")) return apply_fir(sentence, model, now_us, source);
         if (sentence_is(sentence, "FSI")) return apply_fsi(sentence, model, now_us, source);
         if (sentence_is(sentence, "GBS")) return apply_gbs(sentence, model, now_us, source);
         if (sentence_is(sentence, "GGA")) return apply_gga(sentence, model, now_us, source);
@@ -112,12 +131,15 @@ public:
         if (sentence_is(sentence, "VWR")) return apply_vwr(sentence, model, now_us, source, false);
         if (sentence_is(sentence, "VWT")) return apply_vwr(sentence, model, now_us, source, true);
         if (sentence_is(sentence, "WCV")) return apply_wcv(sentence, model, now_us, source);
+        if (sentence_is(sentence, "WDC")) return apply_wdc(sentence, model, now_us, source);
+        if (sentence_is(sentence, "WDR")) return apply_wdr(sentence, model, now_us, source);
         if (sentence_is(sentence, "WNC")) return apply_wnc(sentence, model, now_us, source);
         if (sentence_is(sentence, "WPL")) return apply_wpl(sentence, model, now_us, source);
         if (sentence_is(sentence, "XDR")) return apply_xdr(sentence, model, now_us);
         if (sentence_is(sentence, "XTE")) return apply_xte(sentence, model, now_us, source);
         if (sentence_is(sentence, "XTR")) return apply_xtr(sentence, model, now_us, source);
         if (sentence_is(sentence, "ZDA")) return apply_zda(sentence, model, now_us, source);
+        if (sentence_is(sentence, "ZDL")) return apply_zdl(sentence, model, now_us, source);
         if (sentence_is(sentence, "ZFO")) return apply_zfo(sentence, model, now_us, source);
         if (sentence_is(sentence, "ZTG")) return apply_ztg(sentence, model, now_us, source);
 
@@ -139,6 +161,42 @@ private:
 #include "nmea_F_G.hpp"
 #include "nmea_H_N.hpp"
 #include "nmea_O_Z.hpp"
+
+    template<typename Model>
+    bool apply_fir(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+        return apply_raw_sentence_record(sentence, model.nmea_extensions.fire_detection, "FIR", now_us, source);
+    }
+
+    template<typename Model>
+    bool apply_wdc(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+        return apply_raw_sentence_record(sentence, model.nmea_extensions.waypoint_distance_great_circle, "WDC", now_us, source);
+    }
+
+    template<typename Model>
+    bool apply_wdr(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+        return apply_raw_sentence_record(sentence, model.nmea_extensions.waypoint_distance_rhumb, "WDR", now_us, source);
+    }
+
+    template<typename Model>
+    bool apply_zdl(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+        if (sentence.field_count < 3) {
+            last_error_ = "short ZDL";
+            return false;
+        }
+        float value = 0.0f;
+        if (parse_utc_time_of_day_s(sentence.field(0), value) || parse_real(sentence.field(0), value)) {
+            model.nmea_extensions.variable_point.time_to_point_s.set(static_cast<Real>(value), now_us);
+        }
+        if (parse_distance_nmi(sentence.field(1), sentence.field_count > 2 ? sentence.field(2) : NmeaSpan(), value)) {
+            model.nmea_extensions.variable_point.distance_to_point_nmi.set(static_cast<Real>(value), now_us);
+        }
+        if (sentence.field_count > 3) nmea_copy_span(model.nmea_extensions.variable_point.point_id,
+                                                     sizeof(model.nmea_extensions.variable_point.point_id),
+                                                     sentence.field(3));
+        set_source(model.nmea_extensions.variable_point.source, source);
+        model.nmea_extensions.variable_point.last_update_us = now_us;
+        return true;
+    }
 };
 
 } // namespace nmea0183_connector
