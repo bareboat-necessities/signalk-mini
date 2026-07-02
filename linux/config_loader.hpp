@@ -136,9 +136,6 @@ private:
             read_bool(connector_setting, "enabled", connector.enabled);
             if (config_setting_lookup_string(connector_setting, "protocol", &value)) connector.protocol = protocol_from_string(value);
             if (config_setting_lookup_string(connector_setting, "transport", &value)) connector.transport = transport_from_string(value);
-            if (connector.protocol == signalk_mini::ConnectorProtocol::Nmea0183) {
-                connector.nmea0183.validate_checksum = signalk_mini::default_nmea0183_validate_checksum(connector.transport);
-            }
             if (config_setting_lookup_string(connector_setting, "label", &value)) connector.label = keep(value);
             if (config_setting_lookup_string(connector_setting, "host", &value)) connector.host = keep(value);
             read_u16(connector_setting, "port", connector.port);
@@ -159,9 +156,11 @@ private:
         if (connector.protocol != signalk_mini::ConnectorProtocol::Nmea0183) return;
         config_setting_t* nmea0183 = config_setting_lookup(connector_setting, "nmea0183");
         if (nmea0183) {
-            read_bool(nmea0183, "validate_checksum", connector.nmea0183.validate_checksum);
-        } else {
-            read_bool(connector_setting, "validate_checksum", connector.nmea0183.validate_checksum);
+            if (read_bool(nmea0183, "validate_checksum", connector.nmea0183.validate_checksum)) {
+                connector.nmea0183.validate_checksum_configured = true;
+            }
+        } else if (read_bool(connector_setting, "validate_checksum", connector.nmea0183.validate_checksum)) {
+            connector.nmea0183.validate_checksum_configured = true;
         }
     }
 
