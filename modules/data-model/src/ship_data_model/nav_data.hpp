@@ -246,8 +246,53 @@ struct OwnShipData {
 template<typename Real = float>
 struct ActiveRouteData {
     Setting<SensorSource> source;
+    Stamped<int32_t> total_messages;
+    Stamped<int32_t> message_number;
+    char mode = 0;
     char waypoint_id[16][16] = {{0}};
     Stamped<int32_t> waypoint_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct RevolutionsData {
+    Setting<SensorSource> source;
+    char source_type = 0;
+    Stamped<int32_t> number;
+    Stamped<Real> speed_rpm;
+    Stamped<Real> propeller_pitch_percent;
+    char status = 0;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct RadarSystemData {
+    Setting<SensorSource> source;
+    Stamped<Real> origin_range_nmi[2];
+    Stamped<Real> origin_bearing_deg[2];
+    Stamped<Real> variable_range_marker_nmi[2];
+    Stamped<Real> electronic_bearing_line_deg[2];
+    Stamped<Real> cursor_range_nmi;
+    Stamped<Real> cursor_bearing_deg;
+    Stamped<Real> range_scale_nmi;
+    char range_units = 0;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct ScanningFrequencyData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> total_messages;
+    Stamped<int32_t> message_number;
+    Stamped<Real> frequency_hz[6];
+    char mode[6] = {0, 0, 0, 0, 0, 0};
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct MultipleDataIdData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> talker_id_number;
     uint64_t last_update_us = 0;
 };
 
@@ -342,6 +387,10 @@ struct NavigationData {
     OmegaLaneNumbersData<Real> omega_lane_numbers;
     OwnShipData<Real> own_ship;
     ActiveRouteData<Real> active_route;
+    RevolutionsData<Real> revolutions;
+    RadarSystemData<Real> radar_system;
+    ScanningFrequencyData<Real> scanning_frequency;
+    MultipleDataIdData<Real> multiple_data_id;
     RmaData<Real> rma;
     WaypointArrivalData<Real> waypoint_arrival;
     WaypointNavigationData<Real> waypoint;
