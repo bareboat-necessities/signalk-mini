@@ -20,8 +20,8 @@ static void check_sentence_token(const char* raw, nmea0183_connector::NmeaSenten
 int main() {
     check_sentence_token("$GPGGA,002153.000,3342.6618,N,11751.3858,W,1,10,1.2,27.0,M,-34.2,M,,0000*5A", nmea0183_connector::NmeaSentenceFamily::Standard, '$');
     check_sentence_token("!AIVDM,1,1,,A,13HOI:0P0000VOHLCnHQKwvL05Ip,0*23", nmea0183_connector::NmeaSentenceFamily::Ais, '!');
-    check_sentence_token("$STALK,84,56,e,0,0,0,0,0,8*0F", nmea0183_connector::NmeaSentenceFamily::Standard, '$');
-    check_sentence_token("$DSC,12,3380405810,00,1234567890,72,1234567890,00,00,00,00,00,00,00*3B", nmea0183_connector::NmeaSentenceFamily::Standard, '$');
+    check_sentence_token("$STALK,84,56,e,0,0,0,0,0,8*0F", nmea0183_connector::NmeaSentenceFamily::SeaTalk, '$');
+    check_sentence_token("$DSC,12,3380405810,00,1234567890,72,1234567890,00,00,00,00,00,00,00*3B", nmea0183_connector::NmeaSentenceFamily::Dsc, '$');
 
     const char* inmarsat = "/g:1-9-1234,s:egcterm1,n:213,c:1333636200*hh/$CSSM3,123456,005213,798,0,3,14,00,2012,04,05,14,30,3400,N,076,W,300*hh";
     const nmea0183_connector::NmeaTokenizeResult tokens = nmea0183_connector::tokenize_nmea_line(inmarsat);
