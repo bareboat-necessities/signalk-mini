@@ -116,6 +116,32 @@ bool apply_gll(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 }
 
 template<typename Model>
+bool apply_gns(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 12) {
+        last_error_ = "short GNS";
+        return false;
+    }
+
+    float value = 0.0f;
+    int32_t integer_value = 0;
+    if (parse_utc_time_of_day_s(sentence.field(0), value)) model.navigation.gps.timestamp_s.set(static_cast<Real>(value), now_us);
+    if (parse_lat_lon(sentence.field(1), sentence.field(2), value)) model.navigation.gps.fix_lat_deg.set(static_cast<Real>(value), now_us);
+    if (parse_lat_lon(sentence.field(3), sentence.field(4), value)) model.navigation.gps.fix_lon_deg.set(static_cast<Real>(value), now_us);
+    nmea_copy_span(model.navigation.gps.fix_mode_indicator, sizeof(model.navigation.gps.fix_mode_indicator), sentence.field(5));
+    if (sentence.field(5).length > 0) model.navigation.gps.fix_quality.set(sentence.field(5)[0] == 'N' ? 0 : 1, now_us);
+    if (parse_int32(sentence.field(6), integer_value)) model.navigation.gps.satellites_used.set(integer_value, now_us);
+    if (parse_real(sentence.field(7), value)) model.navigation.gps.hdop.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(8), value)) model.navigation.gps.fix_alt_m.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(9), value)) model.navigation.gps.geoidal_separation_m.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(10), value)) model.navigation.gps.dgps_age_s.set(static_cast<Real>(value), now_us);
+    if (parse_int32(sentence.field(11), integer_value)) model.navigation.gps.dgps_station_id.set(integer_value, now_us);
+    if (sentence.field_count >= 13) model.navigation.gps.navigational_status = sentence.field(12)[0];
+    set_source(model.navigation.gps.source, source);
+    model.navigation.gps.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
 bool apply_grs(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 14) {
         last_error_ = "short GRS";
