@@ -48,47 +48,41 @@ enum class ConnectorTransport : uint8_t {
 };
 
 struct Nmea0183ProtocolConfig {
-    bool validate_checksum = true;
+    bool validate_checksum = false;
+    bool validate_checksum_configured = false;
 };
 
 inline bool default_nmea0183_validate_checksum(ConnectorTransport transport) {
     return transport == ConnectorTransport::Serial;
 }
 
+inline bool effective_nmea0183_validate_checksum(const Nmea0183ProtocolConfig& protocol, ConnectorTransport transport) {
+    return protocol.validate_checksum_configured ? protocol.validate_checksum : default_nmea0183_validate_checksum(transport);
+}
+
 struct ConnectorConfig {
-    // ConnectorConfig is static configuration. It may create zero, one, or many runtime connections.
     bool enabled = false;
     ConnectorProtocol protocol = ConnectorProtocol::None;
     ConnectorTransport transport = ConnectorTransport::None;
     const char* label = nullptr;
-
     const char* host = "127.0.0.1";
     uint16_t port = 0;
-
     const char* device = nullptr;
     uint32_t baud = 4800;
-
     uint8_t pin = 0;
     uint8_t i2c_bus = 0;
     uint8_t i2c_address = 0;
-
     bool allow_rx = true;
     bool allow_tx = false;
-
     Nmea0183ProtocolConfig nmea0183;
 };
 
 struct SignalKMiniConfig {
     ServerIdentityConfig identity;
-
-    // The main Signal K protocol server is mandatory. It is always started.
     SignalKProtocolServerConfig signalk;
-
     PublisherConfig publisher;
-
-    // Connectors are configuration entries. Runtime TCP peers are connections.
     ConnectorConfig connectors[max_connector_configs] = {
-        {true, ConnectorProtocol::Nmea0183, ConnectorTransport::TcpClient, "nmea0183-tcp-client", "127.0.0.1", 10110, nullptr, 4800, 0, 0, 0, true, false, {false}},
+        {true, ConnectorProtocol::Nmea0183, ConnectorTransport::TcpClient, "nmea0183-tcp-client", "127.0.0.1", 10110, nullptr, 4800, 0, 0, 0, true, false, {}},
         {},
         {},
         {}
