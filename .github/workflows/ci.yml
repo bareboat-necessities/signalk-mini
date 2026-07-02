@@ -9,8 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install native TCP dependency
-        run: sudo apt-get update && sudo apt-get install -y libevent-dev pkg-config
+      - name: Install Linux dependencies
+        run: sudo apt-get update && sudo apt-get install -y libevent-dev libconfig-dev pkg-config
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
       - name: Build
