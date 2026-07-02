@@ -42,45 +42,45 @@ int main() {
     uint64_t now_us = 0;
 
     feed(app, "GPTXT,2,1,07,FIRST ", now_us);
-    REQUIRE(app.nmea0183().state().text_message.in_progress);
-    REQUIRE(!app.nmea0183().state().text_message.complete);
-    REQUIRE(app.nmea0183().state().text_message.received_mask == 0x0001);
-    REQUIRE(app.nmea0183().state().text_message.total_fragments.value == 2);
-    REQUIRE(app.nmea0183().state().text_message.last_fragment_number.value == 1);
-    REQUIRE(std::strcmp(app.nmea0183().state().text_message.message_id, "07") == 0);
-    REQUIRE(std::strcmp(app.nmea0183().state().text_message.text, "FIRST ") == 0);
+    REQUIRE(app.nmea0183().message_state().text_message.in_progress);
+    REQUIRE(!app.nmea0183().message_state().text_message.complete);
+    REQUIRE(app.nmea0183().message_state().text_message.received_mask == 0x0001);
+    REQUIRE(app.nmea0183().message_state().text_message.total_fragments.value == 2);
+    REQUIRE(app.nmea0183().message_state().text_message.last_fragment_number.value == 1);
+    REQUIRE(std::strcmp(app.nmea0183().message_state().text_message.message_id, "07") == 0);
+    REQUIRE(std::strcmp(app.nmea0183().message_state().text_message.text, "FIRST ") == 0);
 
     feed(app, "GPTXT,2,2,07,SECOND", now_us);
-    REQUIRE(!app.nmea0183().state().text_message.in_progress);
-    REQUIRE(app.nmea0183().state().text_message.complete);
-    REQUIRE(!app.nmea0183().state().text_message.overflow);
-    REQUIRE(app.nmea0183().state().text_message.received_mask == 0x0003);
-    REQUIRE(std::strcmp(app.nmea0183().state().text_message.text, "FIRST SECOND") == 0);
-    REQUIRE(app.nmea0183().state().text_message.text_length.value == 12);
-    REQUIRE(std::strcmp(app.nmea0183().state().text_sentence.sentence_id, "TXT") == 0);
+    REQUIRE(!app.nmea0183().message_state().text_message.in_progress);
+    REQUIRE(app.nmea0183().message_state().text_message.complete);
+    REQUIRE(!app.nmea0183().message_state().text_message.overflow);
+    REQUIRE(app.nmea0183().message_state().text_message.received_mask == 0x0003);
+    REQUIRE(std::strcmp(app.nmea0183().message_state().text_message.text, "FIRST SECOND") == 0);
+    REQUIRE(app.nmea0183().message_state().text_message.text_length.value == 12);
+    REQUIRE(std::strcmp(app.nmea0183().message_state().text_sentence.sentence_id, "TXT") == 0);
 
     feed(app, "CDDSE,2,1,A,3380400790,00,HELLO", now_us);
-    REQUIRE(app.nmea0183().state().dsc.multipart.in_progress);
-    REQUIRE(app.nmea0183().state().dsc.multipart.received_mask == 0x0001);
-    REQUIRE(std::strcmp(app.nmea0183().state().dsc.multipart.message_id, "3380400790") == 0);
+    REQUIRE(app.nmea0183().dsc_state().multipart.in_progress);
+    REQUIRE(app.nmea0183().dsc_state().multipart.received_mask == 0x0001);
+    REQUIRE(std::strcmp(app.nmea0183().dsc_state().multipart.message_id, "3380400790") == 0);
     feed(app, "CDDSE,2,2,A,3380400790,00, DSC", now_us);
-    REQUIRE(app.nmea0183().state().dsc.multipart.complete);
-    REQUIRE(std::strcmp(app.nmea0183().state().dsc.multipart.text, "HELLO DSC") == 0);
+    REQUIRE(app.nmea0183().dsc_state().multipart.complete);
+    REQUIRE(std::strcmp(app.nmea0183().dsc_state().multipart.text, "HELLO DSC") == 0);
 
     feed(app, "NXNRX,2,1,NAV1,NAV ", now_us);
-    REQUIRE(app.nmea0183().state().navtex_message.in_progress);
-    REQUIRE(std::strcmp(app.nmea0183().state().navtex_message.message_id, "NAV1") == 0);
+    REQUIRE(app.nmea0183().message_state().navtex_message.in_progress);
+    REQUIRE(std::strcmp(app.nmea0183().message_state().navtex_message.message_id, "NAV1") == 0);
     feed(app, "NXNRX,2,2,NAV1,TEX", now_us);
-    REQUIRE(app.nmea0183().state().navtex_message.complete);
-    REQUIRE(std::strcmp(app.nmea0183().state().navtex_message.text, "NAV TEX") == 0);
+    REQUIRE(app.nmea0183().message_state().navtex_message.complete);
+    REQUIRE(std::strcmp(app.nmea0183().message_state().navtex_message.text, "NAV TEX") == 0);
 
     feed_raw(app, encapsulated_sentence("AIVDM,2,1,3,A,ABC,0"), now_us);
-    REQUIRE(app.nmea0183().state().ais_message.in_progress);
-    REQUIRE(app.nmea0183().state().ais_message.received_mask == 0x0001);
-    REQUIRE(std::strcmp(app.nmea0183().state().ais_message.message_id, "3") == 0);
+    REQUIRE(app.nmea0183().message_state().ais_message.in_progress);
+    REQUIRE(app.nmea0183().message_state().ais_message.received_mask == 0x0001);
+    REQUIRE(std::strcmp(app.nmea0183().message_state().ais_message.message_id, "3") == 0);
     feed_raw(app, encapsulated_sentence("AIVDM,2,2,3,A,DEF,0"), now_us);
-    REQUIRE(app.nmea0183().state().ais_message.complete);
-    REQUIRE(std::strcmp(app.nmea0183().state().ais_message.text, "ABCDEF") == 0);
+    REQUIRE(app.nmea0183().message_state().ais_message.complete);
+    REQUIRE(std::strcmp(app.nmea0183().message_state().ais_message.text, "ABCDEF") == 0);
 
     nmea0183_connector::Nmea0183StreamParser parser;
     nmea0183_connector::NmeaSentence parsed;
