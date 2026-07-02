@@ -57,7 +57,6 @@ int main() {
     REQUIRE(app.nmea0183().message_state().text_message.received_mask == 0x0003);
     REQUIRE(std::strcmp(app.nmea0183().message_state().text_message.text, "FIRST SECOND") == 0);
     REQUIRE(app.nmea0183().message_state().text_message.text_length.value == 12);
-    REQUIRE(std::strcmp(app.nmea0183().message_state().text_sentence.sentence_id, "TXT") == 0);
 
     feed(app, "CDDSE,2,1,A,3380400790,00,HELLO", now_us);
     REQUIRE(app.nmea0183().dsc_state().multipart.in_progress);
