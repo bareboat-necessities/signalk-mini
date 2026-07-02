@@ -33,6 +33,29 @@ bool apply_rmb(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 }
 
 template<typename Model>
+bool apply_rmc(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 8 || sentence.field(1)[0] != 'A') {
+        last_error_ = "invalid RMC";
+        return false;
+    }
+
+    float value = 0.0f;
+    if (parse_lat_lon(sentence.field(2), sentence.field(3), value)) model.navigation.gps.fix_lat_deg.set(static_cast<Real>(value), now_us);
+    if (parse_lat_lon(sentence.field(4), sentence.field(5), value)) model.navigation.gps.fix_lon_deg.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(6), value)) model.navigation.gps.speed_kn.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(7), value)) model.navigation.gps.track_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
+    if (sentence.field_count >= 9 && parse_rmc_timestamp_s(sentence.field(0), sentence.field(8), value)) {
+        model.navigation.gps.timestamp_s.set(static_cast<Real>(value), now_us);
+    }
+    if (sentence.field_count >= 11 && parse_east_west_signed(sentence.field(9), sentence.field(10), value)) {
+        model.navigation.gps.declination_deg.set(static_cast<Real>(value), now_us);
+    }
+    set_source(model.navigation.gps.source, source);
+    model.navigation.gps.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
 bool apply_rot(const NmeaSentence& sentence, Model& model, uint64_t now_us) {
     float rate_deg_min = 0.0f;
     if (sentence.field_count < 2 || sentence.field(1)[0] != 'A' || !parse_real(sentence.field(0), rate_deg_min)) {
