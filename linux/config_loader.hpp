@@ -108,7 +108,7 @@ private:
         const char* value = nullptr;
         if (config_setting_lookup_string(s, "host", &value)) config.signalk.host = keep(value);
         read_u16(s, "port", config.signalk.port);
-        read_u16(s, "max_clients", config.signalk.max_clients);
+        read_u16(s, "max_connections", config.signalk.max_connections);
         read_bool(s, "allow_rx", config.signalk.allow_rx);
         read_bool(s, "allow_tx", config.signalk.allow_tx);
     }
@@ -124,28 +124,28 @@ private:
     }
 
     void load_connectors(config_t* file) {
-        config_setting_t* list = config_lookup(file, "connectors");
-        if (!list) return;
-        const int total = config_setting_length(list);
+        config_setting_t* connector_list = config_lookup(file, "connectors");
+        if (!connector_list) return;
+        const int total = config_setting_length(connector_list);
         size_t out = 0;
         for (int i = 0; i < total && out < signalk_mini::max_connector_configs; ++i) {
-            config_setting_t* s = config_setting_get_elem(list, i);
-            if (!s) continue;
+            config_setting_t* connector_setting = config_setting_get_elem(connector_list, i);
+            if (!connector_setting) continue;
             signalk_mini::ConnectorConfig connector;
             const char* value = nullptr;
-            read_bool(s, "enabled", connector.enabled);
-            if (config_setting_lookup_string(s, "protocol", &value)) connector.protocol = protocol_from_string(value);
-            if (config_setting_lookup_string(s, "transport", &value)) connector.transport = transport_from_string(value);
-            if (config_setting_lookup_string(s, "label", &value)) connector.label = keep(value);
-            if (config_setting_lookup_string(s, "host", &value)) connector.host = keep(value);
-            read_u16(s, "port", connector.port);
-            if (config_setting_lookup_string(s, "device", &value)) connector.device = keep(value);
-            read_u32(s, "baud", connector.baud);
-            read_u8(s, "pin", connector.pin);
-            read_u8(s, "i2c_bus", connector.i2c_bus);
-            read_u8(s, "i2c_address", connector.i2c_address);
-            read_bool(s, "allow_rx", connector.allow_rx);
-            read_bool(s, "allow_tx", connector.allow_tx);
+            read_bool(connector_setting, "enabled", connector.enabled);
+            if (config_setting_lookup_string(connector_setting, "protocol", &value)) connector.protocol = protocol_from_string(value);
+            if (config_setting_lookup_string(connector_setting, "transport", &value)) connector.transport = transport_from_string(value);
+            if (config_setting_lookup_string(connector_setting, "label", &value)) connector.label = keep(value);
+            if (config_setting_lookup_string(connector_setting, "host", &value)) connector.host = keep(value);
+            read_u16(connector_setting, "port", connector.port);
+            if (config_setting_lookup_string(connector_setting, "device", &value)) connector.device = keep(value);
+            read_u32(connector_setting, "baud", connector.baud);
+            read_u8(connector_setting, "pin", connector.pin);
+            read_u8(connector_setting, "i2c_bus", connector.i2c_bus);
+            read_u8(connector_setting, "i2c_address", connector.i2c_address);
+            read_bool(connector_setting, "allow_rx", connector.allow_rx);
+            read_bool(connector_setting, "allow_tx", connector.allow_tx);
             config.connectors[out++] = connector;
         }
         config.connector_count = out;
