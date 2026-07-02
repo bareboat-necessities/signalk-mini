@@ -85,6 +85,10 @@ inline bool nmea_token_body_starts_with(NmeaSpan token, const char* prefix) {
     return true;
 }
 
+inline bool nmea_token_is_query(NmeaSpan token) {
+    return token.data && token.length > 6 && token[0] == '$' && token.data[5] == 'Q';
+}
+
 inline NmeaSentenceFamily nmea_classify_token_span(NmeaSpan token) {
     if (!token.data || token.length == 0) return NmeaSentenceFamily::Standard;
     if (token[0] == '!') {
@@ -94,6 +98,7 @@ inline NmeaSentenceFamily nmea_classify_token_span(NmeaSpan token) {
         }
         return NmeaSentenceFamily::UnknownEncapsulation;
     }
+    if (nmea_token_is_query(token)) return NmeaSentenceFamily::Query;
     if (nmea_token_body_starts_with(token, "STALK") || nmea_token_body_starts_with(token, "PSTALK")) {
         return NmeaSentenceFamily::SeaTalk;
     }
