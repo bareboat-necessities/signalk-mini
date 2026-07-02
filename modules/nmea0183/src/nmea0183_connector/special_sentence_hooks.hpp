@@ -1,7 +1,7 @@
 #pragma once
 
 #include <stdint.h>
-#include "nmea0183_helpers.hpp"
+#include "nmea_enums.hpp"
 #include "proprietary_vendor.hpp"
 
 namespace nmea0183_connector {
