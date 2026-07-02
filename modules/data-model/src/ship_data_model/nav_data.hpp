@@ -60,10 +60,6 @@ struct GnssAlmanacData {
     Stamped<Real> mean_anomaly_rad;
     Stamped<Real> clock_f0_s;
     Stamped<Real> clock_f1_s_s;
-
-    // NMEA ALM calls this GPS week. Kept as a reference to the generic GNSS-week field.
-    Stamped<int32_t>& gps_week = gnss_week;
-
     uint64_t last_update_us = 0;
 };
 
@@ -474,87 +470,6 @@ struct CommData {
     BeaconReceiverControlData<Real> beacon_control;
     BeaconReceiverStatusData<Real> beacon_status;
     ReturnLinkMessageData<Real> return_link_message;
-};
-
-// Compatibility aliases for old type names. New code should use Gnss* names.
-template<typename Real = float> using GpsData = GnssData<Real>;
-template<typename Real = float> using GpsAlmanacData = GnssAlmanacData<Real>;
-template<typename Real = float> using GpsFaultDetectionData = GnssFaultDetectionData<Real>;
-template<typename Real = float> using GpsRangeResidualData = GnssRangeResidualData<Real>;
-template<typename Real = float> using GpsNoiseStatisticsData = GnssNoiseStatisticsData<Real>;
-template<typename Real = float> using GpsDopActiveSatellitesData = GnssDopActiveSatellitesData<Real>;
-template<typename Real = float> using GpsSatellitesInViewData = GnssSatellitesInViewData<Real>;
-
-// Compatibility aggregate for legacy decoder paths. New code should use nav/route/gnss/ais/propulsion/comm.
-template<typename Real>
-struct NavigationData {
-    GnssData<Real>& gps;
-    GnssAlmanacData<Real>& gps_almanac;
-    GnssFaultDetectionData<Real>& gps_fault;
-    GnssRangeResidualData<Real>& gps_range_residual;
-    GnssNoiseStatisticsData<Real>& gps_noise;
-    GnssDopActiveSatellitesData<Real>& gps_dop;
-    GnssSatellitesInViewData<Real>& gps_satellites_in_view;
-    DatumReferenceData<Real>& datum;
-    DeccaPositionData<Real>& decca;
-    LegacyTimingData<Real>& legacy_timing;
-    LegacyDeltaData<Real>& legacy_delta;
-    TransitFixData<Real>& transit_fix;
-    RadioFrequencySetData<Real>& radio_frequency_set;
-    HeadingSteeringCommandData<Real>& heading_steering_command;
-    BeaconReceiverControlData<Real>& beacon_control;
-    BeaconReceiverStatusData<Real>& beacon_status;
-    ReturnLinkMessageData<Real>& return_link_message;
-    OmegaLaneNumbersData<Real>& omega_lane_numbers;
-    OwnShipData<Real>& own_ship;
-    ActiveRouteData<Real>& active_route;
-    RevolutionsData<Real>& revolutions;
-    RadarSystemData<Real>& radar_system;
-    ScanningFrequencyData<Real>& scanning_frequency;
-    MultipleDataIdData<Real>& multiple_data_id;
-    TrackedTargetData<Real>& tracked_target;
-    RmaData<Real>& rma;
-    WaypointArrivalData<Real>& waypoint_arrival;
-    WaypointNavigationData<Real>& waypoint;
-    ApbData<Real>& apb;
-    RmbData<Real>& rmb;
-
-    NavigationData(NavData<Real>& nav,
-                   RouteData<Real>& route,
-                   GnssModelData<Real>& gnss,
-                   AisData<Real>& ais,
-                   PropulsionData<Real>& propulsion,
-                   CommData<Real>& comm)
-        : gps(gnss.fix),
-          gps_almanac(gnss.almanac),
-          gps_fault(gnss.fault_detection),
-          gps_range_residual(gnss.range_residual),
-          gps_noise(gnss.noise_statistics),
-          gps_dop(gnss.dop_active_satellites),
-          gps_satellites_in_view(gnss.satellites_in_view),
-          datum(nav.datum),
-          decca(nav.decca),
-          legacy_timing(nav.legacy_timing),
-          legacy_delta(nav.legacy_delta),
-          transit_fix(nav.transit_fix),
-          radio_frequency_set(comm.radio_frequency_set),
-          heading_steering_command(route.heading_steering_command),
-          beacon_control(comm.beacon_control),
-          beacon_status(comm.beacon_status),
-          return_link_message(comm.return_link_message),
-          omega_lane_numbers(nav.omega_lane_numbers),
-          own_ship(nav.own_ship),
-          active_route(route.active),
-          revolutions(propulsion.revolutions),
-          radar_system(nav.radar_system),
-          scanning_frequency(nav.scanning_frequency),
-          multiple_data_id(nav.multiple_data_id),
-          tracked_target(ais.tracked_target),
-          rma(nav.rma),
-          waypoint_arrival(route.waypoint_arrival),
-          waypoint(route.waypoint),
-          apb(route.apb),
-          rmb(route.rmb) {}
 };
 
 } // namespace ship_data_model
