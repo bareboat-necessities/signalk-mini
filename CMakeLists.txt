@@ -10,6 +10,7 @@ FetchContent_Declare(ArduinoJson GIT_REPOSITORY https://github.com/bblanchon/Ard
 FetchContent_MakeAvailable(ArduinoJson)
 
 find_package(PkgConfig REQUIRED)
+find_package(Threads REQUIRED)
 pkg_check_modules(LIBEVENT REQUIRED libevent)
 pkg_check_modules(LIBCONFIG REQUIRED libconfig)
 
@@ -37,4 +38,8 @@ if(BUILD_TESTING)
   add_executable(test_signalk_mini_smoke tests/test_signalk_mini_smoke.cpp)
   target_link_libraries(test_signalk_mini_smoke PRIVATE signalk_mini_core)
   add_test(NAME test_signalk_mini_smoke COMMAND test_signalk_mini_smoke)
+
+  add_executable(test_signalk_mini_tcp_integration tests/test_signalk_mini_tcp_integration.cpp)
+  target_link_libraries(test_signalk_mini_tcp_integration PRIVATE signalk_mini_core Threads::Threads)
+  add_test(NAME test_signalk_mini_tcp_integration COMMAND test_signalk_mini_tcp_integration)
 endif()
