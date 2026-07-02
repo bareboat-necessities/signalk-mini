@@ -104,8 +104,12 @@ public:
         if (sentence_is(sentence, "VTG")) return apply_vtg(sentence, model, now_us, source);
         if (sentence_is(sentence, "VWR")) return apply_vwr(sentence, model, now_us, source, false);
         if (sentence_is(sentence, "VWT")) return apply_vwr(sentence, model, now_us, source, true);
+        if (sentence_is(sentence, "WCV")) return apply_wcv(sentence, model, now_us, source);
+        if (sentence_is(sentence, "WNC")) return apply_wnc(sentence, model, now_us, source);
+        if (sentence_is(sentence, "WPL")) return apply_wpl(sentence, model, now_us, source);
         if (sentence_is(sentence, "XDR")) return apply_xdr(sentence, model, now_us);
         if (sentence_is(sentence, "XTE")) return apply_xte(sentence, model, now_us, source);
+        if (sentence_is(sentence, "XTR")) return apply_xtr(sentence, model, now_us, source);
 
         last_error_ = "unsupported sentence";
         return false;
