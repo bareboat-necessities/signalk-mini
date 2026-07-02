@@ -32,7 +32,7 @@ int main() {
     feed(app, "GNGNS,112257.00,3844.24011,N,00908.43828,W,AN,03,10.5,100.1,45.6,2.5,1234,S", now_us);
     NEAR(app.store().model().navigation.gps.timestamp_s.value, 40977.0f, 0.001f);
     NEAR(app.store().model().navigation.gps.fix_lat_deg.value, 38.737335f, 0.001f);
-    NEAR(app.store().model().navigation.gps.fix_lon_deg.value, 9.140638f, 0.001f);
+    NEAR(app.store().model().navigation.gps.fix_lon_deg.value, -9.140638f, 0.001f);
 
     feed(app, "WIMDA,29.91,I,1.013,B,18.2,C,16.7,C,72.5,12.3,9.4,C,123.4,T,121.1,M,7.8,N,4.0,M", now_us);
     NEAR(app.store().model().water.barometric_pressure_inhg.value, 29.91f, 0.001f);
