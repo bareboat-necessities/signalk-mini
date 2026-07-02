@@ -41,7 +41,27 @@ Example:
 examples/linux/signalk-mini.conf
 ```
 
-The config has one mandatory main Signal K server and optional connectors. Each connector combines protocol plus transport, for example `protocol = "nmea0183"` and `transport = "tcp_client"`.
+The config has one mandatory main Signal K server and optional connectors. Each connector combines protocol plus transport, for example:
+
+```text
+protocol = "nmea0183";
+transport = "tcp_client";
+```
+
+or:
+
+```text
+protocol = "nmea0183";
+transport = "serial";
+device = "/dev/ttyUSB0";
+baud = 4800;
+```
+
+Implemented NMEA0183 transports in this stage:
+
+- `tcp_client`
+- `tcp_server`
+- `serial`
 
 ## Build
 
