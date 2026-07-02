@@ -60,6 +60,7 @@ public:
         if (sentence_is(sentence, "GGA")) return apply_gga(sentence, model, now_us, source);
         if (sentence_is(sentence, "GLC")) return apply_glc(sentence, model, now_us, source);
         if (sentence_is(sentence, "GLL")) return apply_gll(sentence, model, now_us, source);
+        if (sentence_is(sentence, "GNS")) return apply_gns(sentence, model, now_us, source);
         if (sentence_is(sentence, "GRS")) return apply_grs(sentence, model, now_us, source);
         if (sentence_is(sentence, "GSA")) return apply_gsa(sentence, model, now_us, source);
         if (sentence_is(sentence, "GST")) return apply_gst(sentence, model, now_us, source);
@@ -73,6 +74,7 @@ public:
         if (sentence_is(sentence, "HSC")) return apply_hsc(sentence, model, now_us, source);
         if (sentence_is(sentence, "ITS")) return apply_its(sentence, model, now_us, source);
         if (sentence_is(sentence, "LWY")) return apply_lwy(sentence, model, now_us, source);
+        if (sentence_is(sentence, "MDA")) return apply_mda(sentence, model, now_us, source);
         if (sentence_is(sentence, "MSK")) return apply_msk(sentence, model, now_us, source);
         if (sentence_is(sentence, "MSS")) return apply_mss(sentence, model, now_us, source);
         if (sentence_is(sentence, "MTW")) return apply_mtw(sentence, model, now_us, source);
@@ -81,6 +83,7 @@ public:
         if (sentence_is(sentence, "OLN")) return apply_oln(sentence, model, now_us, source);
         if (sentence_is(sentence, "OSD")) return apply_osd(sentence, model, now_us, source);
         if (sentence_is(sentence, "R00")) return apply_r00(sentence, model, now_us, source);
+        if (sentence_is(sentence, "RLM")) return apply_rlm(sentence, model, now_us, source);
         if (sentence_is(sentence, "RMA")) return apply_rma(sentence, model, now_us, source);
         if (sentence_is(sentence, "RMB")) return apply_rmb(sentence, model, now_us, source);
         if (sentence_is(sentence, "RMC")) return apply_rmc(sentence, model, now_us, source);
@@ -92,6 +95,10 @@ public:
         if (sentence_is(sentence, "SFI")) return apply_sfi(sentence, model, now_us, source);
         if (sentence_is(sentence, "STN")) return apply_stn(sentence, model, now_us, source);
         if (sentence_is(sentence, "TDS")) return apply_tds(sentence, model, now_us, source);
+        if (sentence_is(sentence, "TFI")) return apply_tfi(sentence, model, now_us, source);
+        if (sentence_is(sentence, "TLB")) return apply_tlb(sentence, model, now_us, source);
+        if (sentence_is(sentence, "TLL")) return apply_tll(sentence, model, now_us, source);
+        if (sentence_is(sentence, "TPC")) return apply_tpc(sentence, model, now_us, source);
         if (sentence_is(sentence, "TPR")) return apply_tpr(sentence, model, now_us, source);
         if (sentence_is(sentence, "TPT")) return apply_tpt(sentence, model, now_us, source);
         if (sentence_is(sentence, "TRF")) return apply_trf(sentence, model, now_us, source);
@@ -133,6 +140,8 @@ private:
 #include "nmea_H_N.hpp"
 #include "nmea_O_Z.hpp"
 #include "nmea_Z.hpp"
+#include "nmea_gpsd_g_m.hpp"
+#include "nmea_gpsd_r_t.hpp"
 };
 
 } // namespace nmea0183_connector
