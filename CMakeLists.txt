@@ -11,12 +11,7 @@ FetchContent_MakeAvailable(ArduinoJson)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBEVENT REQUIRED libevent)
-
-find_path(LIBCONFIG_INCLUDE_DIR libconfig.h++)
-find_library(LIBCONFIGPP_LIBRARY config++)
-if(NOT LIBCONFIG_INCLUDE_DIR OR NOT LIBCONFIGPP_LIBRARY)
-  message(FATAL_ERROR "libconfig++ is required for Linux daemon config loading")
-endif()
+pkg_check_modules(LIBCONFIG REQUIRED libconfig)
 
 add_library(signalk_mini_core INTERFACE)
 target_include_directories(signalk_mini_core INTERFACE
@@ -32,8 +27,10 @@ target_link_libraries(signalk_mini_core INTERFACE ArduinoJson ${LIBEVENT_LIBRARI
 target_compile_options(signalk_mini_core INTERFACE ${LIBEVENT_CFLAGS_OTHER})
 
 add_executable(signalk-mini linux/main.cpp)
-target_include_directories(signalk-mini PRIVATE ${LIBCONFIG_INCLUDE_DIR})
-target_link_libraries(signalk-mini PRIVATE signalk_mini_core ${LIBCONFIGPP_LIBRARY})
+target_include_directories(signalk-mini PRIVATE ${LIBCONFIG_INCLUDE_DIRS})
+target_link_directories(signalk-mini PRIVATE ${LIBCONFIG_LIBRARY_DIRS})
+target_compile_options(signalk-mini PRIVATE ${LIBCONFIG_CFLAGS_OTHER})
+target_link_libraries(signalk-mini PRIVATE signalk_mini_core ${LIBCONFIG_LIBRARIES})
 
 include(CTest)
 if(BUILD_TESTING)
