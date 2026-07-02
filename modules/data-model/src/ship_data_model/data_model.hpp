@@ -4,6 +4,7 @@
 #include "ship_imu_data.hpp"
 #include "nav_data.hpp"
 #include "wind_sea_data.hpp"
+#include "nmea_extension_data.hpp"
 #include "steering_data.hpp"
 
 namespace ship_data_model {
@@ -17,6 +18,7 @@ struct DataModel {
     NavigationData<Real> navigation;
     WindData<Real> wind;
     WaterData<Real> water;
+    NmeaExtensionsData<Real> nmea_extensions;
     ShipImuData<Real> imu;
     ImuStateData<Real> imu_state;
     ImuCalibrationData<Real> imu_calibration;
