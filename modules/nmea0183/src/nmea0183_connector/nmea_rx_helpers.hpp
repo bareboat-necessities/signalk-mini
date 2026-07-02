@@ -21,6 +21,15 @@ inline bool parse_int32(NmeaSpan field, int32_t& out) {
     return true;
 }
 
+inline bool parse_nmea_hhmm_time_s(NmeaSpan field, float& out_s) {
+    if (field.length < 4 || !field.data) return false;
+    const int hour = (field[0] - '0') * 10 + (field[1] - '0');
+    const int minute = (field[2] - '0') * 10 + (field[3] - '0');
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return false;
+    out_s = static_cast<float>(hour * 3600 + minute * 60);
+    return true;
+}
+
 inline bool parse_north_south_signed(NmeaSpan magnitude, NmeaSpan side, float& out) {
     float value = 0.0f;
     if (!parse_real(magnitude, value) || side.empty()) return false;
@@ -89,6 +98,17 @@ inline bool parse_distance_nmi(NmeaSpan value, NmeaSpan unit, float& out_nmi) {
     return true;
 }
 
+inline bool parse_depth_m(NmeaSpan value, NmeaSpan unit, float& out_m) {
+    float v = 0.0f;
+    if (!parse_real(value, v)) return false;
+    const char u = unit.empty() ? 'M' : unit[0];
+    if (u == 'M') out_m = v;
+    else if (u == 'f' || u == 'F') out_m = v * 0.3048f;
+    else if (u == 'm') out_m = v * 1852.0f;
+    else return false;
+    return true;
+}
+
 inline bool parse_depth_m_from_triplet(const NmeaSentence& sentence, float& out_m) {
     if (sentence.field_count >= 4 && parse_real(sentence.field(2), out_m)) return true;
 
@@ -102,6 +122,22 @@ inline bool parse_depth_m_from_triplet(const NmeaSentence& sentence, float& out_
         return true;
     }
     return false;
+}
+
+inline bool parse_dsc_compact_position(NmeaSpan code, float& lat_deg, float& lon_deg) {
+    if (code.length < 10 || !code.data) return false;
+    for (uint8_t i = 0; i < 10; ++i) if (code[i] < '0' || code[i] > '9') return false;
+    const int quadrant = code[0] - '0';
+    const int lat_d = (code[1] - '0') * 10 + (code[2] - '0');
+    const int lat_m = (code[3] - '0') * 10 + (code[4] - '0');
+    const int lon_d = (code[5] - '0') * 100 + (code[6] - '0') * 10 + (code[7] - '0');
+    const int lon_m = (code[8] - '0') * 10 + (code[9] - '0');
+    if (quadrant < 0 || quadrant > 3 || lat_d > 90 || lat_m > 59 || lon_d > 180 || lon_m > 59) return false;
+    lat_deg = static_cast<float>(lat_d) + static_cast<float>(lat_m) / 60.0f;
+    lon_deg = static_cast<float>(lon_d) + static_cast<float>(lon_m) / 60.0f;
+    if (quadrant == 2 || quadrant == 3) lat_deg = -lat_deg;
+    if (quadrant == 1 || quadrant == 3) lon_deg = -lon_deg;
+    return true;
 }
 
 } // namespace nmea0183_connector
