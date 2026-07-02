@@ -41,7 +41,6 @@ public:
     }
     int get() const { return fd_; }
     bool valid() const { return fd_ >= 0; }
-    int release() { const int fd = fd_; fd_ = -1; return fd; }
     void reset(int fd = -1) {
         if (fd_ >= 0) ::close(fd_);
         fd_ = fd;
@@ -211,15 +210,15 @@ int main() {
 
     signalk_mini::ConnectorConfig nmea_connector;
     nmea_connector.enabled = true;
-    nmea_connector.protocol = signalk_mini::ConnectorProtocol::Nmea0183;
-    nmea_connector.transport = signalk_mini::ConnectorTransport::TcpClient;
     nmea_connector.label = "integration-nmea0183-tcp-client";
-    nmea_connector.host = "127.0.0.1";
-    nmea_connector.port = nmea_source.port();
-    nmea_connector.allow_rx = true;
-    nmea_connector.allow_tx = false;
-    nmea_connector.nmea0183.validate_checksum = false;
-    nmea_connector.nmea0183.validate_checksum_configured = true;
+    nmea_connector.access.allow_rx = true;
+    nmea_connector.access.allow_tx = false;
+    nmea_connector.protocol.kind = signalk_mini::ConnectorProtocol::Nmea0183;
+    nmea_connector.protocol.nmea0183.validate_checksum = false;
+    nmea_connector.protocol.nmea0183.validate_checksum_configured = true;
+    nmea_connector.transport.kind = signalk_mini::ConnectorTransport::TcpClient;
+    nmea_connector.transport.tcp_client.host = "127.0.0.1";
+    nmea_connector.transport.tcp_client.port = nmea_source.port();
 
     signalk_mini::SignalKMiniConfig config;
     config.signalk.host = "127.0.0.1";
