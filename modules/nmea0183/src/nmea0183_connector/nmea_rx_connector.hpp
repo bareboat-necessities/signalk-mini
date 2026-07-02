@@ -1,607 +1,82 @@
 #pragma once
 
-#include <string.h>
 #include <stdint.h>
+#include <string.h>
 #include <ship_data_model.hpp>
 #include "sentence_parser.hpp"
 
 namespace nmea0183_connector {
 
-inline float wrap_360_deg(float v) {
-    while (v >= 360.0f) v -= 360.0f;
-    while (v < 0.0f) v += 360.0f;
-    return v;
-}
+inline float wrap_360_deg(float v){ while(v>=360.0f)v-=360.0f; while(v<0.0f)v+=360.0f; return v; }
+inline float wrap_180_deg(float v){ v=wrap_360_deg(v+180.0f)-180.0f; if(v<=-180.0f)v+=360.0f; return v; }
+inline bool parse_int32(NmeaSpan f,int32_t& o){ float v=0; if(!parse_real(f,v))return false; o=static_cast<int32_t>(v); return true; }
+inline bool parse_north_south_signed(NmeaSpan mag,NmeaSpan side,float& o){ float v=0; if(!parse_real(mag,v)||side.empty())return false; if(side[0]=='N')o=v; else if(side[0]=='S')o=-v; else return false; return true; }
+inline bool parse_utc_time_of_day_s(NmeaSpan t,float& o){ if(t.length<6)return false; int h=(t[0]-'0')*10+(t[1]-'0'),m=(t[2]-'0')*10+(t[3]-'0'),s=(t[4]-'0')*10+(t[5]-'0'); if(h<0||h>23||m<0||m>59||s<0||s>60)return false; o=static_cast<float>(h*3600+m*60+s); if(t.length>7&&t[6]=='.'){ float f=0,sc=0.1f; for(uint8_t i=7;i<t.length;++i){ char c=t[i]; if(c<'0'||c>'9')break; f+=static_cast<float>(c-'0')*sc; sc*=0.1f; } o+=f; } return true; }
+inline bool parse_rmc_timestamp_s(NmeaSpan utc,NmeaSpan d,float& o){ if(utc.length<6||d.length<6)return false; int h=(utc[0]-'0')*10+(utc[1]-'0'),mi=(utc[2]-'0')*10+(utc[3]-'0'),se=(utc[4]-'0')*10+(utc[5]-'0'); int day=(d[0]-'0')*10+(d[1]-'0'),mon=(d[2]-'0')*10+(d[3]-'0'),yy=(d[4]-'0')*10+(d[5]-'0'); if(h<0||h>23||mi<0||mi>59||se<0||se>60||day<1||day>31||mon<1||mon>12)return false; int yr=yy>=70?1900+yy:2000+yy; int y=yr-(mon<=2); int era=(y>=0?y:y-399)/400; unsigned yoe=static_cast<unsigned>(y-era*400); unsigned mo=static_cast<unsigned>(mon+(mon>2?-3:9)); unsigned doy=(153*mo+2)/5+static_cast<unsigned>(day)-1; unsigned doe=yoe*365+yoe/4-yoe/100+doy; long days=era*146097L+static_cast<long>(doe)-719468L; o=static_cast<float>(days*86400L+h*3600+mi*60+se); return true; }
+inline bool parse_distance_nmi(NmeaSpan val,NmeaSpan unit,float& o){ float v=0; if(!parse_real(val,v))return false; const char u=unit.empty()?'N':unit[0]; if(u=='N')o=v; else if(u=='K')o=v*0.539956803f; else return false; return true; }
+inline bool parse_depth_m_from_triplet(const NmeaSentence& s,float& o){ if(s.field_count>=4&&parse_real(s.field(2),o))return true; float v=0; if(s.field_count>=2&&parse_real(s.field(0),v)){o=v*0.3048f;return true;} if(s.field_count>=6&&parse_real(s.field(4),v)){o=v*1.8288f;return true;} return false; }
 
-inline float wrap_180_deg(float v) {
-    v = wrap_360_deg(v + 180.0f) - 180.0f;
-    if (v <= -180.0f) v += 360.0f;
-    return v;
-}
-
-inline bool parse_int32(NmeaSpan field, int32_t& out) {
-    float value = 0;
-    if (!parse_real(field, value)) return false;
-    out = static_cast<int32_t>(value);
-    return true;
-}
-
-inline bool parse_north_south_signed(NmeaSpan magnitude, NmeaSpan side, float& out) {
-    float v = 0.0f;
-    if (!parse_real(magnitude, v) || side.empty()) return false;
-    if (side[0] == 'N') out = v;
-    else if (side[0] == 'S') out = -v;
-    else return false;
-    return true;
-}
-
-inline bool parse_utc_time_of_day_s(NmeaSpan utc_time, float& out_s) {
-    if (utc_time.length < 6) return false;
-    int hour = (utc_time[0]-'0')*10 + (utc_time[1]-'0');
-    int minute = (utc_time[2]-'0')*10 + (utc_time[3]-'0');
-    int second = (utc_time[4]-'0')*10 + (utc_time[5]-'0');
-    if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 60) return false;
-    out_s = static_cast<float>(hour * 3600 + minute * 60 + second);
-    if (utc_time.length > 7 && utc_time[6] == '.') {
-        float fraction = 0.0f;
-        float scale = 0.1f;
-        for (uint8_t i = 7; i < utc_time.length; ++i) {
-            char c = utc_time[i];
-            if (c < '0' || c > '9') break;
-            fraction += static_cast<float>(c - '0') * scale;
-            scale *= 0.1f;
-        }
-        out_s += fraction;
-    }
-    return true;
-}
-
-inline bool parse_rmc_timestamp_s(NmeaSpan utc_time, NmeaSpan date_ddmmyy, float& out_s) {
-    if (utc_time.length < 6 || date_ddmmyy.length < 6) return false;
-    int hour = (utc_time[0]-'0')*10 + (utc_time[1]-'0');
-    int minute = (utc_time[2]-'0')*10 + (utc_time[3]-'0');
-    int second = (utc_time[4]-'0')*10 + (utc_time[5]-'0');
-    int day = (date_ddmmyy[0]-'0')*10 + (date_ddmmyy[1]-'0');
-    int month = (date_ddmmyy[2]-'0')*10 + (date_ddmmyy[3]-'0');
-    int yy = (date_ddmmyy[4]-'0')*10 + (date_ddmmyy[5]-'0');
-    if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 60) return false;
-    if (day < 1 || day > 31 || month < 1 || month > 12) return false;
-    int year = yy >= 70 ? 1900 + yy : 2000 + yy;
-    int y = year - (month <= 2);
-    int era = (y >= 0 ? y : y - 399) / 400;
-    unsigned yoe = static_cast<unsigned>(y - era * 400);
-    unsigned m = static_cast<unsigned>(month + (month > 2 ? -3 : 9));
-    unsigned doy = (153 * m + 2) / 5 + static_cast<unsigned>(day) - 1;
-    unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    long days = era * 146097L + static_cast<long>(doe) - 719468L;
-    out_s = static_cast<float>(days * 86400L + hour * 3600 + minute * 60 + second);
-    return true;
-}
-
-inline bool parse_distance_nmi(NmeaSpan value, NmeaSpan unit, float& out_nmi) {
-    float v = 0;
-    if (!parse_real(value, v)) return false;
-    const char u = unit.empty() ? 'N' : unit[0];
-    if (u == 'N') out_nmi = v;
-    else if (u == 'K') out_nmi = v * 0.539956803f;
-    else return false;
-    return true;
-}
-
-inline bool parse_depth_m_from_triplet(const NmeaSentence& s, float& out_m) {
-    if (s.field_count >= 4 && parse_real(s.field(2), out_m)) return true;
-    float v = 0;
-    if (s.field_count >= 2 && parse_real(s.field(0), v)) { out_m = v * 0.3048f; return true; }
-    if (s.field_count >= 6 && parse_real(s.field(4), v)) { out_m = v * 1.8288f; return true; }
-    return false;
-}
-
-template<typename Real = float>
+template<typename Real=float>
 class Nmea0183RxConnector {
 public:
-    Nmea0183RxConnector() : last_error_(""), last_apb_mode_(ship_data_model::AutopilotMode::gps) {
-        last_apb_sender_id_[0] = last_apb_sender_id_[1] = last_apb_sender_id_[2] = '\0';
+    Nmea0183RxConnector():last_error_(""),last_apb_mode_(ship_data_model::AutopilotMode::gps){ last_apb_sender_id_[0]=last_apb_sender_id_[1]=last_apb_sender_id_[2]='\0'; }
+    const char* last_error()const{return last_error_;}
+    ship_data_model::AutopilotMode last_apb_mode()const{return last_apb_mode_;}
+    const char* last_apb_sender_id()const{return last_apb_sender_id_;}
+    bool apply_sentence(const NmeaSentence& s,ship_data_model::DataModel<Real>& m,uint64_t now){return apply_sentence(s,m,now,ship_data_model::SensorSource::none);} 
+    bool apply_sentence(const NmeaSentence& s,ship_data_model::DataModel<Real>& m,uint64_t now,ship_data_model::SensorSource src){
+        last_error_=""; if(!s.valid_checksum){last_error_="invalid checksum";return false;}
+        if(sentence_is(s,"AAM"))return apply_aam(s,m,now,src); if(sentence_is(s,"ALM"))return apply_alm(s,m,now,src); if(sentence_is(s,"APA"))return apply_apa(s,m,now,src); if(sentence_is(s,"APB"))return apply_apb(s,m,now,src);
+        if(sentence_is(s,"BOD"))return apply_bod_bww(s,m,now,src); if(sentence_is(s,"BWC"))return apply_bwc_bwr(s,m,now,src); if(sentence_is(s,"BWR"))return apply_bwc_bwr(s,m,now,src); if(sentence_is(s,"BWW"))return apply_bod_bww(s,m,now,src);
+        if(sentence_is(s,"DBK"))return apply_depth_below_keel(s,m,now,src); if(sentence_is(s,"DBS"))return apply_depth_below_surface(s,m,now,src); if(sentence_is(s,"DBT"))return apply_dbt(s,m,now,src); if(sentence_is(s,"DCN"))return apply_dcn(s,m,now,src); if(sentence_is(s,"DPT"))return apply_dpt(s,m,now,src); if(sentence_is(s,"DTM"))return apply_dtm(s,m,now,src);
+        if(sentence_is(s,"FSI"))return apply_fsi(s,m,now,src); if(sentence_is(s,"GBS"))return apply_gbs(s,m,now,src); if(sentence_is(s,"GLC"))return apply_glc(s,m,now,src); if(sentence_is(s,"GRS"))return apply_grs(s,m,now,src); if(sentence_is(s,"GST"))return apply_gst(s,m,now,src); if(sentence_is(s,"GSA"))return apply_gsa(s,m,now,src); if(sentence_is(s,"GSV"))return apply_gsv(s,m,now,src); if(sentence_is(s,"GTD"))return apply_gtd(s,m,now,src); if(sentence_is(s,"GXA"))return apply_gxa(s,m,now,src);
+        if(sentence_is(s,"RMC"))return apply_rmc(s,m,now,src); if(sentence_is(s,"GGA"))return apply_gga(s,m,now,src); if(sentence_is(s,"GLL"))return apply_gll(s,m,now,src); if(sentence_is(s,"VTG"))return apply_vtg(s,m,now,src);
+        if(sentence_is(s,"HDT"))return apply_hdt(s,m,now); if(sentence_is(s,"HDM"))return apply_hdm(s,m,now); if(sentence_is(s,"HDG"))return apply_hdg(s,m,now);
+        if(sentence_is(s,"MWV"))return apply_mwv(s,m,now,src); if(sentence_is(s,"MWD"))return apply_mwd(s,m,now,src); if(sentence_is(s,"VWR"))return apply_vwr(s,m,now,src,false); if(sentence_is(s,"VWT"))return apply_vwr(s,m,now,src,true); if(sentence_is(s,"VHW"))return apply_vhw(s,m,now,src); if(sentence_is(s,"LWY"))return apply_lwy(s,m,now,src);
+        if(sentence_is(s,"RSA"))return apply_rsa(s,m,now,src); if(sentence_is(s,"RMB"))return apply_rmb(s,m,now,src); if(sentence_is(s,"XTE"))return apply_xte(s,m,now,src); if(sentence_is(s,"XDR"))return apply_xdr(s,m,now); if(sentence_is(s,"ROT"))return apply_rot(s,m,now); last_error_="unsupported sentence"; return false;
     }
-
-    const char* last_error() const { return last_error_; }
-    ship_data_model::AutopilotMode last_apb_mode() const { return last_apb_mode_; }
-    const char* last_apb_sender_id() const { return last_apb_sender_id_; }
-
-    bool apply_sentence(const NmeaSentence& s, ship_data_model::DataModel<Real>& model, uint64_t now_us) {
-        return apply_sentence(s, model, now_us, ship_data_model::SensorSource::none);
-    }
-
-    bool apply_sentence(const NmeaSentence& s, ship_data_model::DataModel<Real>& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        last_error_ = "";
-        if (!s.valid_checksum) { last_error_ = "invalid checksum"; return false; }
-        if (sentence_is(s, "AAM")) return apply_aam(s, model, now_us, source);
-        if (sentence_is(s, "ALM")) return apply_alm(s, model, now_us, source);
-        if (sentence_is(s, "APA")) return apply_apa(s, model, now_us, source);
-        if (sentence_is(s, "APB")) return apply_apb(s, model, now_us, source);
-        if (sentence_is(s, "BOD")) return apply_bod_bww(s, model, now_us, source);
-        if (sentence_is(s, "BWC")) return apply_bwc_bwr(s, model, now_us, source);
-        if (sentence_is(s, "BWR")) return apply_bwc_bwr(s, model, now_us, source);
-        if (sentence_is(s, "BWW")) return apply_bod_bww(s, model, now_us, source);
-        if (sentence_is(s, "DBK")) return apply_depth_below_keel(s, model, now_us, source);
-        if (sentence_is(s, "DBS")) return apply_depth_below_surface(s, model, now_us, source);
-        if (sentence_is(s, "DBT")) return apply_dbt(s, model, now_us, source);
-        if (sentence_is(s, "DCN")) return apply_dcn(s, model, now_us, source);
-        if (sentence_is(s, "DPT")) return apply_dpt(s, model, now_us, source);
-        if (sentence_is(s, "DTM")) return apply_dtm(s, model, now_us, source);
-        if (sentence_is(s, "FSI")) return apply_fsi(s, model, now_us, source);
-        if (sentence_is(s, "GBS")) return apply_gbs(s, model, now_us, source);
-        if (sentence_is(s, "RMC")) return apply_rmc(s, model, now_us, source);
-        if (sentence_is(s, "GGA")) return apply_gga(s, model, now_us, source);
-        if (sentence_is(s, "GLL")) return apply_gll(s, model, now_us, source);
-        if (sentence_is(s, "VTG")) return apply_vtg(s, model, now_us, source);
-        if (sentence_is(s, "HDT")) return apply_heading(s, model, now_us, "bad HDT");
-        if (sentence_is(s, "HDM")) return apply_heading(s, model, now_us, "bad HDM");
-        if (sentence_is(s, "HDG")) return apply_hdg(s, model, now_us);
-        if (sentence_is(s, "MWV")) return apply_mwv(s, model, now_us, source);
-        if (sentence_is(s, "MWD")) return apply_mwd(s, model, now_us, source);
-        if (sentence_is(s, "VWR")) return apply_vwr(s, model, now_us, source, false);
-        if (sentence_is(s, "VWT")) return apply_vwr(s, model, now_us, source, true);
-        if (sentence_is(s, "VHW")) return apply_vhw(s, model, now_us, source);
-        if (sentence_is(s, "LWY")) return apply_lwy(s, model, now_us, source);
-        if (sentence_is(s, "RSA")) return apply_rsa(s, model, now_us, source);
-        if (sentence_is(s, "RMB")) return apply_rmb(s, model, now_us, source);
-        if (sentence_is(s, "XTE")) return apply_xte(s, model, now_us, source);
-        if (sentence_is(s, "XDR")) return apply_xdr(s, model, now_us);
-        if (sentence_is(s, "ROT")) return apply_rot(s, model, now_us);
-        last_error_ = "unsupported sentence";
-        return false;
-    }
-
 private:
-    const char* last_error_;
-    ship_data_model::AutopilotMode last_apb_mode_;
-    char last_apb_sender_id_[3];
-
-    template<typename Setting>
-    void set_source(Setting& setting, ship_data_model::SensorSource source) {
-        if (source != ship_data_model::SensorSource::none) setting.value = source;
-    }
-
-    template<typename Model>
-    bool apply_aam(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        if (s.field_count < 5) { last_error_ = "short AAM"; return false; }
-        float radius = 0;
-        model.navigation.waypoint_arrival.arrival_circle_entered.value = s.field(0)[0] == 'A';
-        model.navigation.waypoint_arrival.perpendicular_passed.value = s.field(1)[0] == 'A';
-        if (parse_distance_nmi(s.field(2), s.field(3), radius)) model.navigation.waypoint_arrival.arrival_radius_nmi.set(static_cast<Real>(radius), now_us);
-        nmea_copy_span(model.navigation.waypoint_arrival.waypoint_id, sizeof(model.navigation.waypoint_arrival.waypoint_id), s.field(4));
-        set_source(model.navigation.waypoint_arrival.source, source);
-        model.navigation.waypoint_arrival.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_alm(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        if (s.field_count < 15) { last_error_ = "short ALM"; return false; }
-        int32_t i = 0;
-        float v = 0;
-        if (parse_int32(s.field(0), i)) model.navigation.gps_almanac.total_messages.set(i, now_us);
-        if (parse_int32(s.field(1), i)) model.navigation.gps_almanac.message_number.set(i, now_us);
-        if (parse_int32(s.field(2), i)) model.navigation.gps_almanac.satellite_prn.set(i, now_us);
-        if (parse_int32(s.field(3), i)) model.navigation.gps_almanac.gps_week.set(i, now_us);
-        if (parse_int32(s.field(4), i)) model.navigation.gps_almanac.sv_health.set(i, now_us);
-        if (parse_real(s.field(5), v)) model.navigation.gps_almanac.eccentricity.set(static_cast<Real>(v), now_us);
-        if (parse_real(s.field(6), v)) model.navigation.gps_almanac.reference_time_s.set(static_cast<Real>(v), now_us);
-        if (parse_real(s.field(7), v)) model.navigation.gps_almanac.inclination_rad.set(static_cast<Real>(v), now_us);
-        if (parse_real(s.field(8), v)) model.navigation.gps_almanac.right_ascension_rate_rad_s.set(static_cast<Real>(v), now_us);
-        if (parse_real(s.field(9), v)) model.navigation.gps_almanac.sqrt_semi_major_axis.set(static_cast<Real>(v), now_us);
-        if (parse_real(s.field(10), v)) model.navigation.gps_almanac.argument_of_perigee_rad.set(static_cast<Real>(v), now_us);
-        if (parse_real(s.field(11), v)) model.navigation.gps_almanac.longitude_ascension_node_rad.set(static_cast<Real>(v), now_us);
-        if (parse_real(s.field(12), v)) model.navigation.gps_almanac.mean_anomaly_rad.set(static_cast<Real>(v), now_us);
-        if (parse_real(s.field(13), v)) model.navigation.gps_almanac.clock_f0_s.set(static_cast<Real>(v), now_us);
-        if (parse_real(s.field(14), v)) model.navigation.gps_almanac.clock_f1_s_s.set(static_cast<Real>(v), now_us);
-        set_source(model.navigation.gps_almanac.source, source);
-        model.navigation.gps_almanac.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_dcn(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        if (s.field_count < 16) { last_error_ = "short DCN"; return false; }
-        float v = 0;
-        int32_t i = 0;
-        nmea_copy_span(model.navigation.decca.chain_id, sizeof(model.navigation.decca.chain_id), s.field(0));
-        nmea_copy_span(model.navigation.decca.red_zone, sizeof(model.navigation.decca.red_zone), s.field(1));
-        if (parse_real(s.field(2), v)) model.navigation.decca.red_line_of_position.set(static_cast<Real>(v), now_us);
-        model.navigation.decca.red_master_status = s.field(3)[0];
-        nmea_copy_span(model.navigation.decca.green_zone, sizeof(model.navigation.decca.green_zone), s.field(4));
-        if (parse_real(s.field(5), v)) model.navigation.decca.green_line_of_position.set(static_cast<Real>(v), now_us);
-        model.navigation.decca.green_master_status = s.field(6)[0];
-        nmea_copy_span(model.navigation.decca.purple_zone, sizeof(model.navigation.decca.purple_zone), s.field(7));
-        if (parse_real(s.field(8), v)) model.navigation.decca.purple_line_of_position.set(static_cast<Real>(v), now_us);
-        model.navigation.decca.purple_master_status = s.field(9)[0];
-        model.navigation.decca.red_line_navigation_use = s.field(10)[0];
-        model.navigation.decca.green_line_navigation_use = s.field(11)[0];
-        model.navigation.decca.purple_line_navigation_use = s.field(12)[0];
-        if (parse_distance_nmi(s.field(13), s.field(14), v)) model.navigation.decca.position_uncertainty_nmi.set(static_cast<Real>(v), now_us);
-        if (parse_int32(s.field(15), i)) model.navigation.decca.fix_data_basis.set(i, now_us);
-        set_source(model.navigation.decca.source, source);
-        model.navigation.decca.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_dtm(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        if (s.field_count < 8) { last_error_ = "short DTM"; return false; }
-        float v = 0;
-        nmea_copy_span(model.navigation.datum.local_datum_code, sizeof(model.navigation.datum.local_datum_code), s.field(0));
-        nmea_copy_span(model.navigation.datum.local_datum_subcode, sizeof(model.navigation.datum.local_datum_subcode), s.field(1));
-        if (parse_north_south_signed(s.field(2), s.field(3), v)) model.navigation.datum.latitude_offset_min.set(static_cast<Real>(v), now_us);
-        if (parse_east_west_signed(s.field(4), s.field(5), v)) model.navigation.datum.longitude_offset_min.set(static_cast<Real>(v), now_us);
-        if (parse_real(s.field(6), v)) model.navigation.datum.altitude_offset_m.set(static_cast<Real>(v), now_us);
-        nmea_copy_span(model.navigation.datum.reference_datum_code, sizeof(model.navigation.datum.reference_datum_code), s.field(7));
-        set_source(model.navigation.datum.source, source);
-        model.navigation.datum.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_fsi(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        if (s.field_count < 4) { last_error_ = "short FSI"; return false; }
-        float v = 0;
-        int32_t i = 0;
-        if (parse_real(s.field(0), v)) model.navigation.radio_frequency_set.transmitting_frequency_hz.set(static_cast<Real>(v), now_us);
-        if (parse_real(s.field(1), v)) model.navigation.radio_frequency_set.receiving_frequency_hz.set(static_cast<Real>(v), now_us);
-        model.navigation.radio_frequency_set.communication_mode = s.field(2)[0];
-        if (parse_int32(s.field(3), i)) model.navigation.radio_frequency_set.power_level.set(i, now_us);
-        set_source(model.navigation.radio_frequency_set.source, source);
-        model.navigation.radio_frequency_set.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_gbs(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        if (s.field_count < 8) { last_error_ = "short GBS"; return false; }
-        float v = 0;
-        int32_t i = 0;
-        if (parse_utc_time_of_day_s(s.field(0), v)) model.navigation.gps_fault.utc_time_s.set(static_cast<Real>(v), now_us);
-        if (parse_real(s.field(1), v)) model.navigation.gps_fault.expected_error_lat_m.set(static_cast<Real>(v), now_us);
-        if (parse_real(s.field(2), v)) model.navigation.gps_fault.expected_error_lon_m.set(static_cast<Real>(v), now_us);
-        if (parse_real(s.field(3), v)) model.navigation.gps_fault.expected_error_alt_m.set(static_cast<Real>(v), now_us);
-        if (parse_int32(s.field(4), i)) model.navigation.gps_fault.failed_satellite_prn.set(i, now_us);
-        if (parse_real(s.field(5), v)) model.navigation.gps_fault.missed_detection_probability.set(static_cast<Real>(v), now_us);
-        if (parse_real(s.field(6), v)) model.navigation.gps_fault.failed_satellite_bias_m.set(static_cast<Real>(v), now_us);
-        if (parse_real(s.field(7), v)) model.navigation.gps_fault.failed_satellite_bias_stddev_m.set(static_cast<Real>(v), now_us);
-        set_source(model.navigation.gps_fault.source, source);
-        model.navigation.gps_fault.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_apa(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        if (s.field_count < 10) { last_error_ = "short APA"; return false; }
-        float xte = 0, bearing = 0;
-        if (parse_distance_nmi(s.field(2), s.field(4), xte)) {
-            if (s.field(3)[0] == 'L') xte = -xte;
-            else if (s.field(3)[0] != 'R') { last_error_ = "bad APA steer direction"; return false; }
-            model.navigation.apb.xte_nmi.set(static_cast<Real>(xte), now_us);
-        }
-        model.navigation.apb.arrival_circle_entered.value = s.field(5)[0] == 'A';
-        model.navigation.apb.perpendicular_passed.value = s.field(6)[0] == 'A';
-        if (parse_real(s.field(7), bearing)) model.navigation.apb.origin_to_destination_bearing_deg.set(static_cast<Real>(wrap_360_deg(bearing)), now_us);
-        nmea_copy_span(model.navigation.apb.destination_id, sizeof(model.navigation.apb.destination_id), s.field(9));
-        set_source(model.navigation.apb.source, source);
-        model.navigation.apb.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_bod_bww(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        if (s.field_count < 6) { last_error_ = sentence_is(s, "BOD") ? "short BOD" : "short BWW"; return false; }
-        float bearing = 0;
-        if (parse_real(s.field(0), bearing)) model.navigation.waypoint.bearing_true_deg.set(static_cast<Real>(wrap_360_deg(bearing)), now_us);
-        if (parse_real(s.field(2), bearing)) model.navigation.waypoint.bearing_magnetic_deg.set(static_cast<Real>(wrap_360_deg(bearing)), now_us);
-        nmea_copy_span(model.navigation.waypoint.to_waypoint_id, sizeof(model.navigation.waypoint.to_waypoint_id), s.field(4));
-        nmea_copy_span(model.navigation.waypoint.from_waypoint_id, sizeof(model.navigation.waypoint.from_waypoint_id), s.field(5));
-        set_source(model.navigation.waypoint.source, source);
-        model.navigation.waypoint.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_bwc_bwr(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        if (s.field_count < 12) { last_error_ = sentence_is(s, "BWC") ? "short BWC" : "short BWR"; return false; }
-        float v = 0;
-        if (parse_utc_time_of_day_s(s.field(0), v)) model.navigation.waypoint.utc_time_s.set(static_cast<Real>(v), now_us);
-        if (parse_lat_lon(s.field(1), s.field(2), v)) model.navigation.waypoint.latitude_deg.set(static_cast<Real>(v), now_us);
-        if (parse_lat_lon(s.field(3), s.field(4), v)) model.navigation.waypoint.longitude_deg.set(static_cast<Real>(v), now_us);
-        if (parse_real(s.field(5), v)) model.navigation.waypoint.bearing_true_deg.set(static_cast<Real>(wrap_360_deg(v)), now_us);
-        if (parse_real(s.field(7), v)) model.navigation.waypoint.bearing_magnetic_deg.set(static_cast<Real>(wrap_360_deg(v)), now_us);
-        if (parse_distance_nmi(s.field(9), s.field(10), v)) model.navigation.waypoint.distance_nmi.set(static_cast<Real>(v), now_us);
-        nmea_copy_span(model.navigation.waypoint.to_waypoint_id, sizeof(model.navigation.waypoint.to_waypoint_id), s.field(11));
-        set_source(model.navigation.waypoint.source, source);
-        model.navigation.waypoint.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_rmc(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        if (s.field_count < 8 || s.field(1)[0] != 'A') { last_error_ = "invalid RMC"; return false; }
-        float lat = 0, lon = 0, speed = 0, track = 0, timestamp = 0;
-        if (parse_lat_lon(s.field(2), s.field(3), lat)) model.navigation.gps.fix_lat_deg.set(static_cast<Real>(lat), now_us);
-        if (parse_lat_lon(s.field(4), s.field(5), lon)) model.navigation.gps.fix_lon_deg.set(static_cast<Real>(lon), now_us);
-        if (parse_real(s.field(6), speed)) model.navigation.gps.speed_kn.set(static_cast<Real>(speed), now_us);
-        if (parse_real(s.field(7), track)) model.navigation.gps.track_deg.set(static_cast<Real>(wrap_360_deg(track)), now_us);
-        if (s.field_count >= 9 && parse_rmc_timestamp_s(s.field(0), s.field(8), timestamp)) model.navigation.gps.timestamp_s.set(static_cast<Real>(timestamp), now_us);
-        if (s.field_count >= 11) {
-            float declination = 0;
-            if (parse_east_west_signed(s.field(9), s.field(10), declination)) model.navigation.gps.declination_deg.set(static_cast<Real>(declination), now_us);
-        }
-        set_source(model.navigation.gps.source, source);
-        model.navigation.gps.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_gga(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        if (s.field_count < 9 || s.field(5)[0] == '0') { last_error_ = "invalid GGA"; return false; }
-        float v = 0;
-        int32_t i = 0;
-        if (parse_utc_time_of_day_s(s.field(0), v)) model.navigation.gps.timestamp_s.set(static_cast<Real>(v), now_us);
-        if (parse_lat_lon(s.field(1), s.field(2), v)) model.navigation.gps.fix_lat_deg.set(static_cast<Real>(v), now_us);
-        if (parse_lat_lon(s.field(3), s.field(4), v)) model.navigation.gps.fix_lon_deg.set(static_cast<Real>(v), now_us);
-        if (parse_int32(s.field(5), i)) model.navigation.gps.fix_quality.set(i, now_us);
-        if (parse_int32(s.field(6), i)) model.navigation.gps.satellites_used.set(i, now_us);
-        if (parse_real(s.field(7), v)) model.navigation.gps.hdop.set(static_cast<Real>(v), now_us);
-        if (parse_real(s.field(8), v)) model.navigation.gps.fix_alt_m.set(static_cast<Real>(v), now_us);
-        if (s.field_count >= 11 && parse_real(s.field(10), v)) model.navigation.gps.geoidal_separation_m.set(static_cast<Real>(v), now_us);
-        if (s.field_count >= 13 && parse_real(s.field(12), v)) model.navigation.gps.dgps_age_s.set(static_cast<Real>(v), now_us);
-        if (s.field_count >= 14 && parse_int32(s.field(13), i)) model.navigation.gps.dgps_station_id.set(i, now_us);
-        set_source(model.navigation.gps.source, source);
-        model.navigation.gps.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_gll(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        if (s.field_count < 6 || s.field(5)[0] != 'A') { last_error_ = "bad GLL"; return false; }
-        float lat = 0, lon = 0;
-        if (parse_lat_lon(s.field(0), s.field(1), lat)) model.navigation.gps.fix_lat_deg.set(static_cast<Real>(lat), now_us);
-        if (parse_lat_lon(s.field(2), s.field(3), lon)) model.navigation.gps.fix_lon_deg.set(static_cast<Real>(lon), now_us);
-        set_source(model.navigation.gps.source, source);
-        model.navigation.gps.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_vtg(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        if (s.field_count < 7) { last_error_ = "short VTG"; return false; }
-        float track = 0, speed = 0;
-        if (parse_real(s.field(0), track)) model.navigation.gps.track_deg.set(static_cast<Real>(wrap_360_deg(track)), now_us);
-        if (parse_knots(s.field(4), s.field(5), speed)) model.navigation.gps.speed_kn.set(static_cast<Real>(speed), now_us);
-        else if (parse_knots(s.field(6), s.field(7), speed)) model.navigation.gps.speed_kn.set(static_cast<Real>(speed), now_us);
-        set_source(model.navigation.gps.source, source);
-        model.navigation.gps.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_heading(const NmeaSentence& s, Model& model, uint64_t now_us, const char* error) {
-        float heading = 0;
-        if (!parse_real(s.field(0), heading)) { last_error_ = error; return false; }
-        model.imu.heading_deg.set(static_cast<Real>(wrap_360_deg(heading)), now_us);
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_hdg(const NmeaSentence& s, Model& model, uint64_t now_us) {
-        if (!apply_heading(s, model, now_us, "bad HDG")) return false;
-        float variation = 0;
-        if (s.field_count >= 5 && parse_east_west_signed(s.field(3), s.field(4), variation)) model.navigation.gps.declination_deg.set(static_cast<Real>(variation), now_us);
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_mwv(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        if (s.field_count < 5 || s.field(4)[0] != 'A') { last_error_ = "invalid MWV"; return false; }
-        float angle = 0, speed = 0;
-        if (!parse_real(s.field(0), angle) || !parse_knots(s.field(2), s.field(3), speed)) { last_error_ = "bad MWV"; return false; }
-        if (s.field(1)[0] == 'T') return set_wind(model.wind.truewind, angle, speed, now_us, source);
-        return set_wind(model.wind.apparent, angle, speed, now_us, source);
-    }
-
-    template<typename Wind>
-    bool set_wind(Wind& wind, float angle, float speed, uint64_t now_us, ship_data_model::SensorSource source) {
-        wind.direction_deg.set(wrap_180_deg(angle), now_us);
-        wind.speed_kn.set(speed, now_us);
-        set_source(wind.source, source);
-        wind.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_mwd(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        float direction = 0, speed = 0;
-        if (s.field_count < 7 || !parse_real(s.field(0), direction) || !parse_knots(s.field(4), s.field(5), speed)) { last_error_ = "bad MWD"; return false; }
-        model.wind.truewind.direction_deg.set(static_cast<Real>(wrap_180_deg(direction)), now_us);
-        model.wind.truewind.speed_kn.set(static_cast<Real>(speed), now_us);
-        set_source(model.wind.truewind.source, source);
-        model.wind.truewind.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_vwr(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source, bool true_wind) {
-        float angle = 0, speed = 0;
-        if (!parse_left_right_signed(s.field(0), s.field(1), angle) || !parse_knots(s.field(2), s.field(3), speed)) { last_error_ = true_wind ? "bad VWT" : "bad VWR"; return false; }
-        if (true_wind) return set_wind(model.wind.truewind, angle, speed, now_us, source);
-        return set_wind(model.wind.apparent, angle, speed, now_us, source);
-    }
-
-    template<typename Model>
-    bool apply_vhw(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        float speed = 0;
-        if (!parse_knots(s.field(4), s.field(5), speed)) { last_error_ = "bad VHW"; return false; }
-        model.water.speed_kn.set(static_cast<Real>(speed), now_us);
-        set_source(model.water.source, source);
-        model.water.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_lwy(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        float leeway = 0;
-        if (s.field_count < 2 || s.field(0)[0] != 'A' || !parse_real(s.field(1), leeway)) { last_error_ = "bad LWY"; return false; }
-        model.water.leeway_deg.set(static_cast<Real>(leeway), now_us);
-        set_source(model.water.leeway_source, source);
-        model.water.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_dbt(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        float depth = 0;
-        if (parse_depth_m_from_triplet(s, depth)) {
-            model.water.depth_m.set(static_cast<Real>(depth), now_us);
-            set_source(model.water.depth_source, source);
-            model.water.last_update_us = now_us;
-            return true;
-        }
-        last_error_ = "bad DBT";
-        return false;
-    }
-
-    template<typename Model>
-    bool apply_depth_below_keel(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        float depth = 0;
-        if (!parse_depth_m_from_triplet(s, depth)) { last_error_ = "bad DBK"; return false; }
-        model.water.depth_below_keel_m.set(static_cast<Real>(depth), now_us);
-        set_source(model.water.depth_source, source);
-        model.water.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_depth_below_surface(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        float depth = 0;
-        if (!parse_depth_m_from_triplet(s, depth)) { last_error_ = "bad DBS"; return false; }
-        model.water.depth_below_surface_m.set(static_cast<Real>(depth), now_us);
-        set_source(model.water.depth_source, source);
-        model.water.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_dpt(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        float depth = 0, offset = 0;
-        if (!parse_real(s.field(0), depth)) { last_error_ = "bad DPT"; return false; }
-        model.water.depth_m.set(static_cast<Real>(depth), now_us);
-        if (parse_real(s.field(1), offset)) model.water.depth_offset_m.set(static_cast<Real>(offset), now_us);
-        set_source(model.water.depth_source, source);
-        model.water.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_rsa(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        float angle = 0;
-        if (s.field_count >= 2 && s.field(1)[0] == 'A' && parse_real(s.field(0), angle)) {
-            model.rudder.angle_deg.set(static_cast<Real>(-angle), now_us);
-        } else if (s.field_count >= 4 && s.field(3)[0] == 'A' && parse_real(s.field(2), angle)) {
-            model.rudder.angle_deg.set(static_cast<Real>(-angle), now_us);
-        } else { last_error_ = "bad RSA"; return false; }
-        set_source(model.rudder.source, source);
-        model.rudder.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_xte(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        float xte = 0;
-        if (s.field_count < 5 || s.field(0)[0] != 'A' || s.field(1)[0] != 'A' || !parse_left_right_signed(s.field(2), s.field(3), xte)) { last_error_ = "bad XTE"; return false; }
-        model.navigation.apb.xte_nmi.set(static_cast<Real>(xte), now_us);
-        set_source(model.navigation.apb.source, source);
-        model.navigation.apb.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_apb(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        if (s.field_count < 14) { last_error_ = "short APB"; return false; }
-        bool any = false;
-        float xte = 0, bearing = 0, track = 0;
-        if (parse_left_right_signed(s.field(2), s.field(3), xte)) {
-            if (xte > 0.15f) xte = 0.15f;
-            if (xte < -0.15f) xte = -0.15f;
-            model.navigation.apb.xte_nmi.set(static_cast<Real>(xte), now_us);
-            any = true;
-        }
-        model.navigation.apb.arrival_circle_entered.value = s.field(5)[0] == 'A';
-        model.navigation.apb.perpendicular_passed.value = s.field(6)[0] == 'A';
-        if (parse_real(s.field(7), bearing)) { model.navigation.apb.origin_to_destination_bearing_deg.set(static_cast<Real>(wrap_360_deg(bearing)), now_us); any = true; }
-        nmea_copy_span(model.navigation.apb.destination_id, sizeof(model.navigation.apb.destination_id), s.field(9));
-        if (parse_real(s.field(10), bearing)) { model.navigation.apb.present_to_destination_bearing_deg.set(static_cast<Real>(wrap_360_deg(bearing)), now_us); any = true; }
-        if (parse_real(s.field(12), track)) {
-            model.navigation.apb.track_deg.set(static_cast<Real>(wrap_360_deg(track)), now_us);
-            model.navigation.apb.heading_to_steer_deg.set(static_cast<Real>(wrap_360_deg(track)), now_us);
-            any = true;
-        }
-        last_apb_mode_ = s.field(13)[0] == 'M' ? ship_data_model::AutopilotMode::compass : ship_data_model::AutopilotMode::gps;
-        model.navigation.apb.mode_hint.value = last_apb_mode_;
-        last_apb_sender_id_[0] = s.talker[0];
-        last_apb_sender_id_[1] = s.talker[1];
-        last_apb_sender_id_[2] = '\0';
-        model.navigation.apb.sender_id[0] = last_apb_sender_id_[0];
-        model.navigation.apb.sender_id[1] = last_apb_sender_id_[1];
-        model.navigation.apb.sender_id[2] = '\0';
-        set_source(model.navigation.apb.source, source);
-        model.navigation.apb.last_update_us = now_us;
-        if (!any) last_error_ = "bad APB";
-        return any;
-    }
-
-    template<typename Model>
-    bool apply_rmb(const NmeaSentence& s, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        if (s.field_count < 13 || s.field(0)[0] != 'A') { last_error_ = "bad RMB"; return false; }
-        float xte = 0, lat = 0, lon = 0, range = 0, bearing = 0, vmg = 0;
-        if (parse_left_right_signed(s.field(1), s.field(2), xte)) {
-            model.navigation.rmb.xte_nmi.set(static_cast<Real>(xte), now_us);
-            model.navigation.apb.xte_nmi.set(static_cast<Real>(xte), now_us);
-        }
-        nmea_copy_span(model.navigation.rmb.origin_id, sizeof(model.navigation.rmb.origin_id), s.field(3));
-        nmea_copy_span(model.navigation.rmb.destination_id, sizeof(model.navigation.rmb.destination_id), s.field(4));
-        if (parse_lat_lon(s.field(5), s.field(6), lat)) model.navigation.rmb.destination_lat_deg.set(static_cast<Real>(lat), now_us);
-        if (parse_lat_lon(s.field(7), s.field(8), lon)) model.navigation.rmb.destination_lon_deg.set(static_cast<Real>(lon), now_us);
-        if (parse_real(s.field(9), range)) model.navigation.rmb.range_nmi.set(static_cast<Real>(range), now_us);
-        if (parse_real(s.field(10), bearing)) {
-            model.navigation.rmb.bearing_deg.set(static_cast<Real>(wrap_360_deg(bearing)), now_us);
-            model.navigation.apb.track_deg.set(static_cast<Real>(wrap_360_deg(bearing)), now_us);
-        }
-        if (parse_real(s.field(11), vmg)) model.navigation.rmb.closing_velocity_kn.set(static_cast<Real>(vmg), now_us);
-        model.navigation.rmb.arrived.value = s.field(12)[0] == 'A';
-        set_source(model.navigation.rmb.source, source);
-        set_source(model.navigation.apb.source, source);
-        model.navigation.rmb.last_update_us = now_us;
-        model.navigation.apb.last_update_us = now_us;
-        return true;
-    }
-
-    template<typename Model>
-    bool apply_xdr(const NmeaSentence& s, Model& model, uint64_t now_us) {
-        bool any = false;
-        for (uint8_t i = 0; i + 3 < s.field_count; i += 4) {
-            float v = 0;
-            if (s.field(i)[0] == 'A' && parse_real(s.field(i + 1), v) && s.field(i + 2)[0] == 'D') {
-                if (nmea_span_equals(s.field(i + 3), "PTCH")) { model.imu.pitch_deg.set(static_cast<Real>(v), now_us); any = true; }
-                else if (nmea_span_equals(s.field(i + 3), "ROLL")) { model.imu.roll_deg.set(static_cast<Real>(v), now_us); any = true; }
-            }
-        }
-        if (!any) last_error_ = "bad XDR";
-        return any;
-    }
-
-    template<typename Model>
-    bool apply_rot(const NmeaSentence& s, Model& model, uint64_t now_us) {
-        float rate_min = 0;
-        if (s.field_count < 2 || s.field(1)[0] != 'A' || !parse_real(s.field(0), rate_min)) { last_error_ = "bad ROT"; return false; }
-        model.imu.heading_rate_lowpass_deg_s.set(static_cast<Real>(rate_min / 60.0f), now_us);
-        return true;
-    }
+    const char* last_error_; ship_data_model::AutopilotMode last_apb_mode_; char last_apb_sender_id_[3];
+    template<typename Setting> void set_source(Setting& s,ship_data_model::SensorSource src){ if(src!=ship_data_model::SensorSource::none)s.value=src; }
+    template<typename Model> bool apply_aam(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<5){last_error_="short AAM";return false;} float r=0; m.navigation.waypoint_arrival.arrival_circle_entered.value=s.field(0)[0]=='A'; m.navigation.waypoint_arrival.perpendicular_passed.value=s.field(1)[0]=='A'; if(parse_distance_nmi(s.field(2),s.field(3),r))m.navigation.waypoint_arrival.arrival_radius_nmi.set(static_cast<Real>(r),n); nmea_copy_span(m.navigation.waypoint_arrival.waypoint_id,sizeof(m.navigation.waypoint_arrival.waypoint_id),s.field(4)); set_source(m.navigation.waypoint_arrival.source,src); m.navigation.waypoint_arrival.last_update_us=n; return true; }
+    template<typename Model> bool apply_alm(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<15){last_error_="short ALM";return false;} int32_t i=0; float v=0; if(parse_int32(s.field(0),i))m.navigation.gps_almanac.total_messages.set(i,n); if(parse_int32(s.field(1),i))m.navigation.gps_almanac.message_number.set(i,n); if(parse_int32(s.field(2),i))m.navigation.gps_almanac.satellite_prn.set(i,n); if(parse_int32(s.field(3),i))m.navigation.gps_almanac.gps_week.set(i,n); if(parse_int32(s.field(4),i))m.navigation.gps_almanac.sv_health.set(i,n); if(parse_real(s.field(5),v))m.navigation.gps_almanac.eccentricity.set(static_cast<Real>(v),n); if(parse_real(s.field(6),v))m.navigation.gps_almanac.reference_time_s.set(static_cast<Real>(v),n); if(parse_real(s.field(7),v))m.navigation.gps_almanac.inclination_rad.set(static_cast<Real>(v),n); if(parse_real(s.field(8),v))m.navigation.gps_almanac.right_ascension_rate_rad_s.set(static_cast<Real>(v),n); if(parse_real(s.field(9),v))m.navigation.gps_almanac.sqrt_semi_major_axis.set(static_cast<Real>(v),n); if(parse_real(s.field(10),v))m.navigation.gps_almanac.argument_of_perigee_rad.set(static_cast<Real>(v),n); if(parse_real(s.field(11),v))m.navigation.gps_almanac.longitude_ascension_node_rad.set(static_cast<Real>(v),n); if(parse_real(s.field(12),v))m.navigation.gps_almanac.mean_anomaly_rad.set(static_cast<Real>(v),n); if(parse_real(s.field(13),v))m.navigation.gps_almanac.clock_f0_s.set(static_cast<Real>(v),n); if(parse_real(s.field(14),v))m.navigation.gps_almanac.clock_f1_s_s.set(static_cast<Real>(v),n); set_source(m.navigation.gps_almanac.source,src); m.navigation.gps_almanac.last_update_us=n; return true; }
+    template<typename Model> bool apply_dcn(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<16){last_error_="short DCN";return false;} float v=0; int32_t i=0; nmea_copy_span(m.navigation.decca.chain_id,sizeof(m.navigation.decca.chain_id),s.field(0)); nmea_copy_span(m.navigation.decca.red_zone,sizeof(m.navigation.decca.red_zone),s.field(1)); if(parse_real(s.field(2),v))m.navigation.decca.red_line_of_position.set(static_cast<Real>(v),n); m.navigation.decca.red_master_status=s.field(3)[0]; nmea_copy_span(m.navigation.decca.green_zone,sizeof(m.navigation.decca.green_zone),s.field(4)); if(parse_real(s.field(5),v))m.navigation.decca.green_line_of_position.set(static_cast<Real>(v),n); m.navigation.decca.green_master_status=s.field(6)[0]; nmea_copy_span(m.navigation.decca.purple_zone,sizeof(m.navigation.decca.purple_zone),s.field(7)); if(parse_real(s.field(8),v))m.navigation.decca.purple_line_of_position.set(static_cast<Real>(v),n); m.navigation.decca.purple_master_status=s.field(9)[0]; m.navigation.decca.red_line_navigation_use=s.field(10)[0]; m.navigation.decca.green_line_navigation_use=s.field(11)[0]; m.navigation.decca.purple_line_navigation_use=s.field(12)[0]; if(parse_distance_nmi(s.field(13),s.field(14),v))m.navigation.decca.position_uncertainty_nmi.set(static_cast<Real>(v),n); if(parse_int32(s.field(15),i))m.navigation.decca.fix_data_basis.set(i,n); set_source(m.navigation.decca.source,src); m.navigation.decca.last_update_us=n; return true; }
+    template<typename Model> bool apply_dtm(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<8){last_error_="short DTM";return false;} float v=0; nmea_copy_span(m.navigation.datum.local_datum_code,sizeof(m.navigation.datum.local_datum_code),s.field(0)); nmea_copy_span(m.navigation.datum.local_datum_subcode,sizeof(m.navigation.datum.local_datum_subcode),s.field(1)); if(parse_north_south_signed(s.field(2),s.field(3),v))m.navigation.datum.latitude_offset_min.set(static_cast<Real>(v),n); if(parse_east_west_signed(s.field(4),s.field(5),v))m.navigation.datum.longitude_offset_min.set(static_cast<Real>(v),n); if(parse_real(s.field(6),v))m.navigation.datum.altitude_offset_m.set(static_cast<Real>(v),n); nmea_copy_span(m.navigation.datum.reference_datum_code,sizeof(m.navigation.datum.reference_datum_code),s.field(7)); set_source(m.navigation.datum.source,src); m.navigation.datum.last_update_us=n; return true; }
+    template<typename Model> bool apply_fsi(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<4){last_error_="short FSI";return false;} float v=0; int32_t i=0; if(parse_real(s.field(0),v))m.navigation.radio_frequency_set.transmitting_frequency_hz.set(static_cast<Real>(v),n); if(parse_real(s.field(1),v))m.navigation.radio_frequency_set.receiving_frequency_hz.set(static_cast<Real>(v),n); m.navigation.radio_frequency_set.communication_mode=s.field(2)[0]; if(parse_int32(s.field(3),i))m.navigation.radio_frequency_set.power_level.set(i,n); set_source(m.navigation.radio_frequency_set.source,src); m.navigation.radio_frequency_set.last_update_us=n; return true; }
+    template<typename Model> bool apply_gbs(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<8){last_error_="short GBS";return false;} float v=0; int32_t i=0; if(parse_utc_time_of_day_s(s.field(0),v))m.navigation.gps_fault.utc_time_s.set(static_cast<Real>(v),n); if(parse_real(s.field(1),v))m.navigation.gps_fault.expected_error_lat_m.set(static_cast<Real>(v),n); if(parse_real(s.field(2),v))m.navigation.gps_fault.expected_error_lon_m.set(static_cast<Real>(v),n); if(parse_real(s.field(3),v))m.navigation.gps_fault.expected_error_alt_m.set(static_cast<Real>(v),n); if(parse_int32(s.field(4),i))m.navigation.gps_fault.failed_satellite_prn.set(i,n); if(parse_real(s.field(5),v))m.navigation.gps_fault.missed_detection_probability.set(static_cast<Real>(v),n); if(parse_real(s.field(6),v))m.navigation.gps_fault.failed_satellite_bias_m.set(static_cast<Real>(v),n); if(parse_real(s.field(7),v))m.navigation.gps_fault.failed_satellite_bias_stddev_m.set(static_cast<Real>(v),n); set_source(m.navigation.gps_fault.source,src); m.navigation.gps_fault.last_update_us=n; return true; }
+    template<typename Model> bool apply_glc(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<13){last_error_="short GLC";return false;} float v=0; if(parse_real(s.field(0),v))m.navigation.legacy_timing.gri_us_div_10.set(static_cast<Real>(v),n); if(parse_real(s.field(1),v))m.navigation.legacy_timing.master_toa_us.set(static_cast<Real>(v),n); m.navigation.legacy_timing.master_toa_status=s.field(2)[0]; for(uint8_t k=0;k<5;++k){uint8_t b=static_cast<uint8_t>(3+k*2); if(parse_real(s.field(b),v))m.navigation.legacy_timing.delta_us[k].set(static_cast<Real>(v),n); m.navigation.legacy_timing.delta_status[k]=s.field(b+1)[0];} set_source(m.navigation.legacy_timing.source,src); m.navigation.legacy_timing.last_update_us=n; return true; }
+    template<typename Model> bool apply_grs(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<14){last_error_="short GRS";return false;} float v=0; int32_t mode=0; if(parse_utc_time_of_day_s(s.field(0),v))m.navigation.gps_range_residual.utc_time_s.set(static_cast<Real>(v),n); if(parse_int32(s.field(1),mode))m.navigation.gps_range_residual.mode.set(mode,n); for(uint8_t k=0;k<12;++k)if(parse_real(s.field(static_cast<uint8_t>(2+k)),v))m.navigation.gps_range_residual.satellite_residual_m[k].set(static_cast<Real>(v),n); set_source(m.navigation.gps_range_residual.source,src); m.navigation.gps_range_residual.last_update_us=n; return true; }
+    template<typename Model> bool apply_gst(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<8){last_error_="short GST";return false;} float v=0; if(parse_utc_time_of_day_s(s.field(0),v))m.navigation.gps_noise.utc_time_s.set(static_cast<Real>(v),n); if(parse_real(s.field(1),v))m.navigation.gps_noise.rms_range_stddev_m.set(static_cast<Real>(v),n); if(parse_real(s.field(2),v))m.navigation.gps_noise.semi_major_stddev_m.set(static_cast<Real>(v),n); if(parse_real(s.field(3),v))m.navigation.gps_noise.semi_minor_stddev_m.set(static_cast<Real>(v),n); if(parse_real(s.field(4),v))m.navigation.gps_noise.semi_major_orientation_deg.set(static_cast<Real>(wrap_360_deg(v)),n); if(parse_real(s.field(5),v))m.navigation.gps_noise.latitude_error_stddev_m.set(static_cast<Real>(v),n); if(parse_real(s.field(6),v))m.navigation.gps_noise.longitude_error_stddev_m.set(static_cast<Real>(v),n); if(parse_real(s.field(7),v))m.navigation.gps_noise.altitude_error_stddev_m.set(static_cast<Real>(v),n); set_source(m.navigation.gps_noise.source,src); m.navigation.gps_noise.last_update_us=n; return true; }
+    template<typename Model> bool apply_gsa(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<17){last_error_="short GSA";return false;} float v=0; int32_t i=0; m.navigation.gps_dop.selection_mode=s.field(0)[0]; if(parse_int32(s.field(1),i))m.navigation.gps_dop.fix_mode.set(i,n); for(uint8_t k=0;k<12;++k)if(parse_int32(s.field(static_cast<uint8_t>(2+k)),i))m.navigation.gps_dop.satellite_prn[k].set(i,n); if(parse_real(s.field(14),v))m.navigation.gps_dop.pdop.set(static_cast<Real>(v),n); if(parse_real(s.field(15),v)){m.navigation.gps_dop.hdop.set(static_cast<Real>(v),n);m.navigation.gps.hdop.set(static_cast<Real>(v),n);} if(parse_real(s.field(16),v))m.navigation.gps_dop.vdop.set(static_cast<Real>(v),n); set_source(m.navigation.gps_dop.source,src); set_source(m.navigation.gps.source,src); m.navigation.gps_dop.last_update_us=n; m.navigation.gps.last_update_us=n; return true; }
+    template<typename Model> bool apply_gsv(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<3){last_error_="short GSV";return false;} float v=0; int32_t i=0; if(parse_int32(s.field(0),i))m.navigation.gps_satellites_in_view.total_messages.set(i,n); if(parse_int32(s.field(1),i))m.navigation.gps_satellites_in_view.message_number.set(i,n); if(parse_int32(s.field(2),i))m.navigation.gps_satellites_in_view.satellites_in_view.set(i,n); for(uint8_t k=0;k<4;++k){uint8_t b=static_cast<uint8_t>(3+k*4); if(b>=s.field_count)break; if(parse_int32(s.field(b),i))m.navigation.gps_satellites_in_view.satellite_prn[k].set(i,n); if(b+1<s.field_count&&parse_real(s.field(b+1),v))m.navigation.gps_satellites_in_view.elevation_deg[k].set(static_cast<Real>(v),n); if(b+2<s.field_count&&parse_real(s.field(b+2),v))m.navigation.gps_satellites_in_view.azimuth_true_deg[k].set(static_cast<Real>(wrap_360_deg(v)),n); if(b+3<s.field_count&&parse_real(s.field(b+3),v))m.navigation.gps_satellites_in_view.snr_db[k].set(static_cast<Real>(v),n);} set_source(m.navigation.gps_satellites_in_view.source,src); m.navigation.gps_satellites_in_view.last_update_us=n; return true; }
+    template<typename Model> bool apply_gtd(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ float v=0; bool any=false; for(uint8_t k=0;k<5&&k<s.field_count;++k)if(parse_real(s.field(k),v)){m.navigation.legacy_delta.value[k].set(static_cast<Real>(v),n);any=true;} set_source(m.navigation.legacy_delta.source,src); m.navigation.legacy_delta.last_update_us=n; if(!any)last_error_="bad GTD"; return any; }
+    template<typename Model> bool apply_gxa(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<7){last_error_="short GXA";return false;} float v=0; int32_t i=0; if(parse_utc_time_of_day_s(s.field(0),v))m.navigation.transit_fix.utc_time_s.set(static_cast<Real>(v),n); if(parse_lat_lon(s.field(1),s.field(2),v))m.navigation.transit_fix.latitude_deg.set(static_cast<Real>(v),n); if(parse_lat_lon(s.field(3),s.field(4),v))m.navigation.transit_fix.longitude_deg.set(static_cast<Real>(v),n); nmea_copy_span(m.navigation.transit_fix.waypoint_id,sizeof(m.navigation.transit_fix.waypoint_id),s.field(5)); if(parse_int32(s.field(6),i))m.navigation.transit_fix.satellite_number.set(i,n); set_source(m.navigation.transit_fix.source,src); m.navigation.transit_fix.last_update_us=n; return true; }
+    template<typename Model> bool apply_apa(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<10){last_error_="short APA";return false;} float x=0,b=0; if(parse_distance_nmi(s.field(2),s.field(4),x)){ if(s.field(3)[0]=='L')x=-x; else if(s.field(3)[0]!='R'){last_error_="bad APA steer direction";return false;} m.navigation.apb.xte_nmi.set(static_cast<Real>(x),n);} m.navigation.apb.arrival_circle_entered.value=s.field(5)[0]=='A'; m.navigation.apb.perpendicular_passed.value=s.field(6)[0]=='A'; if(parse_real(s.field(7),b))m.navigation.apb.origin_to_destination_bearing_deg.set(static_cast<Real>(wrap_360_deg(b)),n); nmea_copy_span(m.navigation.apb.destination_id,sizeof(m.navigation.apb.destination_id),s.field(9)); set_source(m.navigation.apb.source,src); m.navigation.apb.last_update_us=n; return true; }
+    template<typename Model> bool apply_bod_bww(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<6){last_error_=sentence_is(s,"BOD")?"short BOD":"short BWW";return false;} float b=0; if(parse_real(s.field(0),b))m.navigation.waypoint.bearing_true_deg.set(static_cast<Real>(wrap_360_deg(b)),n); if(parse_real(s.field(2),b))m.navigation.waypoint.bearing_magnetic_deg.set(static_cast<Real>(wrap_360_deg(b)),n); nmea_copy_span(m.navigation.waypoint.to_waypoint_id,sizeof(m.navigation.waypoint.to_waypoint_id),s.field(4)); nmea_copy_span(m.navigation.waypoint.from_waypoint_id,sizeof(m.navigation.waypoint.from_waypoint_id),s.field(5)); set_source(m.navigation.waypoint.source,src); m.navigation.waypoint.last_update_us=n; return true; }
+    template<typename Model> bool apply_bwc_bwr(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<12){last_error_=sentence_is(s,"BWC")?"short BWC":"short BWR";return false;} float v=0; if(parse_utc_time_of_day_s(s.field(0),v))m.navigation.waypoint.utc_time_s.set(static_cast<Real>(v),n); if(parse_lat_lon(s.field(1),s.field(2),v))m.navigation.waypoint.latitude_deg.set(static_cast<Real>(v),n); if(parse_lat_lon(s.field(3),s.field(4),v))m.navigation.waypoint.longitude_deg.set(static_cast<Real>(v),n); if(parse_real(s.field(5),v))m.navigation.waypoint.bearing_true_deg.set(static_cast<Real>(wrap_360_deg(v)),n); if(parse_real(s.field(7),v))m.navigation.waypoint.bearing_magnetic_deg.set(static_cast<Real>(wrap_360_deg(v)),n); if(parse_distance_nmi(s.field(9),s.field(10),v))m.navigation.waypoint.distance_nmi.set(static_cast<Real>(v),n); nmea_copy_span(m.navigation.waypoint.to_waypoint_id,sizeof(m.navigation.waypoint.to_waypoint_id),s.field(11)); set_source(m.navigation.waypoint.source,src); m.navigation.waypoint.last_update_us=n; return true; }
+    template<typename Model> bool apply_rmc(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<8||s.field(1)[0]!='A'){last_error_="invalid RMC";return false;} float v=0; if(parse_lat_lon(s.field(2),s.field(3),v))m.navigation.gps.fix_lat_deg.set(static_cast<Real>(v),n); if(parse_lat_lon(s.field(4),s.field(5),v))m.navigation.gps.fix_lon_deg.set(static_cast<Real>(v),n); if(parse_real(s.field(6),v))m.navigation.gps.speed_kn.set(static_cast<Real>(v),n); if(parse_real(s.field(7),v))m.navigation.gps.track_deg.set(static_cast<Real>(wrap_360_deg(v)),n); if(s.field_count>=9&&parse_rmc_timestamp_s(s.field(0),s.field(8),v))m.navigation.gps.timestamp_s.set(static_cast<Real>(v),n); if(s.field_count>=11&&parse_east_west_signed(s.field(9),s.field(10),v))m.navigation.gps.declination_deg.set(static_cast<Real>(v),n); set_source(m.navigation.gps.source,src); m.navigation.gps.last_update_us=n; return true; }
+    template<typename Model> bool apply_gga(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<9||s.field(5)[0]=='0'){last_error_="invalid GGA";return false;} float v=0; int32_t i=0; if(parse_utc_time_of_day_s(s.field(0),v))m.navigation.gps.timestamp_s.set(static_cast<Real>(v),n); if(parse_lat_lon(s.field(1),s.field(2),v))m.navigation.gps.fix_lat_deg.set(static_cast<Real>(v),n); if(parse_lat_lon(s.field(3),s.field(4),v))m.navigation.gps.fix_lon_deg.set(static_cast<Real>(v),n); if(parse_int32(s.field(5),i))m.navigation.gps.fix_quality.set(i,n); if(parse_int32(s.field(6),i))m.navigation.gps.satellites_used.set(i,n); if(parse_real(s.field(7),v))m.navigation.gps.hdop.set(static_cast<Real>(v),n); if(parse_real(s.field(8),v))m.navigation.gps.fix_alt_m.set(static_cast<Real>(v),n); if(s.field_count>=11&&parse_real(s.field(10),v))m.navigation.gps.geoidal_separation_m.set(static_cast<Real>(v),n); if(s.field_count>=13&&parse_real(s.field(12),v))m.navigation.gps.dgps_age_s.set(static_cast<Real>(v),n); if(s.field_count>=14&&parse_int32(s.field(13),i))m.navigation.gps.dgps_station_id.set(i,n); set_source(m.navigation.gps.source,src); m.navigation.gps.last_update_us=n; return true; }
+    template<typename Model> bool apply_gll(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<6||s.field(5)[0]!='A'){last_error_="bad GLL";return false;} float v=0; if(parse_lat_lon(s.field(0),s.field(1),v))m.navigation.gps.fix_lat_deg.set(static_cast<Real>(v),n); if(parse_lat_lon(s.field(2),s.field(3),v))m.navigation.gps.fix_lon_deg.set(static_cast<Real>(v),n); if(parse_utc_time_of_day_s(s.field(4),v))m.navigation.gps.timestamp_s.set(static_cast<Real>(v),n); set_source(m.navigation.gps.source,src); m.navigation.gps.last_update_us=n; return true; }
+    template<typename Model> bool apply_vtg(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<7){last_error_="short VTG";return false;} float v=0; if(parse_real(s.field(0),v))m.navigation.gps.track_deg.set(static_cast<Real>(wrap_360_deg(v)),n); if(parse_knots(s.field(4),s.field(5),v)||parse_knots(s.field(6),s.field(7),v))m.navigation.gps.speed_kn.set(static_cast<Real>(v),n); set_source(m.navigation.gps.source,src); m.navigation.gps.last_update_us=n; return true; }
+    template<typename Model> bool apply_hdt(const NmeaSentence& s,Model& m,uint64_t n){ float h=0; if(!parse_real(s.field(0),h)){last_error_="bad HDT";return false;} Real v=static_cast<Real>(wrap_360_deg(h)); m.imu.heading_deg.set(v,n); m.imu.heading_true_deg.set(v,n); return true; }
+    template<typename Model> bool apply_hdm(const NmeaSentence& s,Model& m,uint64_t n){ float h=0; if(!parse_real(s.field(0),h)){last_error_="bad HDM";return false;} Real v=static_cast<Real>(wrap_360_deg(h)); m.imu.heading_deg.set(v,n); m.imu.heading_magnetic_deg.set(v,n); return true; }
+    template<typename Model> bool apply_hdg(const NmeaSentence& s,Model& m,uint64_t n){ if(!apply_hdm(s,m,n)){last_error_="bad HDG";return false;} float v=0; if(s.field_count>=3&&parse_east_west_signed(s.field(1),s.field(2),v))m.imu.magnetic_deviation_deg.set(static_cast<Real>(v),n); if(s.field_count>=5&&parse_east_west_signed(s.field(3),s.field(4),v)){m.imu.magnetic_variation_deg.set(static_cast<Real>(v),n);m.navigation.gps.declination_deg.set(static_cast<Real>(v),n);} return true; }
+    template<typename Wind> bool set_wind(Wind& w,float a,float sp,uint64_t n,ship_data_model::SensorSource src){ w.direction_deg.set(static_cast<Real>(wrap_180_deg(a)),n); w.speed_kn.set(static_cast<Real>(sp),n); set_source(w.source,src); w.last_update_us=n; return true; }
+    template<typename Model> bool apply_mwv(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<5||s.field(4)[0]!='A'){last_error_="invalid MWV";return false;} float a=0,sp=0; if(!parse_real(s.field(0),a)||!parse_knots(s.field(2),s.field(3),sp)){last_error_="bad MWV";return false;} return s.field(1)[0]=='T'?set_wind(m.wind.truewind,a,sp,n,src):set_wind(m.wind.apparent,a,sp,n,src); }
+    template<typename Model> bool apply_mwd(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ float d=0,sp=0; if(s.field_count<7||!parse_real(s.field(0),d)||!parse_knots(s.field(4),s.field(5),sp)){last_error_="bad MWD";return false;} m.wind.truewind.direction_deg.set(static_cast<Real>(wrap_180_deg(d)),n); m.wind.truewind.speed_kn.set(static_cast<Real>(sp),n); set_source(m.wind.truewind.source,src); m.wind.truewind.last_update_us=n; return true; }
+    template<typename Model> bool apply_vwr(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src,bool true_wind){ float a=0,sp=0; if(!parse_left_right_signed(s.field(0),s.field(1),a)||!parse_knots(s.field(2),s.field(3),sp)){last_error_=true_wind?"bad VWT":"bad VWR";return false;} return true_wind?set_wind(m.wind.truewind,a,sp,n,src):set_wind(m.wind.apparent,a,sp,n,src); }
+    template<typename Model> bool apply_vhw(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ float sp=0; if(!parse_knots(s.field(4),s.field(5),sp)){last_error_="bad VHW";return false;} m.water.speed_kn.set(static_cast<Real>(sp),n); set_source(m.water.source,src); m.water.last_update_us=n; return true; }
+    template<typename Model> bool apply_lwy(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ float v=0; if(s.field_count<2||s.field(0)[0]!='A'||!parse_real(s.field(1),v)){last_error_="bad LWY";return false;} m.water.leeway_deg.set(static_cast<Real>(v),n); set_source(m.water.leeway_source,src); m.water.last_update_us=n; return true; }
+    template<typename Model> bool apply_dbt(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ float d=0; if(!parse_depth_m_from_triplet(s,d)){last_error_="bad DBT";return false;} m.water.depth_m.set(static_cast<Real>(d),n); set_source(m.water.depth_source,src); m.water.last_update_us=n; return true; }
+    template<typename Model> bool apply_depth_below_keel(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ float d=0; if(!parse_depth_m_from_triplet(s,d)){last_error_="bad DBK";return false;} m.water.depth_below_keel_m.set(static_cast<Real>(d),n); set_source(m.water.depth_source,src); m.water.last_update_us=n; return true; }
+    template<typename Model> bool apply_depth_below_surface(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ float d=0; if(!parse_depth_m_from_triplet(s,d)){last_error_="bad DBS";return false;} m.water.depth_below_surface_m.set(static_cast<Real>(d),n); set_source(m.water.depth_source,src); m.water.last_update_us=n; return true; }
+    template<typename Model> bool apply_dpt(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ float d=0,o=0; if(!parse_real(s.field(0),d)){last_error_="bad DPT";return false;} m.water.depth_m.set(static_cast<Real>(d),n); if(parse_real(s.field(1),o))m.water.depth_offset_m.set(static_cast<Real>(o),n); set_source(m.water.depth_source,src); m.water.last_update_us=n; return true; }
+    template<typename Model> bool apply_rsa(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ float a=0; if(s.field_count>=2&&s.field(1)[0]=='A'&&parse_real(s.field(0),a))m.rudder.angle_deg.set(static_cast<Real>(-a),n); else if(s.field_count>=4&&s.field(3)[0]=='A'&&parse_real(s.field(2),a))m.rudder.angle_deg.set(static_cast<Real>(-a),n); else{last_error_="bad RSA";return false;} set_source(m.rudder.source,src); m.rudder.last_update_us=n; return true; }
+    template<typename Model> bool apply_xte(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ float x=0; if(s.field_count<5||s.field(0)[0]!='A'||s.field(1)[0]!='A'||!parse_left_right_signed(s.field(2),s.field(3),x)){last_error_="bad XTE";return false;} m.navigation.apb.xte_nmi.set(static_cast<Real>(x),n); set_source(m.navigation.apb.source,src); m.navigation.apb.last_update_us=n; return true; }
+    template<typename Model> bool apply_apb(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<14){last_error_="short APB";return false;} bool any=false; float x=0,b=0; if(parse_left_right_signed(s.field(2),s.field(3),x)){ if(x>0.15f)x=0.15f; if(x<-0.15f)x=-0.15f; m.navigation.apb.xte_nmi.set(static_cast<Real>(x),n); any=true;} m.navigation.apb.arrival_circle_entered.value=s.field(5)[0]=='A'; m.navigation.apb.perpendicular_passed.value=s.field(6)[0]=='A'; if(parse_real(s.field(7),b)){m.navigation.apb.origin_to_destination_bearing_deg.set(static_cast<Real>(wrap_360_deg(b)),n);any=true;} nmea_copy_span(m.navigation.apb.destination_id,sizeof(m.navigation.apb.destination_id),s.field(9)); if(parse_real(s.field(10),b)){m.navigation.apb.present_to_destination_bearing_deg.set(static_cast<Real>(wrap_360_deg(b)),n);any=true;} if(parse_real(s.field(12),b)){m.navigation.apb.track_deg.set(static_cast<Real>(wrap_360_deg(b)),n);m.navigation.apb.heading_to_steer_deg.set(static_cast<Real>(wrap_360_deg(b)),n);any=true;} last_apb_mode_=s.field(13)[0]=='M'?ship_data_model::AutopilotMode::compass:ship_data_model::AutopilotMode::gps; m.navigation.apb.mode_hint.value=last_apb_mode_; last_apb_sender_id_[0]=s.talker[0]; last_apb_sender_id_[1]=s.talker[1]; last_apb_sender_id_[2]='\0'; m.navigation.apb.sender_id[0]=last_apb_sender_id_[0]; m.navigation.apb.sender_id[1]=last_apb_sender_id_[1]; m.navigation.apb.sender_id[2]='\0'; set_source(m.navigation.apb.source,src); m.navigation.apb.last_update_us=n; if(!any)last_error_="bad APB"; return any; }
+    template<typename Model> bool apply_rmb(const NmeaSentence& s,Model& m,uint64_t n,ship_data_model::SensorSource src){ if(s.field_count<13||s.field(0)[0]!='A'){last_error_="bad RMB";return false;} float v=0; if(parse_left_right_signed(s.field(1),s.field(2),v)){m.navigation.rmb.xte_nmi.set(static_cast<Real>(v),n);m.navigation.apb.xte_nmi.set(static_cast<Real>(v),n);} nmea_copy_span(m.navigation.rmb.origin_id,sizeof(m.navigation.rmb.origin_id),s.field(3)); nmea_copy_span(m.navigation.rmb.destination_id,sizeof(m.navigation.rmb.destination_id),s.field(4)); if(parse_lat_lon(s.field(5),s.field(6),v))m.navigation.rmb.destination_lat_deg.set(static_cast<Real>(v),n); if(parse_lat_lon(s.field(7),s.field(8),v))m.navigation.rmb.destination_lon_deg.set(static_cast<Real>(v),n); if(parse_real(s.field(9),v))m.navigation.rmb.range_nmi.set(static_cast<Real>(v),n); if(parse_real(s.field(10),v)){m.navigation.rmb.bearing_deg.set(static_cast<Real>(wrap_360_deg(v)),n);m.navigation.apb.track_deg.set(static_cast<Real>(wrap_360_deg(v)),n);} if(parse_real(s.field(11),v))m.navigation.rmb.closing_velocity_kn.set(static_cast<Real>(v),n); m.navigation.rmb.arrived.value=s.field(12)[0]=='A'; set_source(m.navigation.rmb.source,src); set_source(m.navigation.apb.source,src); m.navigation.rmb.last_update_us=n; m.navigation.apb.last_update_us=n; return true; }
+    template<typename Model> bool apply_xdr(const NmeaSentence& s,Model& m,uint64_t n){ bool any=false; float v=0; for(uint8_t i=0;i+3<s.field_count;i+=4)if(s.field(i)[0]=='A'&&parse_real(s.field(i+1),v)&&s.field(i+2)[0]=='D'){ if(nmea_span_equals(s.field(i+3),"PTCH")){m.imu.pitch_deg.set(static_cast<Real>(v),n);any=true;} else if(nmea_span_equals(s.field(i+3),"ROLL")){m.imu.roll_deg.set(static_cast<Real>(v),n);any=true;} } if(!any)last_error_="bad XDR"; return any; }
+    template<typename Model> bool apply_rot(const NmeaSentence& s,Model& m,uint64_t n){ float r=0; if(s.field_count<2||s.field(1)[0]!='A'||!parse_real(s.field(0),r)){last_error_="bad ROT";return false;} m.imu.heading_rate_lowpass_deg_s.set(static_cast<Real>(r/60.0f),n); return true; }
 };
 
 } // namespace nmea0183_connector
