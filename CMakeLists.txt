@@ -39,6 +39,10 @@ if(BUILD_TESTING)
   target_link_libraries(test_signalk_mini_smoke PRIVATE signalk_mini_core)
   add_test(NAME test_signalk_mini_smoke COMMAND test_signalk_mini_smoke)
 
+  add_executable(test_nmea_tokenizer_examples tests/test_nmea_tokenizer_examples.cpp)
+  target_link_libraries(test_nmea_tokenizer_examples PRIVATE signalk_mini_core)
+  add_test(NAME test_nmea_tokenizer_examples COMMAND test_nmea_tokenizer_examples)
+
   add_executable(test_signalk_mini_tcp_integration tests/test_signalk_mini_tcp_integration.cpp)
   target_link_libraries(test_signalk_mini_tcp_integration PRIVATE signalk_mini_core Threads::Threads)
   add_test(NAME test_signalk_mini_tcp_integration COMMAND test_signalk_mini_tcp_integration)
