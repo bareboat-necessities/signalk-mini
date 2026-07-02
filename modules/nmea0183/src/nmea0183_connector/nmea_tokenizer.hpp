@@ -14,6 +14,8 @@ static const uint8_t NMEA_TOKEN_MAX_TOKENS = 2;
 struct NmeaToken {
     NmeaSpan text;
     NmeaSentenceFamily family = NmeaSentenceFamily::Standard;
+    NmeaSpan proprietary_vendor_code;
+    NmeaProprietaryVendor proprietary_vendor = NmeaProprietaryVendor::Unknown;
     bool is_sentence = false;
     bool has_checksum = false;
 };
@@ -127,6 +129,8 @@ inline void nmea_add_token(NmeaTokenizeResult& result, NmeaSpan text, NmeaSenten
     NmeaToken& token = result.tokens[result.count++];
     token.text = text;
     token.family = family;
+    token.proprietary_vendor_code = nmea_proprietary_vendor_code_from_token(text);
+    token.proprietary_vendor = nmea_proprietary_vendor_from_code(token.proprietary_vendor_code);
     token.is_sentence = is_sentence;
     token.has_checksum = nmea_token_has_checksum(text);
 }
