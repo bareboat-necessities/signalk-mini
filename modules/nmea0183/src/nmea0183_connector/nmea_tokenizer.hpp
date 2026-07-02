@@ -184,9 +184,8 @@ inline NmeaSentenceFamily nmea_classify_token_span(NmeaSpan token) {
     if (nmea_token_body_starts_with(token, "STALK") || nmea_token_body_starts_with(token, "PSTALK")) {
         return NmeaSentenceFamily::SeaTalk;
     }
-    if (nmea_token_body_starts_with(token, "DSC") || nmea_token_body_starts_with(token, "DSE") ||
-        nmea_token_body_starts_with(token, "DSI") || nmea_token_body_starts_with(token, "DSR") ||
-        nmea_token_body_starts_with(token, "CDDSC")) {
+    if (nmea_token_sentence_is(token, "DSC") || nmea_token_sentence_is(token, "DSE") ||
+        nmea_token_sentence_is(token, "DSI") || nmea_token_sentence_is(token, "DSR")) {
         return NmeaSentenceFamily::Dsc;
     }
     if (nmea_token_sentence_is(token, "NRM") || nmea_token_sentence_is(token, "NRX")) {
