@@ -420,6 +420,48 @@ bool apply_ttm(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 }
 
 template<typename Model>
+bool apply_vbw(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 6) {
+        last_error_ = "short VBW";
+        return false;
+    }
+
+    float value = 0.0f;
+    model.water.water_speed_status = sentence.field(2)[0];
+    model.water.ground_speed_status = sentence.field(5)[0];
+    if (sentence.field(2)[0] == 'A') {
+        if (parse_real(sentence.field(0), value)) {
+            model.water.longitudinal_water_speed_kn.set(static_cast<Real>(value), now_us);
+            model.water.speed_kn.set(static_cast<Real>(value), now_us);
+        }
+        if (parse_real(sentence.field(1), value)) model.water.transverse_water_speed_kn.set(static_cast<Real>(value), now_us);
+    }
+    if (sentence.field(5)[0] == 'A') {
+        if (parse_real(sentence.field(3), value)) model.water.longitudinal_ground_speed_kn.set(static_cast<Real>(value), now_us);
+        if (parse_real(sentence.field(4), value)) model.water.transverse_ground_speed_kn.set(static_cast<Real>(value), now_us);
+    }
+    set_source(model.water.source, source);
+    model.water.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
+bool apply_vdr(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 6) {
+        last_error_ = "short VDR";
+        return false;
+    }
+
+    float value = 0.0f;
+    if (sentence.field(1)[0] == 'T' && parse_real(sentence.field(0), value)) model.water.current_direction_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
+    if (sentence.field(3)[0] == 'M' && parse_real(sentence.field(2), value)) model.water.current_direction_magnetic_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
+    if (parse_knots(sentence.field(4), sentence.field(5), value)) model.water.current_speed_kn.set(static_cast<Real>(value), now_us);
+    set_source(model.water.source, source);
+    model.water.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
 bool apply_vhw(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     float speed_kn = 0.0f;
     if (!parse_knots(sentence.field(4), sentence.field(5), speed_kn)) {
@@ -428,6 +470,36 @@ bool apply_vhw(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     }
 
     model.water.speed_kn.set(static_cast<Real>(speed_kn), now_us);
+    set_source(model.water.source, source);
+    model.water.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
+bool apply_vlw(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 4) {
+        last_error_ = "short VLW";
+        return false;
+    }
+
+    float value = 0.0f;
+    if (parse_distance_nmi(sentence.field(0), sentence.field(1), value)) model.water.total_distance_nmi.set(static_cast<Real>(value), now_us);
+    if (parse_distance_nmi(sentence.field(2), sentence.field(3), value)) model.water.trip_distance_nmi.set(static_cast<Real>(value), now_us);
+    set_source(model.water.source, source);
+    model.water.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
+bool apply_vpw(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 4) {
+        last_error_ = "short VPW";
+        return false;
+    }
+
+    float value = 0.0f;
+    if (parse_knots(sentence.field(0), sentence.field(1), value)) model.water.speed_parallel_to_wind_kn.set(static_cast<Real>(value), now_us);
+    if (sentence.field(3)[0] == 'M' && parse_real(sentence.field(2), value)) model.water.speed_parallel_to_wind_m_s.set(static_cast<Real>(value), now_us);
     set_source(model.water.source, source);
     model.water.last_update_us = now_us;
     return true;
