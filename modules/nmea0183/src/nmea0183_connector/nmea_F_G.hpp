@@ -4,8 +4,8 @@
 
 template<typename Model>
 bool apply_fir(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model;
-    return apply_raw_sentence_record(sentence, state_.fire_detection, "FIR", now_us, source);
+    (void)model; (void)now_us; (void)source;
+    return accept_unmodeled_sentence(sentence);
 }
 
 template<typename Model>
