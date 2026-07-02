@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include "nmea0183_helpers.hpp"
+#include "proprietary_vendor.hpp"
 
 namespace nmea0183_connector {
 
