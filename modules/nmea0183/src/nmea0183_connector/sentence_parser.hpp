@@ -12,6 +12,17 @@ namespace nmea0183_connector {
 static const uint8_t NMEA_MAX_SENTENCE_LEN = 192;
 static const uint8_t NMEA_MAX_FIELDS = 32;
 
+struct NmeaFragmentInfo {
+    bool is_fragmented = false;
+    uint8_t total = 0;
+    uint8_t number = 0;
+    NmeaSpan message_id;
+    NmeaSpan payload;
+
+    bool is_first() const { return is_fragmented && number == 1; }
+    bool is_last() const { return is_fragmented && total > 0 && number == total; }
+};
+
 struct NmeaSentence {
     char raw[NMEA_MAX_SENTENCE_LEN];
     uint8_t raw_length;
@@ -28,6 +39,7 @@ struct NmeaSentence {
     NmeaSpan query_requested_sentence;
     NmeaSpan proprietary_vendor_code;
     NmeaProprietaryVendor proprietary_vendor;
+    NmeaFragmentInfo fragment;
 
     void clear() {
         raw[0] = '\0';
@@ -44,6 +56,7 @@ struct NmeaSentence {
         query_requested_sentence = NmeaSpan();
         proprietary_vendor_code = NmeaSpan();
         proprietary_vendor = NmeaProprietaryVendor::Unknown;
+        fragment = NmeaFragmentInfo{};
         for (uint8_t i = 0; i < NMEA_MAX_FIELDS; ++i) fields[i] = NmeaSpan();
     }
 
@@ -66,6 +79,19 @@ inline bool sentence_is_any(const NmeaSentence& s, const char* a, const char* b)
 
 inline bool sentence_is_any(const NmeaSentence& s, const char* a, const char* b, const char* c) {
     return sentence_is(s, a) || sentence_is(s, b) || sentence_is(s, c);
+}
+
+inline bool nmea_parse_uint8_span(NmeaSpan field, uint8_t& out) {
+    if (field.empty() || !field.data) return false;
+    unsigned value = 0;
+    for (uint8_t i = 0; i < field.length; ++i) {
+        const char c = field[i];
+        if (c < '0' || c > '9') return false;
+        value = value * 10u + static_cast<unsigned>(c - '0');
+        if (value > 255u) return false;
+    }
+    out = static_cast<uint8_t>(value);
+    return true;
 }
 
 inline bool nmea_is_query_sentence(const NmeaSentence& s) {
@@ -95,12 +121,40 @@ inline bool nmea_is_proprietary_sentence(const NmeaSentence& s) {
     return s.body.length > 0 && s.body[0] == 'P';
 }
 
+inline void nmea_set_fragment_info(NmeaSentence& s, uint8_t total_index, uint8_t number_index, uint8_t id_index, uint8_t payload_index) {
+    uint8_t total = 0;
+    uint8_t number = 0;
+    if (s.field_count <= total_index || s.field_count <= number_index) return;
+    if (!nmea_parse_uint8_span(s.field(total_index), total) || !nmea_parse_uint8_span(s.field(number_index), number)) return;
+    if (total == 0 || number == 0 || number > total || total > 16) return;
+
+    s.fragment.is_fragmented = true;
+    s.fragment.total = total;
+    s.fragment.number = number;
+    if (id_index < s.field_count) s.fragment.message_id = s.field(id_index);
+    if (payload_index < s.field_count) s.fragment.payload = s.field(payload_index);
+}
+
+inline void nmea_detect_fragment_info(NmeaSentence& s) {
+    if (sentence_is(s, "TXT")) {
+        nmea_set_fragment_info(s, 0, 1, 2, 3);
+    } else if (nmea_is_ais_sentence(s)) {
+        nmea_set_fragment_info(s, 0, 1, 2, 4);
+    } else if (sentence_is(s, "DSE")) {
+        nmea_set_fragment_info(s, 0, 1, 3, 5);
+    } else if (sentence_is_any(s, "NRM", "NRX")) {
+        nmea_set_fragment_info(s, 0, 1, 2, 3);
+    } else if (nmea_is_seatalk_sentence(s) || nmea_is_inmarsat_sentence(s)) {
+        nmea_set_fragment_info(s, 0, 1, 2, 3);
+    }
+}
+
 inline NmeaSentenceFamily classify_nmea_sentence(const NmeaSentence& s) {
     if (nmea_is_query_sentence(s)) return NmeaSentenceFamily::Query;
     if (nmea_is_ais_sentence(s)) return NmeaSentenceFamily::Ais;
     if (nmea_is_seatalk_sentence(s)) return NmeaSentenceFamily::SeaTalk;
     if (nmea_is_dsc_sentence(s)) return NmeaSentenceFamily::Dsc;
-    if (sentence_is_any(s, "NRM", "NRX")) return static_cast<NmeaSentenceFamily>(5);
+    if (sentence_is_any(s, "NRM", "NRX")) return NmeaSentenceFamily::NavTex;
     if (nmea_is_inmarsat_sentence(s)) return NmeaSentenceFamily::Inmarsat;
     if (nmea_is_proprietary_sentence(s)) return NmeaSentenceFamily::Proprietary;
     if (s.start_char == '!') return NmeaSentenceFamily::UnknownEncapsulation;
@@ -212,6 +266,7 @@ public:
 private:
     bool finish_success(NmeaSentence& out) {
         out.family = classify_nmea_sentence(out);
+        nmea_detect_fragment_info(out);
         dispatch_hook(out);
         last_error_ = "";
         return true;
@@ -231,7 +286,7 @@ private:
         case NmeaSentenceFamily::Dsc:
             if (hooks_.on_dsc_sentence) hooks_.on_dsc_sentence(out, hooks_.user);
             break;
-        case static_cast<NmeaSentenceFamily>(5):
+        case NmeaSentenceFamily::NavTex:
             if (hooks_.on_navtex_sentence) hooks_.on_navtex_sentence(out, hooks_.user);
             break;
         case NmeaSentenceFamily::Inmarsat:
