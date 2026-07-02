@@ -8,16 +8,16 @@ using SourceId = uint16_t;
 
 enum class ModelField : uint16_t {
     None = 0,
-    NavigationGpsFixLatDeg,
-    NavigationGpsFixLonDeg,
-    NavigationGpsSpeedKn,
-    NavigationGpsTrackDeg,
+    GnssFixLatDeg,
+    GnssFixLonDeg,
+    GnssSpeedKn,
+    GnssTrackDeg,
     ImuHeadingDeg,
     WindApparentDirectionDeg,
     WindApparentSpeedKn,
-    WaterDepthM,
-    WaterDepthBelowKeelM,
-    WaterDepthBelowSurfaceM,
+    SeaDepthM,
+    SeaDepthBelowKeelM,
+    SeaDepthBelowSurfaceM,
 };
 
 } // namespace signalk_mini
