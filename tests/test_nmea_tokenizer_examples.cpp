@@ -16,7 +16,9 @@ static std::string sentence(const char* body) {
     return std::string(out);
 }
 
-static void check_sentence_token(const char* raw, nmea0183_connector::NmeaSentenceFamily family, char start_char) {
+static const nmea0183_connector::NmeaToken* check_sentence_token(const char* raw,
+                                                                 nmea0183_connector::NmeaSentenceFamily family,
+                                                                 char start_char) {
     const nmea0183_connector::NmeaTokenizeResult tokens = nmea0183_connector::tokenize_nmea_line(raw);
     const nmea0183_connector::NmeaToken* token = tokens.first_sentence();
     REQUIRE(token != nullptr);
@@ -25,6 +27,7 @@ static void check_sentence_token(const char* raw, nmea0183_connector::NmeaSenten
     REQUIRE(token->text.length > 0);
     REQUIRE(token->text[0] == start_char);
     REQUIRE(token->has_checksum);
+    return token;
 }
 
 static void check_vendor(const char* body, nmea0183_connector::NmeaProprietaryVendor expected, const char* expected_code) {
@@ -33,6 +36,7 @@ static void check_vendor(const char* body, nmea0183_connector::NmeaProprietaryVe
     const nmea0183_connector::NmeaToken* token = tokens.first_sentence();
     REQUIRE(token != nullptr);
     REQUIRE(token->family == nmea0183_connector::NmeaSentenceFamily::Proprietary);
+    REQUIRE(token->talker_id == nmea0183_connector::NmeaTalkerId::Proprietary);
     REQUIRE(token->proprietary_vendor == expected);
     REQUIRE(nmea0183_connector::nmea_span_equals(token->proprietary_vendor_code, expected_code));
 
@@ -40,16 +44,23 @@ static void check_vendor(const char* body, nmea0183_connector::NmeaProprietaryVe
     nmea0183_connector::NmeaSentence parsed;
     REQUIRE(parser.parse_line(line.c_str(), parsed));
     REQUIRE(parsed.family == nmea0183_connector::NmeaSentenceFamily::Proprietary);
+    REQUIRE(parsed.talker_id == nmea0183_connector::NmeaTalkerId::Proprietary);
     REQUIRE(parsed.proprietary_vendor == expected);
     REQUIRE(nmea0183_connector::nmea_span_equals(parsed.proprietary_vendor_code, expected_code));
 }
 
 int main() {
-    check_sentence_token("$GPGGA,002153.000,3342.6618,N,11751.3858,W,1,10,1.2,27.0,M,-34.2,M,,0000*5A", nmea0183_connector::NmeaSentenceFamily::Standard, '$');
-    check_sentence_token("!AIVDM,1,1,,A,13HOI:0P0000VOHLCnHQKwvL05Ip,0*23", nmea0183_connector::NmeaSentenceFamily::Ais, '!');
+    const nmea0183_connector::NmeaToken* gp = check_sentence_token("$GPGGA,002153.000,3342.6618,N,11751.3858,W,1,10,1.2,27.0,M,-34.2,M,,0000*5A", nmea0183_connector::NmeaSentenceFamily::Standard, '$');
+    REQUIRE(gp->talker_id == nmea0183_connector::NmeaTalkerId::Gps);
+    REQUIRE(gp->gnss_system == nmea0183_connector::NmeaGnssSystem::Gps);
+
+    const nmea0183_connector::NmeaToken* ai = check_sentence_token("!AIVDM,1,1,,A,13HOI:0P0000VOHLCnHQKwvL05Ip,0*23", nmea0183_connector::NmeaSentenceFamily::Ais, '!');
+    REQUIRE(ai->talker_id == nmea0183_connector::NmeaTalkerId::MobileAisStation);
+
     check_sentence_token("$STALK,84,56,e,0,0,0,0,0,8*0F", nmea0183_connector::NmeaSentenceFamily::SeaTalk, '$');
     const std::string dsc = sentence("CDDSC,12,3380405810,00,1234567890,72,1234567890,00,00,00,00,00,00,00");
-    check_sentence_token(dsc.c_str(), nmea0183_connector::NmeaSentenceFamily::Dsc, '$');
+    const nmea0183_connector::NmeaToken* dsc_token = check_sentence_token(dsc.c_str(), nmea0183_connector::NmeaSentenceFamily::Dsc, '$');
+    REQUIRE(dsc_token->talker_id == nmea0183_connector::NmeaTalkerId::DigitalSelectiveCalling);
 
     const std::string query = sentence("CCGPQ,GGA");
     check_sentence_token(query.c_str(), nmea0183_connector::NmeaSentenceFamily::Query, '$');
@@ -76,6 +87,21 @@ int main() {
     check_vendor("PFEC,GPatt,1,2,3", nmea0183_connector::NmeaProprietaryVendor::Furuno, "FEC");
     check_vendor("PZZZ,1,2,3", nmea0183_connector::NmeaProprietaryVendor::Unknown, "ZZZ");
 
+    REQUIRE(nmea0183_connector::nmea_talker_id_from_span(nmea0183_connector::NmeaSpan("GL", 2)) == nmea0183_connector::NmeaTalkerId::Glonass);
+    REQUIRE(nmea0183_connector::nmea_talker_id_from_span(nmea0183_connector::NmeaSpan("GN", 2)) == nmea0183_connector::NmeaTalkerId::CombinedGnss);
+    REQUIRE(nmea0183_connector::nmea_talker_id_from_span(nmea0183_connector::NmeaSpan("U7", 2)) == nmea0183_connector::NmeaTalkerId::UserConfigured);
+    REQUIRE(nmea0183_connector::nmea_faa_mode_from_char('R') == nmea0183_connector::NmeaFaaModeIndicator::RtkInteger);
+    REQUIRE(nmea0183_connector::nmea_faa_mode_from_char('N') == nmea0183_connector::NmeaFaaModeIndicator::DataNotValid);
+    REQUIRE(nmea0183_connector::nmea_satellite_system_from_nmea_id(22) == nmea0183_connector::NmeaGnssSystem::Gps);
+    REQUIRE(nmea0183_connector::nmea_satellite_system_from_nmea_id(88) == nmea0183_connector::NmeaGnssSystem::Glonass);
+    REQUIRE(nmea0183_connector::nmea_satellite_system_from_nmea_id(305) == nmea0183_connector::NmeaGnssSystem::Galileo);
+    REQUIRE(nmea0183_connector::nmea_satellite_system_from_nmea_id(411) == nmea0183_connector::NmeaGnssSystem::BeiDou);
+    REQUIRE(nmea0183_connector::nmea_global_satellite_id(nmea0183_connector::NmeaTalkerId::Glonass, 7) == 71);
+    REQUIRE(nmea0183_connector::nmea_gnss_signal_from_system_and_signal(1, 7) == nmea0183_connector::NmeaGnssSignalId::GpsL5I);
+    REQUIRE(nmea0183_connector::nmea_gnss_signal_from_system_and_signal(4, 11) == nmea0183_connector::NmeaGnssSignalId::BeiDouB2I);
+    REQUIRE(nmea0183_connector::nmea_gnss_signal_from_system_and_signal(5, 10) == nmea0183_connector::NmeaGnssSignalId::QzssL6E);
+    REQUIRE(nmea0183_connector::nmea_gnss_signal_from_system_and_signal(6, 5) == nmea0183_connector::NmeaGnssSignalId::NavicL1Sps);
+
     const char* inmarsat = "/g:1-9-1234,s:egcterm1,n:213,c:1333636200*hh/$CSSM3,123456,005213,798,0,3,14,00,2012,04,05,14,30,3400,N,076,W,300*hh";
     const nmea0183_connector::NmeaTokenizeResult tokens = nmea0183_connector::tokenize_nmea_line(inmarsat);
     REQUIRE(tokens.count == 2);
@@ -91,6 +117,7 @@ int main() {
     nmea0183_connector::nmea_copy_span(embedded, sizeof(embedded), tokens.tokens[1].text);
     REQUIRE(parser.parse_line(embedded, parsed, false));
     REQUIRE(parsed.family == nmea0183_connector::NmeaSentenceFamily::Inmarsat);
+    REQUIRE(parsed.talker_id == nmea0183_connector::NmeaTalkerId::CommunicationsSatellite);
     REQUIRE(nmea0183_connector::talker_is(parsed, "CS"));
     REQUIRE(nmea0183_connector::sentence_is(parsed, "SM3"));
 
@@ -112,6 +139,8 @@ int main() {
 
     REQUIRE(parser.parse_line(txt1.c_str(), parsed));
     REQUIRE(nmea0183_connector::sentence_is(parsed, "TXT"));
+    REQUIRE(parsed.talker_id == nmea0183_connector::NmeaTalkerId::Gps);
+    REQUIRE(parsed.gnss_system == nmea0183_connector::NmeaGnssSystem::Gps);
     REQUIRE(parsed.fragment.is_fragmented);
     REQUIRE(parsed.fragment.total == 2);
     REQUIRE(parsed.fragment.number == 1);
