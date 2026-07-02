@@ -3,6 +3,127 @@
 // Included inside Nmea0183RxConnector.
 
 template<typename Model>
+bool apply_oln(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 1) {
+        last_error_ = "short OLN";
+        return false;
+    }
+
+    const uint8_t count = sentence.field_count < 3 ? sentence.field_count : 3;
+    for (uint8_t index = 0; index < count; ++index) {
+        nmea_copy_span(model.navigation.omega_lane_numbers.pair[index],
+                       sizeof(model.navigation.omega_lane_numbers.pair[index]),
+                       sentence.field(index));
+    }
+    set_source(model.navigation.omega_lane_numbers.source, source);
+    model.navigation.omega_lane_numbers.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
+bool apply_osd(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 9) {
+        last_error_ = "short OSD";
+        return false;
+    }
+
+    float value = 0.0f;
+    model.navigation.own_ship.heading_status = sentence.field(1)[0];
+    model.navigation.own_ship.course_reference = sentence.field(3)[0];
+    model.navigation.own_ship.speed_reference = sentence.field(5)[0];
+
+    if (sentence.field(1)[0] == 'A' && parse_real(sentence.field(0), value)) {
+        const Real heading = static_cast<Real>(wrap_360_deg(value));
+        model.navigation.own_ship.heading_true_deg.set(heading, now_us);
+        model.imu.heading_deg.set(heading, now_us);
+        model.imu.heading_true_deg.set(heading, now_us);
+    }
+    if (parse_real(sentence.field(2), value)) {
+        model.navigation.own_ship.course_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
+        if (sentence.field(3)[0] == 'T') model.navigation.gps.track_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
+    }
+    if (parse_knots(sentence.field(4), sentence.field(8), value)) {
+        model.navigation.own_ship.speed_kn.set(static_cast<Real>(value), now_us);
+        model.navigation.gps.speed_kn.set(static_cast<Real>(value), now_us);
+    }
+    if (parse_real(sentence.field(6), value)) {
+        model.navigation.own_ship.set_true_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
+        model.water.current_direction_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
+    }
+    if (parse_knots(sentence.field(7), sentence.field(8), value)) {
+        model.navigation.own_ship.drift_speed_kn.set(static_cast<Real>(value), now_us);
+        model.water.current_speed_kn.set(static_cast<Real>(value), now_us);
+    }
+
+    set_source(model.navigation.own_ship.source, source);
+    set_source(model.navigation.gps.source, source);
+    set_source(model.water.source, source);
+    model.navigation.own_ship.last_update_us = now_us;
+    model.navigation.gps.last_update_us = now_us;
+    model.water.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
+bool apply_r00(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 1) {
+        last_error_ = "short R00";
+        return false;
+    }
+
+    const uint8_t count = sentence.field_count < 16 ? sentence.field_count : 16;
+    for (uint8_t index = 0; index < count; ++index) {
+        nmea_copy_span(model.navigation.active_route.waypoint_id[index],
+                       sizeof(model.navigation.active_route.waypoint_id[index]),
+                       sentence.field(index));
+    }
+    model.navigation.active_route.waypoint_count.set(static_cast<int32_t>(count), now_us);
+    set_source(model.navigation.active_route.source, source);
+    model.navigation.active_route.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
+bool apply_rma(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 11 || sentence.field(0)[0] != 'A') {
+        last_error_ = "bad RMA";
+        return false;
+    }
+
+    float value = 0.0f;
+    model.navigation.rma.status = sentence.field(0)[0];
+    if (parse_lat_lon(sentence.field(1), sentence.field(2), value)) {
+        model.navigation.rma.latitude_deg.set(static_cast<Real>(value), now_us);
+        model.navigation.gps.fix_lat_deg.set(static_cast<Real>(value), now_us);
+    }
+    if (parse_lat_lon(sentence.field(3), sentence.field(4), value)) {
+        model.navigation.rma.longitude_deg.set(static_cast<Real>(value), now_us);
+        model.navigation.gps.fix_lon_deg.set(static_cast<Real>(value), now_us);
+    }
+    if (parse_real(sentence.field(5), value)) model.navigation.rma.time_difference_a_us.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(6), value)) model.navigation.rma.time_difference_b_us.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(7), value)) {
+        model.navigation.rma.speed_kn.set(static_cast<Real>(value), now_us);
+        model.navigation.gps.speed_kn.set(static_cast<Real>(value), now_us);
+    }
+    if (parse_real(sentence.field(8), value)) {
+        model.navigation.rma.track_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
+        model.navigation.gps.track_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
+    }
+    if (parse_east_west_signed(sentence.field(9), sentence.field(10), value)) {
+        model.navigation.rma.magnetic_variation_deg.set(static_cast<Real>(value), now_us);
+        model.navigation.gps.declination_deg.set(static_cast<Real>(value), now_us);
+        model.imu.magnetic_variation_deg.set(static_cast<Real>(value), now_us);
+    }
+
+    set_source(model.navigation.rma.source, source);
+    set_source(model.navigation.gps.source, source);
+    model.navigation.rma.last_update_us = now_us;
+    model.navigation.gps.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
 bool apply_rmb(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 13 || sentence.field(0)[0] != 'A') {
         last_error_ = "bad RMB";
