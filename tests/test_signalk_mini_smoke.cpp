@@ -138,6 +138,39 @@ static void test_third_smart0183_group(signalk_mini::SignalKMiniApp<float>& app,
     NEAR(app.store().model().imu.magnetic_variation_deg.value, -13.1f, 0.001f);
 }
 
+static void test_fourth_smart0183_group(signalk_mini::SignalKMiniApp<float>& app, uint64_t& now_us) {
+    feed(app, "GPHFB,12.3,M,45.6,M", now_us);
+    NEAR(app.store().model().water.trawl_headrope_to_footrope_m.value, 12.3f, 0.001f);
+    NEAR(app.store().model().water.trawl_headrope_to_bottom_m.value, 45.6f, 0.001f);
+
+    feed(app, "GPHSC,123.4,T,121.1,M", now_us);
+    NEAR(app.store().model().navigation.heading_steering_command.heading_true_deg.value, 123.4f, 0.001f);
+    NEAR(app.store().model().navigation.heading_steering_command.heading_magnetic_deg.value, 121.1f, 0.001f);
+
+    feed(app, "GPITS,7980,20.5,1.2,11.1,A,22.2,V,33.3,A,44.4,A,55.5,V", now_us);
+    NEAR(app.store().model().navigation.legacy_timing.gri_us_div_10.value, 7980.0f, 0.001f);
+    NEAR(app.store().model().navigation.legacy_timing.master_relative_snr_db.value, 20.5f, 0.001f);
+    NEAR(app.store().model().navigation.legacy_timing.master_relative_ecd.value, 1.2f, 0.001f);
+    REQUIRE(app.store().model().navigation.legacy_timing.delta_status[1] == 'V');
+
+    feed(app, "GPMSK,283.5,A,100,M,284.5", now_us);
+    NEAR(app.store().model().navigation.beacon_control.frequency_khz.value, 283.5f, 0.001f);
+    REQUIRE(app.store().model().navigation.beacon_control.frequency_mode == 'A');
+    REQUIRE(app.store().model().navigation.beacon_control.bit_rate_bps.value == 100);
+    REQUIRE(app.store().model().navigation.beacon_control.bit_rate_mode == 'M');
+    NEAR(app.store().model().navigation.beacon_control.status_frequency_khz.value, 284.5f, 0.001f);
+
+    feed(app, "GPMSS,55.5,12.2,283.5,100,7", now_us);
+    NEAR(app.store().model().navigation.beacon_status.signal_strength_db_uv.value, 55.5f, 0.001f);
+    NEAR(app.store().model().navigation.beacon_status.signal_to_noise_ratio_db.value, 12.2f, 0.001f);
+    NEAR(app.store().model().navigation.beacon_status.beacon_frequency_khz.value, 283.5f, 0.001f);
+    REQUIRE(app.store().model().navigation.beacon_status.beacon_bit_rate_bps.value == 100);
+    REQUIRE(app.store().model().navigation.beacon_status.status.value == 7);
+
+    feed(app, "IIMTW,18.7,C", now_us);
+    NEAR(app.store().model().water.temperature_c.value, 18.7f, 0.001f);
+}
+
 int main() {
     using Real = float;
 
@@ -174,6 +207,7 @@ int main() {
     test_first_smart0183_group(app, now_us);
     test_second_smart0183_group(app, now_us);
     test_third_smart0183_group(app, now_us);
+    test_fourth_smart0183_group(app, now_us);
 
     signalk_mini::SignalKMapper<Real> mapper;
     signalk_mini::ModelChange change;
