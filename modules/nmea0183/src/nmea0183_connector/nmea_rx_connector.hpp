@@ -146,6 +146,8 @@ public:
         if (sentence_is(sentence, "ZFO")) return apply_zfo(sentence, model, now_us, source);
         if (sentence_is(sentence, "ZTG")) return apply_ztg(sentence, model, now_us, source);
 
+        if (sentence.fragment.is_fragmented && accepts_fragment_only_family(sentence.family)) return true;
+
         last_error_ = "unsupported sentence";
         return false;
     }
@@ -158,6 +160,13 @@ private:
     template<typename Setting>
     void set_source(Setting& setting, ship_data_model::SensorSource source) {
         if (source != ship_data_model::SensorSource::none) setting.value = source;
+    }
+
+    bool accepts_fragment_only_family(NmeaSentenceFamily family) const {
+        return family == NmeaSentenceFamily::Ais ||
+               family == NmeaSentenceFamily::NavTex ||
+               family == NmeaSentenceFamily::SeaTalk ||
+               family == NmeaSentenceFamily::Inmarsat;
     }
 
     template<typename Multipart>
