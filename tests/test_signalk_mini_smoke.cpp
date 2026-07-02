@@ -196,6 +196,36 @@ static void test_fifth_smart0183_group(signalk_mini::SignalKMiniApp<float>& app,
     NEAR(app.store().model().navigation.rma.magnetic_variation_deg.value, -13.1f, 0.001f);
 }
 
+static void test_sixth_smart0183_group(signalk_mini::SignalKMiniApp<float>& app, uint64_t& now_us) {
+    feed(app, "IIRPM,E,1,1234.5,42.0,A", now_us);
+    REQUIRE(app.store().model().navigation.revolutions.source_type == 'E');
+    REQUIRE(app.store().model().navigation.revolutions.number.value == 1);
+    NEAR(app.store().model().navigation.revolutions.speed_rpm.value, 1234.5f, 0.001f);
+    NEAR(app.store().model().navigation.revolutions.propeller_pitch_percent.value, 42.0f, 0.001f);
+
+    feed(app, "RARSD,1.0,010.0,2.0,020.0,3.0,030.0,4.0,040.0,5.0,050.0,12.0,N", now_us);
+    NEAR(app.store().model().navigation.radar_system.origin_range_nmi[0].value, 1.0f, 0.001f);
+    NEAR(app.store().model().navigation.radar_system.variable_range_marker_nmi[1].value, 4.0f, 0.001f);
+    NEAR(app.store().model().navigation.radar_system.cursor_range_nmi.value, 5.0f, 0.001f);
+    NEAR(app.store().model().navigation.radar_system.cursor_bearing_deg.value, 50.0f, 0.001f);
+    NEAR(app.store().model().navigation.radar_system.range_scale_nmi.value, 12.0f, 0.001f);
+
+    feed(app, "GPRTE,1,1,c,WP001,WP002,WP003", now_us);
+    REQUIRE(app.store().model().navigation.active_route.total_messages.value == 1);
+    REQUIRE(app.store().model().navigation.active_route.message_number.value == 1);
+    REQUIRE(app.store().model().navigation.active_route.mode == 'c');
+    REQUIRE(app.store().model().navigation.active_route.waypoint_count.value == 3);
+    REQUIRE(std::strcmp(app.store().model().navigation.active_route.waypoint_id[2], "WP003") == 0);
+
+    feed(app, "RFSFI,1,1,156800000,A,156850000,M", now_us);
+    REQUIRE(app.store().model().navigation.scanning_frequency.total_messages.value == 1);
+    NEAR(app.store().model().navigation.scanning_frequency.frequency_hz[1].value, 156850000.0f, 32.0f);
+    REQUIRE(app.store().model().navigation.scanning_frequency.mode[1] == 'M');
+
+    feed(app, "GPSTN,12", now_us);
+    REQUIRE(app.store().model().navigation.multiple_data_id.talker_id_number.value == 12);
+}
+
 int main() {
     using Real = float;
 
@@ -234,6 +264,7 @@ int main() {
     test_third_smart0183_group(app, now_us);
     test_fourth_smart0183_group(app, now_us);
     test_fifth_smart0183_group(app, now_us);
+    test_sixth_smart0183_group(app, now_us);
 
     signalk_mini::SignalKMapper<Real> mapper;
     signalk_mini::ModelChange change;
