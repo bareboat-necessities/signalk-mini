@@ -2,6 +2,7 @@
 
 #include <deque>
 #include <string>
+#include <vector>
 
 #include <libconfig.h>
 #include <signalk_mini/config.hpp>
@@ -126,9 +127,10 @@ private:
     void load_connectors(config_t* file) {
         config_setting_t* connector_list = config_lookup(file, "connectors");
         if (!connector_list) return;
+        connectors_.clear();
         const int total = config_setting_length(connector_list);
-        size_t out = 0;
-        for (int i = 0; i < total && out < signalk_mini::max_connector_configs; ++i) {
+        connectors_.reserve(total > 0 ? static_cast<size_t>(total) : 0);
+        for (int i = 0; i < total; ++i) {
             config_setting_t* connector_setting = config_setting_get_elem(connector_list, i);
             if (!connector_setting) continue;
             signalk_mini::ConnectorConfig connector;
@@ -147,24 +149,24 @@ private:
             read_bool(connector_setting, "allow_rx", connector.allow_rx);
             read_bool(connector_setting, "allow_tx", connector.allow_tx);
             load_nmea0183_protocol(connector_setting, connector);
-            config.connectors[out++] = connector;
+            connectors_.push_back(connector);
         }
-        config.connector_count = out;
+        config.connectors = connectors_.empty() ? nullptr : connectors_.data();
+        config.connector_count = connectors_.size();
     }
 
     void load_nmea0183_protocol(config_setting_t* connector_setting, signalk_mini::ConnectorConfig& connector) {
         if (connector.protocol != signalk_mini::ConnectorProtocol::Nmea0183) return;
         config_setting_t* nmea0183 = config_setting_lookup(connector_setting, "nmea0183");
         if (nmea0183) {
-            if (read_bool(nmea0183, "validate_checksum", connector.nmea0183.validate_checksum)) {
-                connector.nmea0183.validate_checksum_configured = true;
-            }
+            if (read_bool(nmea0183, "validate_checksum", connector.nmea0183.validate_checksum)) connector.nmea0183.validate_checksum_configured = true;
         } else if (read_bool(connector_setting, "validate_checksum", connector.nmea0183.validate_checksum)) {
             connector.nmea0183.validate_checksum_configured = true;
         }
     }
 
     std::deque<std::string> strings_;
+    std::vector<signalk_mini::ConnectorConfig> connectors_;
 };
 
 } // namespace signalk_mini_linux
