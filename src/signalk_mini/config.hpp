@@ -28,18 +28,41 @@ struct PublisherConfig {
     const char* source_label = "signalk-mini";
 };
 
-enum class ConnectorKind : uint8_t {
+enum class ConnectorProtocol : uint8_t {
     None = 0,
-    Nmea0183TcpClient,
-    Nmea0183TcpServer,
+    Nmea0183,
+    Nmea2000,
+    SignalK,
+    GenericSensor,
+};
+
+enum class ConnectorTransport : uint8_t {
+    None = 0,
+    Serial,
+    TcpClient,
+    TcpServer,
+    Udp,
+    I2c,
+    DigitalPin,
+    AnalogPin,
 };
 
 struct ConnectorConfig {
     bool enabled = false;
-    ConnectorKind kind = ConnectorKind::None;
+    ConnectorProtocol protocol = ConnectorProtocol::None;
+    ConnectorTransport transport = ConnectorTransport::None;
     const char* label = nullptr;
+
     const char* host = "127.0.0.1";
     uint16_t port = 0;
+
+    const char* device = nullptr;
+    uint32_t baud = 4800;
+
+    uint8_t pin = 0;
+    uint8_t i2c_bus = 0;
+    uint8_t i2c_address = 0;
+
     bool allow_rx = true;
     bool allow_tx = false;
 };
@@ -54,7 +77,7 @@ struct SignalKMiniConfig {
 
     // Optional connectors are added or removed by configuration.
     ConnectorConfig connectors[max_connector_configs] = {
-        {true, ConnectorKind::Nmea0183TcpClient, "nmea0183-tcp-client", "127.0.0.1", 10110, true, false},
+        {true, ConnectorProtocol::Nmea0183, ConnectorTransport::TcpClient, "nmea0183-tcp-client", "127.0.0.1", 10110, nullptr, 4800, 0, 0, 0, true, false},
         {},
         {},
         {}
