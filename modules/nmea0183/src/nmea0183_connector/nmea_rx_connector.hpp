@@ -7,16 +7,78 @@
 
 #include "sentence_parser.hpp"
 #include "nmea_rx_helpers.hpp"
-#include "nmea_rx_state.hpp"
+#include "nmea_message_state.hpp"
+#include "nmea_dsc_message_state.hpp"
 
 namespace nmea0183_connector {
+
+struct NmeaMessageStateRefs {
+    NmeaMessageState& messages;
+    NmeaDscMessageState& dsc;
+
+    NmeaRawMessageRecord& alarm_acknowledgement;
+    NmeaRawMessageRecord& automatic_device_status;
+    NmeaRawMessageRecord& acknowledge_detail_alarm;
+    NmeaRawMessageRecord& set_detail_alarm;
+    NmeaRawMessageRecord& autopilot_system;
+    NmeaRawMessageRecord& bearing_distance_dead_reckoning;
+    NmeaRawMessageRecord& encryption_key_command;
+    NmeaRawMessageRecord& operational_period_command;
+    NmeaCurrentLayerMessageRecord& current_layer;
+    NmeaRawMessageRecord& device_capability_report;
+    NmeaRawMessageRecord& display_dimming_control;
+    NmeaRawMessageRecord& door_status;
+    NmeaRawMessageRecord& engine_telegraph;
+    NmeaRawMessageRecord& event_message;
+    NmeaRawMessageRecord& fire_detection;
+    NmeaRawMessageRecord& waypoint_distance_rhumb;
+    NmeaRawMessageRecord& waypoint_distance_great_circle;
+    NmeaVariablePointMessageRecord& variable_point;
+    NmeaRawMessageRecord& text_sentence;
+    NmeaMultipartMessageRecord& text_message;
+    NmeaMultipartMessageRecord& ais_message;
+    NmeaMultipartMessageRecord& navtex_message;
+    NmeaMultipartMessageRecord& seatalk_message;
+    NmeaMultipartMessageRecord& inmarsat_message;
+    NmeaMultipartMessageRecord& generic_multipart_message;
+
+    NmeaMessageStateRefs(NmeaMessageState& messages_ref, NmeaDscMessageState& dsc_ref)
+        : messages(messages_ref),
+          dsc(dsc_ref),
+          alarm_acknowledgement(messages_ref.alarm_acknowledgement),
+          automatic_device_status(messages_ref.automatic_device_status),
+          acknowledge_detail_alarm(messages_ref.acknowledge_detail_alarm),
+          set_detail_alarm(messages_ref.set_detail_alarm),
+          autopilot_system(messages_ref.autopilot_system),
+          bearing_distance_dead_reckoning(messages_ref.bearing_distance_dead_reckoning),
+          encryption_key_command(messages_ref.encryption_key_command),
+          operational_period_command(messages_ref.operational_period_command),
+          current_layer(messages_ref.current_layer),
+          device_capability_report(messages_ref.device_capability_report),
+          display_dimming_control(messages_ref.display_dimming_control),
+          door_status(messages_ref.door_status),
+          engine_telegraph(messages_ref.engine_telegraph),
+          event_message(messages_ref.event_message),
+          fire_detection(messages_ref.fire_detection),
+          waypoint_distance_rhumb(messages_ref.waypoint_distance_rhumb),
+          waypoint_distance_great_circle(messages_ref.waypoint_distance_great_circle),
+          variable_point(messages_ref.variable_point),
+          text_sentence(messages_ref.text_sentence),
+          text_message(messages_ref.text_message),
+          ais_message(messages_ref.ais_message),
+          navtex_message(messages_ref.navtex_message),
+          seatalk_message(messages_ref.seatalk_message),
+          inmarsat_message(messages_ref.inmarsat_message),
+          generic_multipart_message(messages_ref.generic_multipart_message) {}
+};
 
 template<typename Real = float>
 class Nmea0183RxConnector {
 public:
     Nmea0183RxConnector()
         : last_error_(""),
-          last_apb_mode_(ship_data_model::AutopilotMode::gps) {
+          last_apb_mode_(ship_data_model::AutopilotMode::gps),
+          state_(message_state_, dsc_state_) {
         last_apb_sender_id_[0] = '\0';
         last_apb_sender_id_[1] = '\0';
         last_apb_sender_id_[2] = '\0';
@@ -25,7 +87,8 @@ public:
     const char* last_error() const { return last_error_; }
     ship_data_model::AutopilotMode last_apb_mode() const { return last_apb_mode_; }
     const char* last_apb_sender_id() const { return last_apb_sender_id_; }
-    const Nmea0183RxState& state() const { return state_; }
+    const NmeaMessageState& message_state() const { return message_state_; }
+    const NmeaDscMessageState& dsc_state() const { return dsc_state_; }
 
     bool apply_sentence(const NmeaSentence& sentence,
                         ship_data_model::DataModel<Real>& model,
@@ -43,7 +106,7 @@ public:
             return false;
         }
 
-        update_multipart_model(sentence, now_us, source);
+        update_multipart_message_state(sentence, now_us, source);
 
         if (sentence_is(sentence, "AAM")) return apply_aam(sentence, model, now_us, source);
         if (sentence_is(sentence, "ACK")) return apply_ack(sentence, model, now_us, source);
@@ -158,7 +221,9 @@ private:
     const char* last_error_;
     ship_data_model::AutopilotMode last_apb_mode_;
     char last_apb_sender_id_[3];
-    Nmea0183RxState state_;
+    NmeaMessageState message_state_;
+    NmeaDscMessageState dsc_state_;
+    NmeaMessageStateRefs state_;
 
     template<typename Setting>
     void set_source(Setting& setting, ship_data_model::SensorSource source) {
@@ -200,7 +265,7 @@ private:
         }
 
         size_t current = strlen(record.text);
-        const size_t capacity = NMEA_RX_MULTIPART_TEXT_BYTES;
+        const size_t capacity = NMEA_MESSAGE_MULTIPART_TEXT_BYTES;
         size_t append = sentence.fragment.payload.length;
         if (current + append + 1u > capacity) {
             append = current < capacity ? capacity - current - 1u : 0u;
@@ -222,71 +287,23 @@ private:
         record.last_update_us = now_us;
     }
 
-    void update_multipart_model(const NmeaSentence& sentence,
-                                uint64_t now_us,
-                                ship_data_model::SensorSource source) {
+    void update_multipart_message_state(const NmeaSentence& sentence,
+                                        uint64_t now_us,
+                                        ship_data_model::SensorSource source) {
         if (!sentence.fragment.is_fragmented) return;
-        if (sentence_is(sentence, "TXT")) update_multipart_record(sentence, state_.text_message, now_us, source);
-        else if (sentence.family == NmeaSentenceFamily::Ais) update_multipart_record(sentence, state_.ais_message, now_us, source);
-        else if (sentence.family == NmeaSentenceFamily::NavTex) update_multipart_record(sentence, state_.navtex_message, now_us, source);
-        else if (sentence.family == NmeaSentenceFamily::Dsc) update_multipart_record(sentence, state_.dsc.multipart, now_us, source);
-        else if (sentence.family == NmeaSentenceFamily::SeaTalk) update_multipart_record(sentence, state_.seatalk_message, now_us, source);
-        else if (sentence.family == NmeaSentenceFamily::Inmarsat) update_multipart_record(sentence, state_.inmarsat_message, now_us, source);
-        else update_multipart_record(sentence, state_.generic_multipart_message, now_us, source);
+        if (sentence_is(sentence, "TXT")) update_multipart_record(sentence, message_state_.text_message, now_us, source);
+        else if (sentence.family == NmeaSentenceFamily::Ais) update_multipart_record(sentence, message_state_.ais_message, now_us, source);
+        else if (sentence.family == NmeaSentenceFamily::NavTex) update_multipart_record(sentence, message_state_.navtex_message, now_us, source);
+        else if (sentence.family == NmeaSentenceFamily::Dsc) update_multipart_record(sentence, dsc_state_.multipart, now_us, source);
+        else if (sentence.family == NmeaSentenceFamily::SeaTalk) update_multipart_record(sentence, message_state_.seatalk_message, now_us, source);
+        else if (sentence.family == NmeaSentenceFamily::Inmarsat) update_multipart_record(sentence, message_state_.inmarsat_message, now_us, source);
+        else update_multipart_record(sentence, message_state_.generic_multipart_message, now_us, source);
     }
 
 #include "nmea_A_E.hpp"
 #include "nmea_F_G.hpp"
 #include "nmea_H_N.hpp"
 #include "nmea_O_Z.hpp"
-
-    template<typename Model>
-    bool apply_fir(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        (void)model;
-        return apply_raw_sentence_record(sentence, state_.fire_detection, "FIR", now_us, source);
-    }
-
-    template<typename Model>
-    bool apply_txt(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        (void)model;
-        return apply_raw_sentence_record(sentence, state_.text_sentence, "TXT", now_us, source);
-    }
-
-    template<typename Model>
-    bool apply_wdc(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        (void)model;
-        return apply_raw_sentence_record(sentence, state_.waypoint_distance_great_circle, "WDC", now_us, source);
-    }
-
-    template<typename Model>
-    bool apply_wdr(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        (void)model;
-        return apply_raw_sentence_record(sentence, state_.waypoint_distance_rhumb, "WDR", now_us, source);
-    }
-
-    template<typename Model>
-    bool apply_zdl(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-        (void)model;
-        if (sentence.field_count < 3) {
-            last_error_ = "short ZDL";
-            return false;
-        }
-        float value = 0.0f;
-        if (parse_utc_time_of_day_s(sentence.field(0), value) || parse_real(sentence.field(0), value)) {
-            state_.variable_point.time_to_point_s = value;
-            state_.variable_point.has_time = true;
-        }
-        if (parse_distance_nmi(sentence.field(1), sentence.field_count > 2 ? sentence.field(2) : NmeaSpan(), value)) {
-            state_.variable_point.distance_to_point_nmi = value;
-            state_.variable_point.has_distance = true;
-        }
-        if (sentence.field_count > 3) nmea_copy_span(state_.variable_point.point_id,
-                                                     sizeof(state_.variable_point.point_id),
-                                                     sentence.field(3));
-        set_source(state_.variable_point.source, source);
-        state_.variable_point.last_update_us = now_us;
-        return true;
-    }
 };
 
 } // namespace nmea0183_connector
