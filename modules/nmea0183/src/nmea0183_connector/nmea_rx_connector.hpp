@@ -304,6 +304,7 @@ private:
 #include "nmea_F_G.hpp"
 #include "nmea_H_N.hpp"
 #include "nmea_O_Z.hpp"
+#include "nmea_O_Z_extra.hpp"
 };
 
 } // namespace nmea0183_connector
