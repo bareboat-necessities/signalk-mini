@@ -41,6 +41,13 @@ struct WaterData {
     Stamped<Real> temperature_c;
     Stamped<Real> trawl_headrope_to_footrope_m;
     Stamped<Real> trawl_headrope_to_bottom_m;
+    Stamped<Real> trawl_door_centerline_offset_m;
+    Stamped<Real> trawl_door_along_centerline_m;
+    Stamped<Real> trawl_depth_below_surface_m;
+    Stamped<Real> trawl_relative_range_m;
+    Stamped<Real> trawl_relative_bearing_deg;
+    Stamped<Real> trawl_true_range_m;
+    Stamped<Real> trawl_true_bearing_deg;
     uint64_t last_update_us = 0;
 };
 
