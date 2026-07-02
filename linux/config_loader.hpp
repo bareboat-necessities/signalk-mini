@@ -229,9 +229,14 @@ private:
         const char* value = nullptr;
         config_setting_t* s = config_setting_lookup(connector_setting, "udp");
         if (!s) s = connector_setting;
-        if (config_setting_lookup_string(s, "host", &value)) connector.transport.udp.host = keep(value);
-        read_u16(s, "port", connector.transport.udp.port);
-        read_u16(s, "local_port", connector.transport.udp.local_port);
+        if (config_setting_lookup_string(s, "listen_host", &value)) connector.transport.udp.listen_host = keep(value);
+        else if (config_setting_lookup_string(s, "host", &value)) connector.transport.udp.listen_host = keep(value);
+        if (!read_u16(s, "listen_port", connector.transport.udp.listen_port)) {
+            read_u16(s, "local_port", connector.transport.udp.listen_port);
+        }
+        if (config_setting_lookup_string(s, "remote_host", &value)) connector.transport.udp.remote_host = keep(value);
+        read_u16(s, "remote_port", connector.transport.udp.remote_port);
+        read_bool(s, "allow_broadcast", connector.transport.udp.allow_broadcast);
     }
 
     void load_i2c(config_setting_t* connector_setting, signalk_mini::ConnectorConfig& connector) {
