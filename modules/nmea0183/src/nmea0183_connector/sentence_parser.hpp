@@ -86,14 +86,27 @@ public:
     }
 
     bool parse_line(const char* line, NmeaSentence& out) {
+        return parse_line(line, out, true);
+    }
+
+    bool parse_line(const char* line, NmeaSentence& out, bool validate_checksum) {
         out.clear();
         if (!line || (line[0] != '$' && line[0] != '!')) { last_error_ = "bad start"; return false; }
+
         const char* star = strchr(line, '*');
-        if (!star) { last_error_ = "missing checksum"; return false; }
-        uint8_t supplied = 0;
-        if (!parse_checksum_hex(star + 1, supplied)) { last_error_ = "bad checksum field"; return false; }
-        uint8_t computed = nmea_checksum_range(line + 1, star);
-        if (computed != supplied) { last_error_ = "checksum mismatch"; return false; }
+        const char* body_end_in = star ? star : (line + strlen(line));
+
+        if (validate_checksum) {
+            if (!star) { last_error_ = "missing checksum"; return false; }
+            uint8_t supplied = 0;
+            if (!parse_checksum_hex(star + 1, supplied)) { last_error_ = "bad checksum field"; return false; }
+            uint8_t computed = nmea_checksum_range(line + 1, star);
+            if (computed != supplied) { last_error_ = "checksum mismatch"; return false; }
+            out.valid_checksum = true;
+        } else if (star) {
+            uint8_t supplied = 0;
+            out.valid_checksum = parse_checksum_hex(star + 1, supplied) && nmea_checksum_range(line + 1, star) == supplied;
+        }
 
         size_t raw_len = strlen(line);
         if (raw_len >= NMEA_MAX_SENTENCE_LEN) raw_len = NMEA_MAX_SENTENCE_LEN - 1;
@@ -101,11 +114,10 @@ public:
         out.raw[raw_len] = '\0';
         out.raw_length = static_cast<uint8_t>(raw_len);
         out.start_char = out.raw[0];
-        out.valid_checksum = true;
 
         const char* raw_begin = out.raw;
         const size_t body_offset = 1;
-        const size_t body_len = static_cast<size_t>(star - (line + 1));
+        const size_t body_len = static_cast<size_t>(body_end_in - (line + 1));
         if (body_len < 5 || body_offset + body_len > raw_len) { last_error_ = "short body"; return false; }
         out.body = NmeaSpan(raw_begin + body_offset, body_len);
         out.talker = NmeaSpan(out.body.data, 2);
