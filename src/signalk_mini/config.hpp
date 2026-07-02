@@ -5,8 +5,6 @@
 
 namespace signalk_mini {
 
-static constexpr size_t max_connector_configs = 4;
-
 struct ServerIdentityConfig {
     const char* server_name = "signalk-mini";
     const char* server_version = "0.1.0";
@@ -77,17 +75,16 @@ struct ConnectorConfig {
     Nmea0183ProtocolConfig nmea0183;
 };
 
+inline const ConnectorConfig default_connector_configs[] = {
+    {true, ConnectorProtocol::Nmea0183, ConnectorTransport::TcpClient, "nmea0183-tcp-client", "127.0.0.1", 10110, nullptr, 4800, 0, 0, 0, true, false, {false, true}}
+};
+
 struct SignalKMiniConfig {
     ServerIdentityConfig identity;
     SignalKProtocolServerConfig signalk;
     PublisherConfig publisher;
-    ConnectorConfig connectors[max_connector_configs] = {
-        {true, ConnectorProtocol::Nmea0183, ConnectorTransport::TcpClient, "nmea0183-tcp-client", "127.0.0.1", 10110, nullptr, 4800, 0, 0, 0, true, false, {}},
-        {},
-        {},
-        {}
-    };
-    size_t connector_count = 1;
+    const ConnectorConfig* connectors = default_connector_configs;
+    size_t connector_count = sizeof(default_connector_configs) / sizeof(default_connector_configs[0]);
 };
 
 } // namespace signalk_mini
