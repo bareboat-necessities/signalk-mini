@@ -19,6 +19,12 @@ struct GpsData {
     Stamped<Real> fix_lat_deg;
     Stamped<Real> fix_lon_deg;
     Stamped<Real> fix_alt_m;
+    Stamped<int32_t> fix_quality;
+    Stamped<int32_t> satellites_used;
+    Stamped<Real> hdop;
+    Stamped<Real> geoidal_separation_m;
+    Stamped<Real> dgps_age_s;
+    Stamped<int32_t> dgps_station_id;
     bool has_fix_json = false;
 
     Stamped<Real> leeway_ground_deg;
