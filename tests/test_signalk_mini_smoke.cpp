@@ -267,6 +267,29 @@ static void test_seventh_smart0183_group(signalk_mini::SignalKMiniApp<float>& ap
     REQUIRE(app.store().model().navigation.tracked_target.reference_target == 'R');
 }
 
+static void test_eighth_smart0183_group(signalk_mini::SignalKMiniApp<float>& app, uint64_t& now_us) {
+    feed(app, "IIVBW,5.1,-0.2,A,5.4,-0.1,A", now_us);
+    NEAR(app.store().model().water.longitudinal_water_speed_kn.value, 5.1f, 0.001f);
+    NEAR(app.store().model().water.transverse_water_speed_kn.value, -0.2f, 0.001f);
+    REQUIRE(app.store().model().water.water_speed_status == 'A');
+    NEAR(app.store().model().water.longitudinal_ground_speed_kn.value, 5.4f, 0.001f);
+    NEAR(app.store().model().water.transverse_ground_speed_kn.value, -0.1f, 0.001f);
+    REQUIRE(app.store().model().water.ground_speed_status == 'A');
+
+    feed(app, "VDVDR,123.4,T,121.1,M,1.8,N", now_us);
+    NEAR(app.store().model().water.current_direction_deg.value, 123.4f, 0.001f);
+    NEAR(app.store().model().water.current_direction_magnetic_deg.value, 121.1f, 0.001f);
+    NEAR(app.store().model().water.current_speed_kn.value, 1.8f, 0.001f);
+
+    feed(app, "IIVLW,1234.5,N,67.8,N", now_us);
+    NEAR(app.store().model().water.total_distance_nmi.value, 1234.5f, 0.001f);
+    NEAR(app.store().model().water.trip_distance_nmi.value, 67.8f, 0.001f);
+
+    feed(app, "IIVPW,4.2,N,2.16,M", now_us);
+    NEAR(app.store().model().water.speed_parallel_to_wind_kn.value, 4.2f, 0.001f);
+    NEAR(app.store().model().water.speed_parallel_to_wind_m_s.value, 2.16f, 0.001f);
+}
+
 int main() {
     using Real = float;
 
@@ -307,6 +330,7 @@ int main() {
     test_fifth_smart0183_group(app, now_us);
     test_sixth_smart0183_group(app, now_us);
     test_seventh_smart0183_group(app, now_us);
+    test_eighth_smart0183_group(app, now_us);
 
     signalk_mini::SignalKMapper<Real> mapper;
     signalk_mini::ModelChange change;
