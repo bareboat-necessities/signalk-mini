@@ -156,6 +156,8 @@ struct LegacyTimingData {
     Setting<SensorSource> source;
     Stamped<Real> gri_us_div_10;
     Stamped<Real> master_toa_us;
+    Stamped<Real> master_relative_snr_db;
+    Stamped<Real> master_relative_ecd;
     char master_toa_status = 0;
     Stamped<Real> delta_us[5];
     char delta_status[5] = {0, 0, 0, 0, 0};
@@ -187,6 +189,36 @@ struct RadioFrequencySetData {
     Stamped<Real> receiving_frequency_hz;
     char communication_mode = 0;
     Stamped<int32_t> power_level;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct HeadingSteeringCommandData {
+    Setting<SensorSource> source;
+    Stamped<Real> heading_true_deg;
+    Stamped<Real> heading_magnetic_deg;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct BeaconReceiverControlData {
+    Setting<SensorSource> source;
+    Stamped<Real> frequency_khz;
+    char frequency_mode = 0;
+    Stamped<int32_t> bit_rate_bps;
+    char bit_rate_mode = 0;
+    Stamped<Real> status_frequency_khz;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct BeaconReceiverStatusData {
+    Setting<SensorSource> source;
+    Stamped<Real> signal_strength_db_uv;
+    Stamped<Real> signal_to_noise_ratio_db;
+    Stamped<Real> beacon_frequency_khz;
+    Stamped<int32_t> beacon_bit_rate_bps;
+    Stamped<int32_t> status;
     uint64_t last_update_us = 0;
 };
 
@@ -261,6 +293,9 @@ struct NavigationData {
     LegacyDeltaData<Real> legacy_delta;
     TransitFixData<Real> transit_fix;
     RadioFrequencySetData<Real> radio_frequency_set;
+    HeadingSteeringCommandData<Real> heading_steering_command;
+    BeaconReceiverControlData<Real> beacon_control;
+    BeaconReceiverStatusData<Real> beacon_status;
     WaypointArrivalData<Real> waypoint_arrival;
     WaypointNavigationData<Real> waypoint;
     ApbData<Real> apb;
