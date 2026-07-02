@@ -27,6 +27,8 @@ Connectors are configuration entries. They describe a protocol plus transport, s
 
 Connections are runtime objects. One connector can create zero, one, or many runtime connections. For example, one TCP server connector can accept many TCP connections.
 
+Protocols may also have protocol-specific properties. For `nmea0183`, the first protocol property is `validate_checksum`.
+
 ## Linux config
 
 Default path:
@@ -46,6 +48,7 @@ The config has one mandatory main Signal K server and optional connectors. Each 
 ```text
 protocol = "nmea0183";
 transport = "tcp_client";
+validate_checksum = false;
 ```
 
 or:
@@ -55,7 +58,13 @@ protocol = "nmea0183";
 transport = "serial";
 device = "/dev/ttyUSB0";
 baud = 4800;
+validate_checksum = true;
 ```
+
+For NMEA0183, omitted `validate_checksum` defaults by transport:
+
+- `serial`: `true`
+- `tcp_client`, `tcp_server`, `udp`: `false`
 
 Implemented NMEA0183 transports in this stage:
 
