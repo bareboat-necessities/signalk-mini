@@ -96,7 +96,11 @@ public:
         if (sentence_is(sentence, "TPT")) return apply_tpt(sentence, model, now_us, source);
         if (sentence_is(sentence, "TRF")) return apply_trf(sentence, model, now_us, source);
         if (sentence_is(sentence, "TTM")) return apply_ttm(sentence, model, now_us, source);
+        if (sentence_is(sentence, "VBW")) return apply_vbw(sentence, model, now_us, source);
+        if (sentence_is(sentence, "VDR")) return apply_vdr(sentence, model, now_us, source);
         if (sentence_is(sentence, "VHW")) return apply_vhw(sentence, model, now_us, source);
+        if (sentence_is(sentence, "VLW")) return apply_vlw(sentence, model, now_us, source);
+        if (sentence_is(sentence, "VPW")) return apply_vpw(sentence, model, now_us, source);
         if (sentence_is(sentence, "VTG")) return apply_vtg(sentence, model, now_us, source);
         if (sentence_is(sentence, "VWR")) return apply_vwr(sentence, model, now_us, source, false);
         if (sentence_is(sentence, "VWT")) return apply_vwr(sentence, model, now_us, source, true);
