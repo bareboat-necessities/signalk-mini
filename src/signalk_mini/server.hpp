@@ -19,7 +19,14 @@ class MiniSignalKServer {
 public:
     explicit MiniSignalKServer(const SignalKMiniConfig& config = SignalKMiniConfig{})
         : config_(config), signalk_tcp_server_(loop_.scheduler()), nmea_tcp_server_(loop_.scheduler()),
-          nmea_tcp_client_(loop_.scheduler()), publisher_(store_, config_), signalk_connections_(*this),
+          nmea_tcp_client_(loop_.scheduler()),
+#if defined(ARDUINO)
+          nmea_serial_stream_(Serial),
+#else
+          nmea_serial_stream_(),
+#endif
+          nmea_serial_reader_(nmea_serial_stream_, async_event_loop::LineProtocolOptions{}, [this](async_event_loop::LineView line) { handle_nmea_serial_line(line); }),
+          publisher_(store_, config_), signalk_connections_(*this),
           nmea_server_connections_(*this), nmea_client_connection_(*this),
           signalk_line_handler_(signalk_connections_, signalk_options()), nmea_line_handler_(nmea_server_connections_) {}
 
@@ -73,12 +80,39 @@ private:
             } else if (connector.protocol == ConnectorProtocol::Nmea0183 && connector.transport == ConnectorTransport::TcpServer && !nmea_tcp_server_connector_started_) {
                 nmea_tcp_server_connection_flags_ = ConnectionFlags{connector.allow_rx, connector.allow_tx};
                 nmea_tcp_server_connector_started_ = listen(nmea_tcp_server_, nmea_line_handler_, connector.host, connector.port);
+            } else if (connector.protocol == ConnectorProtocol::Nmea0183 && connector.transport == ConnectorTransport::Serial && !nmea_serial_connector_started_) {
+                nmea_serial_connector_started_ = start_nmea_serial_connector(connector);
             }
         }
     }
 
+    bool start_nmea_serial_connector(const ConnectorConfig& connector) {
+        nmea_serial_connection_flags_ = ConnectionFlags{connector.allow_rx, connector.allow_tx};
+#if defined(ARDUINO)
+        Serial.begin(connector.baud);
+#else
+        if (!nmea_serial_stream_.open(connector.device, connector.baud)) {
+            return false;
+        }
+#endif
+        if (!connector.allow_rx) {
+            return true;
+        }
+        nmea_serial_event_ = loop_.on_bytes_ready(nmea_serial_stream_, [this]() {
+            nmea_serial_reader_.poll(loop_.clock().micros());
+        });
+        return static_cast<bool>(nmea_serial_event_);
+    }
+
     void handle_nmea_line(const char* text, SourceId source_id) {
         if (nmea_.feed_line(text, source_id, loop_.clock().micros())) publish();
+    }
+
+    void handle_nmea_serial_line(async_event_loop::LineView line) {
+        if (!nmea_serial_connection_flags_.allow_rx) return;
+        char text[160];
+        async_event_loop::line_to_cstr(line, text);
+        handle_nmea_line(text, SourceId(3));
     }
 
     void publish() { publisher_.publish_pending(signalk_connections_.connections); }
@@ -138,6 +172,8 @@ private:
     async_event_loop::NativeTcpServer signalk_tcp_server_;
     async_event_loop::NativeTcpServer nmea_tcp_server_;
     async_event_loop::NativeTcpClient nmea_tcp_client_;
+    async_event_loop::NativeSerialStream nmea_serial_stream_;
+    async_event_loop::LineProtocolReader<192> nmea_serial_reader_;
     ModelStore<Real> store_{};
     Nmea0183Input<Real> nmea_{store_};
     SignalKPublisher<Real> publisher_;
@@ -148,8 +184,11 @@ private:
     async_event_loop::TcpLineServerHandler<192, MaxNmeaSourceConnections> nmea_line_handler_;
     ConnectionFlags nmea_tcp_server_connection_flags_{true, false};
     ConnectionFlags nmea_tcp_client_connection_flags_{true, false};
+    ConnectionFlags nmea_serial_connection_flags_{true, false};
     bool nmea_tcp_server_connector_started_ = false;
     bool nmea_tcp_client_connector_started_ = false;
+    bool nmea_serial_connector_started_ = false;
+    async_event_loop::EventHandle nmea_serial_event_{};
     async_event_loop::EventHandle timer_{};
 };
 
