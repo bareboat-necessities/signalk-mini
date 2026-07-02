@@ -47,5 +47,23 @@ int main() {
     feed(app, "GPXTR,0.08,L,N", now_us);
     NEAR(app.store().model().navigation.apb.xte_nmi.value, -0.08f, 0.0001f);
     NEAR(app.store().model().navigation.rmb.xte_nmi.value, -0.08f, 0.0001f);
+
+    feed(app, "GPZDA,123519.50,01,07,2026,-05,30", now_us);
+    NEAR(app.store().model().navigation.gps.timestamp_s.value, 45319.5f, 0.001f);
+    REQUIRE(app.store().model().navigation.gps.date_day.value == 1);
+    REQUIRE(app.store().model().navigation.gps.date_month.value == 7);
+    REQUIRE(app.store().model().navigation.gps.date_year.value == 2026);
+    REQUIRE(app.store().model().navigation.gps.local_zone_hours.value == -5);
+    REQUIRE(app.store().model().navigation.gps.local_zone_minutes.value == 30);
+
+    feed(app, "GPZFO,123520,000315,ORIG1", now_us);
+    NEAR(app.store().model().navigation.waypoint.origin_utc_time_s.value, 45320.0f, 0.001f);
+    NEAR(app.store().model().navigation.waypoint.origin_elapsed_time_s.value, 195.0f, 0.001f);
+    REQUIRE(std::strcmp(app.store().model().navigation.waypoint.from_waypoint_id, "ORIG1") == 0);
+
+    feed(app, "GPZTG,123521,000930,DEST2", now_us);
+    NEAR(app.store().model().navigation.waypoint.destination_utc_time_s.value, 45321.0f, 0.001f);
+    NEAR(app.store().model().navigation.waypoint.destination_time_remaining_s.value, 570.0f, 0.001f);
+    REQUIRE(std::strcmp(app.store().model().navigation.waypoint.to_waypoint_id, "DEST2") == 0);
     return 0;
 }
