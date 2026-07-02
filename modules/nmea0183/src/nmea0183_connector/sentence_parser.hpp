@@ -73,7 +73,7 @@ inline bool nmea_is_dsc_sentence(const NmeaSentence& s) {
 
 inline bool nmea_is_inmarsat_sentence(const NmeaSentence& s) {
     return nmea_span_starts_with(s.body, "PINM") || nmea_span_starts_with(s.body, "INM") ||
-           sentence_is_any(s, "IMK", "IMN", "IMR") || talker_is(s, "IC");
+           sentence_is_any(s, "IMK", "IMN", "IMR") || talker_is(s, "IC") || talker_is(s, "CS");
 }
 
 inline bool nmea_is_proprietary_sentence(const NmeaSentence& s) {
