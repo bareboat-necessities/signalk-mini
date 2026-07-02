@@ -23,6 +23,9 @@ struct NmeaSentence {
     bool valid_checksum;
     char start_char;
     NmeaSentenceFamily family;
+    NmeaSpan query_requester_talker;
+    NmeaSpan query_target_talker;
+    NmeaSpan query_requested_sentence;
 
     void clear() {
         raw[0] = '\0';
@@ -34,6 +37,9 @@ struct NmeaSentence {
         valid_checksum = false;
         start_char = '$';
         family = NmeaSentenceFamily::Standard;
+        query_requester_talker = NmeaSpan();
+        query_target_talker = NmeaSpan();
+        query_requested_sentence = NmeaSpan();
         for (uint8_t i = 0; i < NMEA_MAX_FIELDS; ++i) fields[i] = NmeaSpan();
     }
 
@@ -56,6 +62,11 @@ inline bool sentence_is_any(const NmeaSentence& s, const char* a, const char* b)
 
 inline bool sentence_is_any(const NmeaSentence& s, const char* a, const char* b, const char* c) {
     return sentence_is(s, a) || sentence_is(s, b) || sentence_is(s, c);
+}
+
+inline bool nmea_is_query_sentence(const NmeaSentence& s) {
+    return s.start_char == '$' && s.sentence.length == 3 && s.sentence.data &&
+           s.sentence.data[2] == 'Q' && s.query_requested_sentence.length == 3;
 }
 
 inline bool nmea_is_ais_sentence(const NmeaSentence& s) {
@@ -81,6 +92,7 @@ inline bool nmea_is_proprietary_sentence(const NmeaSentence& s) {
 }
 
 inline NmeaSentenceFamily classify_nmea_sentence(const NmeaSentence& s) {
+    if (nmea_is_query_sentence(s)) return NmeaSentenceFamily::Query;
     if (nmea_is_ais_sentence(s)) return NmeaSentenceFamily::Ais;
     if (nmea_is_seatalk_sentence(s)) return NmeaSentenceFamily::SeaTalk;
     if (nmea_is_dsc_sentence(s)) return NmeaSentenceFamily::Dsc;
@@ -167,6 +179,10 @@ public:
         out.body = NmeaSpan(raw_begin + body_offset, body_len);
         out.talker = NmeaSpan(out.body.data, 2);
         out.sentence = NmeaSpan(out.body.data + 2, 3);
+        if (out.sentence.length == 3 && out.sentence.data && out.sentence.data[2] == 'Q') {
+            out.query_requester_talker = NmeaSpan(out.body.data, 2);
+            out.query_target_talker = NmeaSpan(out.body.data + 2, 2);
+        }
 
         const char* field_begin = out.body.data;
         const char* body_end = out.body.data + out.body.length;
@@ -179,6 +195,9 @@ public:
             out.fields[out.field_count++] = NmeaSpan(field_begin, static_cast<size_t>(field_end - field_begin));
             if (!next) break;
             field_begin = next + 1;
+        }
+        if (out.query_requester_talker.length == 2 && out.field_count >= 1 && out.field(0).length == 3) {
+            out.query_requested_sentence = out.field(0);
         }
         return finish_success(out);
     }
