@@ -1,6 +1,8 @@
 #pragma once
 
+#include <memory>
 #include <stddef.h>
+#include <vector>
 
 #if defined(ARDUINO)
 #define ASYNC_EVENT_LOOP_ENABLE_ARDUINO_WIFI_TCP
@@ -22,8 +24,7 @@ public:
           signalk_tcp_server_(loop_.scheduler()),
           publisher_(store_, config_),
           signalk_connections_(*this),
-          signalk_line_handler_(signalk_connections_, signalk_options()),
-          connector0_(*this, 0), connector1_(*this, 1), connector2_(*this, 2), connector3_(*this, 3) {}
+          signalk_line_handler_(signalk_connections_, signalk_options()) {}
 
     bool begin() {
         if (!loop_.valid()) return false;
@@ -130,21 +131,25 @@ private:
         async_event_loop::EventHandle serial_event{};
     };
 
-    ConnectorRuntimeSlot& connector_slot(size_t index) { switch (index) { case 0: return connector0_; case 1: return connector1_; case 2: return connector2_; default: return connector3_; } }
-    const ConnectorRuntimeSlot& connector_slot(size_t index) const { switch (index) { case 0: return connector0_; case 1: return connector1_; case 2: return connector2_; default: return connector3_; } }
+    ConnectorRuntimeSlot& connector_slot(size_t index) { return *connector_slots_[index]; }
+    const ConnectorRuntimeSlot& connector_slot(size_t index) const { return *connector_slots_[index]; }
     const ConnectionFlags& connector_connection_flags(size_t index) const { return connector_slot(index).connection_flags; }
     bool connector_allow_rx(size_t index) const { return connector_slot(index).connection_flags.allow_rx; }
 
     void start_configured_connectors() {
-        const size_t count = config_.connector_count <= max_connector_configs ? config_.connector_count : max_connector_configs;
-        for (size_t i = 0; i < count; ++i) {
+        connector_slots_.clear();
+        if (!config_.connectors || config_.connector_count == 0) return;
+        connector_slots_.reserve(config_.connector_count);
+        for (size_t i = 0; i < config_.connector_count; ++i) {
             const ConnectorConfig& connector = config_.connectors[i];
-            ConnectorRuntimeSlot& slot = connector_slot(i);
-            slot.config = connector;
-            slot.connection_flags = ConnectionFlags{connector.allow_rx, connector.allow_tx};
-            slot.nmea0183_validate_checksum = connector.protocol == ConnectorProtocol::Nmea0183 ? effective_nmea0183_validate_checksum(connector.nmea0183, connector.transport) : false;
+            std::unique_ptr<ConnectorRuntimeSlot> slot(new ConnectorRuntimeSlot(*this, i));
+            slot->config = connector;
+            slot->connection_flags = ConnectionFlags{connector.allow_rx, connector.allow_tx};
+            slot->nmea0183_validate_checksum = connector.protocol == ConnectorProtocol::Nmea0183 ? effective_nmea0183_validate_checksum(connector.nmea0183, connector.transport) : false;
+            connector_slots_.push_back(std::move(slot));
+            ConnectorRuntimeSlot& runtime = *connector_slots_.back();
             if (!connector.enabled) continue;
-            if (connector.protocol == ConnectorProtocol::Nmea0183) slot.started = start_nmea0183_connector(slot);
+            if (connector.protocol == ConnectorProtocol::Nmea0183) runtime.started = start_nmea0183_connector(runtime);
         }
     }
 
@@ -164,7 +169,10 @@ private:
         if (!slot.serial_stream.open(slot.config.device, slot.config.baud)) return false;
 #endif
         if (!slot.connection_flags.allow_rx) return true;
-        slot.serial_event = loop_.on_bytes_ready(slot.serial_stream, [&slot]() { slot.serial_reader.poll(0); });
+        const size_t connector_index = slot.index;
+        slot.serial_event = loop_.on_bytes_ready(slot.serial_stream, [this, connector_index]() {
+            connector_slot(connector_index).serial_reader.poll(loop_.clock().micros());
+        });
         return static_cast<bool>(slot.serial_event);
     }
 
@@ -191,10 +199,7 @@ private:
     SignalKPublisher<Real> publisher_;
     SignalKConnectionHandler signalk_connections_;
     async_event_loop::TcpLineServerHandler<256, MaxSignalKConnections> signalk_line_handler_;
-    ConnectorRuntimeSlot connector0_;
-    ConnectorRuntimeSlot connector1_;
-    ConnectorRuntimeSlot connector2_;
-    ConnectorRuntimeSlot connector3_;
+    std::vector<std::unique_ptr<ConnectorRuntimeSlot>> connector_slots_;
     async_event_loop::EventHandle timer_{};
 };
 
