@@ -57,6 +57,63 @@ struct GpsAlmanacData {
 };
 
 template<typename Real = float>
+struct GpsFaultDetectionData {
+    Setting<SensorSource> source;
+    Stamped<Real> utc_time_s;
+    Stamped<Real> expected_error_lat_m;
+    Stamped<Real> expected_error_lon_m;
+    Stamped<Real> expected_error_alt_m;
+    Stamped<int32_t> failed_satellite_prn;
+    Stamped<Real> missed_detection_probability;
+    Stamped<Real> failed_satellite_bias_m;
+    Stamped<Real> failed_satellite_bias_stddev_m;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct DatumReferenceData {
+    Setting<SensorSource> source;
+    char local_datum_code[8] = {0};
+    char local_datum_subcode[8] = {0};
+    Stamped<Real> latitude_offset_min;
+    Stamped<Real> longitude_offset_min;
+    Stamped<Real> altitude_offset_m;
+    char reference_datum_code[8] = {0};
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct DeccaPositionData {
+    Setting<SensorSource> source;
+    char chain_id[8] = {0};
+    char red_zone[8] = {0};
+    char green_zone[8] = {0};
+    char purple_zone[8] = {0};
+    Stamped<Real> red_line_of_position;
+    Stamped<Real> green_line_of_position;
+    Stamped<Real> purple_line_of_position;
+    char red_master_status = 0;
+    char green_master_status = 0;
+    char purple_master_status = 0;
+    char red_line_navigation_use = 0;
+    char green_line_navigation_use = 0;
+    char purple_line_navigation_use = 0;
+    Stamped<Real> position_uncertainty_nmi;
+    Stamped<int32_t> fix_data_basis;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct RadioFrequencySetData {
+    Setting<SensorSource> source;
+    Stamped<Real> transmitting_frequency_hz;
+    Stamped<Real> receiving_frequency_hz;
+    char communication_mode = 0;
+    Stamped<int32_t> power_level;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
 struct WaypointArrivalData {
     Setting<SensorSource> source;
     Setting<bool> arrival_circle_entered;
@@ -116,6 +173,10 @@ template<typename Real>
 struct NavigationData {
     GpsData<Real> gps;
     GpsAlmanacData<Real> gps_almanac;
+    GpsFaultDetectionData<Real> gps_fault;
+    DatumReferenceData<Real> datum;
+    DeccaPositionData<Real> decca;
+    RadioFrequencySetData<Real> radio_frequency_set;
     WaypointArrivalData<Real> waypoint_arrival;
     WaypointNavigationData<Real> waypoint;
     ApbData<Real> apb;
