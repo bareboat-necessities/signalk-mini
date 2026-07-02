@@ -6,7 +6,6 @@
 #include <ship_data_model.hpp>
 
 #include "sentence_parser.hpp"
-#include "nmea_rx_helpers.hpp"
 #include "nmea_message_state.hpp"
 #include "nmea_dsc_message_state.hpp"
 
