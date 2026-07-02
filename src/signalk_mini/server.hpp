@@ -60,14 +60,14 @@ private:
         for (size_t i = 0; i < count; ++i) {
             const ConnectorConfig& c = cfg_.connectors[i];
             if (!c.enabled) continue;
-            if (c.kind == ConnectorKind::Nmea0183TcpClient && !nmea_client_started_) {
+            if (c.protocol == ConnectorProtocol::Nmea0183 && c.transport == ConnectorTransport::TcpClient && !nmea_client_started_) {
                 nmea_client_flags_ = ConnectionFlags{c.allow_rx, c.allow_tx};
                 async_event_loop::TcpConnectOptions o;
                 o.host = c.host;
                 o.port = c.port;
                 nmea_client_.connect(o, nmea_client_cb_);
                 nmea_client_started_ = true;
-            } else if (c.kind == ConnectorKind::Nmea0183TcpServer && !nmea_server_started_) {
+            } else if (c.protocol == ConnectorProtocol::Nmea0183 && c.transport == ConnectorTransport::TcpServer && !nmea_server_started_) {
                 nmea_server_flags_ = ConnectionFlags{c.allow_rx, c.allow_tx};
                 nmea_server_started_ = listen(nmea_server_, nmea_lines_, c.host, c.port);
             }
