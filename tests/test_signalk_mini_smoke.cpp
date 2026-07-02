@@ -226,6 +226,47 @@ static void test_sixth_smart0183_group(signalk_mini::SignalKMiniApp<float>& app,
     REQUIRE(app.store().model().navigation.multiple_data_id.talker_id_number.value == 12);
 }
 
+static void test_seventh_smart0183_group(signalk_mini::SignalKMiniApp<float>& app, uint64_t& now_us) {
+    feed(app, "IITDS,1.2,M,33.4,M,56.7,M", now_us);
+    NEAR(app.store().model().water.trawl_door_centerline_offset_m.value, 1.2f, 0.001f);
+    NEAR(app.store().model().water.trawl_door_along_centerline_m.value, 33.4f, 0.001f);
+    NEAR(app.store().model().water.trawl_depth_below_surface_m.value, 56.7f, 0.001f);
+
+    feed(app, "IITPR,120.5,M,034.0,,60.0,M", now_us);
+    NEAR(app.store().model().water.trawl_relative_range_m.value, 120.5f, 0.001f);
+    NEAR(app.store().model().water.trawl_relative_bearing_deg.value, 34.0f, 0.001f);
+    NEAR(app.store().model().water.trawl_depth_below_surface_m.value, 60.0f, 0.001f);
+
+    feed(app, "IITPT,130.5,M,210.0,,65.0,M", now_us);
+    NEAR(app.store().model().water.trawl_true_range_m.value, 130.5f, 0.001f);
+    NEAR(app.store().model().water.trawl_true_bearing_deg.value, 210.0f, 0.001f);
+    NEAR(app.store().model().water.trawl_depth_below_surface_m.value, 65.0f, 0.001f);
+
+    feed(app, "GPTRF,123519,010726,4917.24,N,12309.57,W,45.0,3,12,1.5,7,A", now_us);
+    REQUIRE(std::strcmp(app.store().model().navigation.transit_fix.date_ddmmyy, "010726") == 0);
+    NEAR(app.store().model().navigation.transit_fix.latitude_deg.value, 49.287333f, 0.001f);
+    NEAR(app.store().model().navigation.transit_fix.longitude_deg.value, -123.1595f, 0.001f);
+    NEAR(app.store().model().navigation.transit_fix.elevation_angle_deg.value, 45.0f, 0.001f);
+    REQUIRE(app.store().model().navigation.transit_fix.iterations.value == 3);
+    REQUIRE(app.store().model().navigation.transit_fix.doppler_intervals.value == 12);
+    NEAR(app.store().model().navigation.transit_fix.update_distance_nmi.value, 1.5f, 0.001f);
+    REQUIRE(app.store().model().navigation.transit_fix.satellite_number.value == 7);
+    REQUIRE(app.store().model().navigation.transit_fix.data_validity == 'A');
+
+    feed(app, "RATTM,7,2.5,045.0,T,12.3,090.0,T,0.8,15.0,N,TGT7,A,R", now_us);
+    REQUIRE(app.store().model().navigation.tracked_target.target_number.value == 7);
+    NEAR(app.store().model().navigation.tracked_target.distance_nmi.value, 2.5f, 0.001f);
+    NEAR(app.store().model().navigation.tracked_target.bearing_deg.value, 45.0f, 0.001f);
+    REQUIRE(app.store().model().navigation.tracked_target.bearing_reference == 'T');
+    NEAR(app.store().model().navigation.tracked_target.speed_kn.value, 12.3f, 0.001f);
+    NEAR(app.store().model().navigation.tracked_target.course_deg.value, 90.0f, 0.001f);
+    NEAR(app.store().model().navigation.tracked_target.cpa_distance_nmi.value, 0.8f, 0.001f);
+    NEAR(app.store().model().navigation.tracked_target.tcpa_min.value, 15.0f, 0.001f);
+    REQUIRE(std::strcmp(app.store().model().navigation.tracked_target.target_name, "TGT7") == 0);
+    REQUIRE(app.store().model().navigation.tracked_target.target_status == 'A');
+    REQUIRE(app.store().model().navigation.tracked_target.reference_target == 'R');
+}
+
 int main() {
     using Real = float;
 
@@ -265,6 +306,7 @@ int main() {
     test_fourth_smart0183_group(app, now_us);
     test_fifth_smart0183_group(app, now_us);
     test_sixth_smart0183_group(app, now_us);
+    test_seventh_smart0183_group(app, now_us);
 
     signalk_mini::SignalKMapper<Real> mapper;
     signalk_mini::ModelChange change;
