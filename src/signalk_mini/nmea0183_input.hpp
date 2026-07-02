@@ -36,12 +36,12 @@ public:
 private:
     void mark_changed_from_sentence(const nmea0183_connector::NmeaSentence& sentence, SourceId source_id, uint64_t now_us) {
         if (nmea0183_connector::sentence_is(sentence, "RMC") || nmea0183_connector::sentence_is(sentence, "GGA") || nmea0183_connector::sentence_is(sentence, "GLL")) {
-            store_.mark_changed(ModelField::NavigationGpsFixLatDeg, source_id, now_us);
-            store_.mark_changed(ModelField::NavigationGpsFixLonDeg, source_id, now_us);
+            store_.mark_changed(ModelField::GnssFixLatDeg, source_id, now_us);
+            store_.mark_changed(ModelField::GnssFixLonDeg, source_id, now_us);
         }
         if (nmea0183_connector::sentence_is(sentence, "RMC") || nmea0183_connector::sentence_is(sentence, "VTG")) {
-            store_.mark_changed(ModelField::NavigationGpsSpeedKn, source_id, now_us);
-            store_.mark_changed(ModelField::NavigationGpsTrackDeg, source_id, now_us);
+            store_.mark_changed(ModelField::GnssSpeedKn, source_id, now_us);
+            store_.mark_changed(ModelField::GnssTrackDeg, source_id, now_us);
         }
         if (nmea0183_connector::sentence_is(sentence, "HDT") || nmea0183_connector::sentence_is(sentence, "HDM") || nmea0183_connector::sentence_is(sentence, "HDG")) {
             store_.mark_changed(ModelField::ImuHeadingDeg, source_id, now_us);
@@ -51,13 +51,13 @@ private:
             store_.mark_changed(ModelField::WindApparentSpeedKn, source_id, now_us);
         }
         if (nmea0183_connector::sentence_is(sentence, "DBT") || nmea0183_connector::sentence_is(sentence, "DPT")) {
-            store_.mark_changed(ModelField::WaterDepthM, source_id, now_us);
+            store_.mark_changed(ModelField::SeaDepthM, source_id, now_us);
         }
         if (nmea0183_connector::sentence_is(sentence, "DBK")) {
-            store_.mark_changed(ModelField::WaterDepthBelowKeelM, source_id, now_us);
+            store_.mark_changed(ModelField::SeaDepthBelowKeelM, source_id, now_us);
         }
         if (nmea0183_connector::sentence_is(sentence, "DBS")) {
-            store_.mark_changed(ModelField::WaterDepthBelowSurfaceM, source_id, now_us);
+            store_.mark_changed(ModelField::SeaDepthBelowSurfaceM, source_id, now_us);
         }
     }
 
