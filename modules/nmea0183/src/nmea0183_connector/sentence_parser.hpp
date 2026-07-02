@@ -34,6 +34,8 @@ struct NmeaSentence {
     bool valid_checksum;
     char start_char;
     NmeaSentenceFamily family;
+    NmeaTalkerId talker_id;
+    NmeaGnssSystem gnss_system;
     NmeaSpan query_requester_talker;
     NmeaSpan query_target_talker;
     NmeaSpan query_requested_sentence;
@@ -51,6 +53,8 @@ struct NmeaSentence {
         valid_checksum = false;
         start_char = '$';
         family = NmeaSentenceFamily::Standard;
+        talker_id = NmeaTalkerId::Unknown;
+        gnss_system = NmeaGnssSystem::Unknown;
         query_requester_talker = NmeaSpan();
         query_target_talker = NmeaSpan();
         query_requested_sentence = NmeaSpan();
@@ -238,6 +242,8 @@ public:
         out.body = NmeaSpan(raw_begin + body_offset, body_len);
         out.talker = NmeaSpan(out.body.data, 2);
         out.sentence = NmeaSpan(out.body.data + 2, 3);
+        out.talker_id = nmea_talker_id_from_span(out.talker);
+        out.gnss_system = nmea_gnss_system_from_talker(out.talker_id);
         if (out.sentence.length == 3 && out.sentence.data && out.sentence.data[2] == 'Q') {
             out.query_requester_talker = NmeaSpan(out.body.data, 2);
             out.query_target_talker = NmeaSpan(out.body.data + 2, 2);
