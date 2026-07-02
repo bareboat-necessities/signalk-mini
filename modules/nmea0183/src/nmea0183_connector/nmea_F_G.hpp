@@ -3,6 +3,12 @@
 // Included inside Nmea0183RxConnector.
 
 template<typename Model>
+bool apply_fir(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    (void)model;
+    return apply_raw_sentence_record(sentence, state_.fire_detection, "FIR", now_us, source);
+}
+
+template<typename Model>
 bool apply_fsi(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 4) {
         last_error_ = "short FSI";
