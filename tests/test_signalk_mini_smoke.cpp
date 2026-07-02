@@ -171,6 +171,31 @@ static void test_fourth_smart0183_group(signalk_mini::SignalKMiniApp<float>& app
     NEAR(app.store().model().water.temperature_c.value, 18.7f, 0.001f);
 }
 
+static void test_fifth_smart0183_group(signalk_mini::SignalKMiniApp<float>& app, uint64_t& now_us) {
+    feed(app, "GPOLN,A12,B34,C56", now_us);
+    REQUIRE(std::strcmp(app.store().model().navigation.omega_lane_numbers.pair[0], "A12") == 0);
+    REQUIRE(std::strcmp(app.store().model().navigation.omega_lane_numbers.pair[2], "C56") == 0);
+
+    feed(app, "IIOSD,123.4,A,234.5,T,6.7,B,210.0,1.2,N", now_us);
+    NEAR(app.store().model().navigation.own_ship.heading_true_deg.value, 123.4f, 0.001f);
+    NEAR(app.store().model().navigation.own_ship.course_deg.value, 234.5f, 0.001f);
+    NEAR(app.store().model().navigation.own_ship.speed_kn.value, 6.7f, 0.001f);
+    NEAR(app.store().model().navigation.own_ship.set_true_deg.value, 210.0f, 0.001f);
+    NEAR(app.store().model().water.current_speed_kn.value, 1.2f, 0.001f);
+
+    feed(app, "GPR00,WP001,WP002,WP003", now_us);
+    REQUIRE(app.store().model().navigation.active_route.waypoint_count.value == 3);
+    REQUIRE(std::strcmp(app.store().model().navigation.active_route.waypoint_id[1], "WP002") == 0);
+
+    feed(app, "GPRMA,A,4917.24,N,12309.57,W,11.1,22.2,5.5,083.2,13.1,W", now_us);
+    NEAR(app.store().model().navigation.rma.latitude_deg.value, 49.287333f, 0.001f);
+    NEAR(app.store().model().navigation.rma.longitude_deg.value, -123.1595f, 0.001f);
+    NEAR(app.store().model().navigation.rma.time_difference_a_us.value, 11.1f, 0.001f);
+    NEAR(app.store().model().navigation.rma.speed_kn.value, 5.5f, 0.001f);
+    NEAR(app.store().model().navigation.rma.track_deg.value, 83.2f, 0.001f);
+    NEAR(app.store().model().navigation.rma.magnetic_variation_deg.value, -13.1f, 0.001f);
+}
+
 int main() {
     using Real = float;
 
@@ -208,6 +233,7 @@ int main() {
     test_second_smart0183_group(app, now_us);
     test_third_smart0183_group(app, now_us);
     test_fourth_smart0183_group(app, now_us);
+    test_fifth_smart0183_group(app, now_us);
 
     signalk_mini::SignalKMapper<Real> mapper;
     signalk_mini::ModelChange change;
