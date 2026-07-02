@@ -9,7 +9,7 @@
 
 namespace nmea0183_connector {
 
-static const uint8_t NMEA_MAX_SENTENCE_LEN = 96;
+static const uint8_t NMEA_MAX_SENTENCE_LEN = 192;
 static const uint8_t NMEA_MAX_FIELDS = 32;
 
 struct NmeaSentence {
@@ -83,7 +83,7 @@ inline bool nmea_is_seatalk_sentence(const NmeaSentence& s) {
 }
 
 inline bool nmea_is_dsc_sentence(const NmeaSentence& s) {
-    return sentence_is_any(s, "DSC", "DSE", "DSI");
+    return sentence_is_any(s, "DSC", "DSE", "DSI") || sentence_is(s, "DSR");
 }
 
 inline bool nmea_is_inmarsat_sentence(const NmeaSentence& s) {
@@ -245,11 +245,11 @@ private:
         }
     }
 
+    NmeaParserHooks hooks_;
     char buffer_[NMEA_MAX_SENTENCE_LEN];
-    size_t pos_;
-    bool collecting_;
-    const char* last_error_;
-    NmeaParserHooks hooks_{};
+    uint8_t pos_ = 0;
+    bool collecting_ = false;
+    const char* last_error_ = "";
 };
 
 } // namespace nmea0183_connector
