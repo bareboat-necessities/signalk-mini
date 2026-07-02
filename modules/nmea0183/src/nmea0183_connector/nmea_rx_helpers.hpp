@@ -40,6 +40,56 @@ inline bool parse_north_south_signed(NmeaSpan magnitude, NmeaSpan side, float& o
     return true;
 }
 
+inline bool parse_east_west_signed(NmeaSpan magnitude, NmeaSpan side, float& out) {
+    float value = 0.0f;
+    if (!parse_real(magnitude, value) || side.empty()) return false;
+
+    if (side[0] == 'E') out = value;
+    else if (side[0] == 'W') out = -value;
+    else return false;
+    return true;
+}
+
+inline bool parse_left_right_signed(NmeaSpan magnitude, NmeaSpan side, float& out) {
+    float value = 0.0f;
+    if (!parse_real(magnitude, value) || side.empty()) return false;
+
+    if (side[0] == 'R') out = value;
+    else if (side[0] == 'L') out = -value;
+    else return false;
+    return true;
+}
+
+inline bool parse_lat_lon(NmeaSpan ddmm, NmeaSpan hemisphere, float& out_deg) {
+    if (!ddmm.data || ddmm.length < 4 || hemisphere.empty()) return false;
+    const char h = hemisphere[0];
+    const uint8_t deg_digits = (h == 'E' || h == 'W') ? 3 : 2;
+    if (ddmm.length <= deg_digits + 1) return false;
+
+    int degrees = 0;
+    for (uint8_t i = 0; i < deg_digits; ++i) {
+        if (ddmm[i] < '0' || ddmm[i] > '9') return false;
+        degrees = degrees * 10 + (ddmm[i] - '0');
+    }
+    float minutes = 0.0f;
+    if (!parse_real(NmeaSpan(ddmm.data + deg_digits, ddmm.length - deg_digits), minutes)) return false;
+    out_deg = static_cast<float>(degrees) + minutes / 60.0f;
+    if (h == 'S' || h == 'W') out_deg = -out_deg;
+    else if (h != 'N' && h != 'E') return false;
+    return true;
+}
+
+inline bool parse_knots(NmeaSpan value, NmeaSpan unit, float& out_kn) {
+    float v = 0.0f;
+    if (!parse_real(value, v)) return false;
+    const char u = unit.empty() ? 'N' : unit[0];
+    if (u == 'N') out_kn = v;
+    else if (u == 'K') out_kn = v * 0.539956803f;
+    else if (u == 'M') out_kn = v * 1.94384449f;
+    else return false;
+    return true;
+}
+
 inline bool parse_utc_time_of_day_s(NmeaSpan utc_time, float& out_s) {
     if (utc_time.length < 6) return false;
 
