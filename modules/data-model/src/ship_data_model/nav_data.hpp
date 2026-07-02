@@ -175,10 +175,16 @@ template<typename Real = float>
 struct TransitFixData {
     Setting<SensorSource> source;
     Stamped<Real> utc_time_s;
+    char date_ddmmyy[8] = {0};
     Stamped<Real> latitude_deg;
     Stamped<Real> longitude_deg;
     char waypoint_id[16] = {0};
+    Stamped<Real> elevation_angle_deg;
+    Stamped<int32_t> iterations;
+    Stamped<int32_t> doppler_intervals;
+    Stamped<Real> update_distance_nmi;
     Stamped<int32_t> satellite_number;
+    char data_validity = 0;
     uint64_t last_update_us = 0;
 };
 
@@ -297,6 +303,25 @@ struct MultipleDataIdData {
 };
 
 template<typename Real = float>
+struct TrackedTargetData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> target_number;
+    Stamped<Real> distance_nmi;
+    Stamped<Real> bearing_deg;
+    char bearing_reference = 0;
+    Stamped<Real> speed_kn;
+    Stamped<Real> course_deg;
+    char course_reference = 0;
+    Stamped<Real> cpa_distance_nmi;
+    Stamped<Real> tcpa_min;
+    char distance_units = 0;
+    char target_name[24] = {0};
+    char target_status = 0;
+    char reference_target = 0;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
 struct RmaData {
     Setting<SensorSource> source;
     char status = 0;
@@ -391,6 +416,7 @@ struct NavigationData {
     RadarSystemData<Real> radar_system;
     ScanningFrequencyData<Real> scanning_frequency;
     MultipleDataIdData<Real> multiple_data_id;
+    TrackedTargetData<Real> tracked_target;
     RmaData<Real> rma;
     WaypointArrivalData<Real> waypoint_arrival;
     WaypointNavigationData<Real> waypoint;
