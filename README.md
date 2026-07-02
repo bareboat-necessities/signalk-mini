@@ -23,11 +23,24 @@ Project direction:
 
 ## Naming
 
-Connectors are configuration entries. They describe a protocol plus transport, such as `nmea0183` over `tcp_client`.
+Connectors are configuration entries. They describe a protocol plus transport, such as `nmea0183` over `udp`.
 
-Connections are runtime objects. One connector can create zero, one, or many runtime connections. For example, one TCP server connector can accept many TCP connections.
+Connections are runtime objects. One connector can create zero, one, or many runtime connections. For example, one TCP server connector can accept many TCP connections. UDP listeners do not create TCP-style connections; they receive datagrams on a socket.
 
-Connector config is separated into common connector identity, access flags, protocol-specific settings, and transport-specific settings. For example, NMEA0183 checksum settings belong to the NMEA0183 protocol block, while TCP host/port belong to the TCP transport block.
+Connector config is separated into common connector identity, access flags, protocol-specific settings, and transport-specific settings. For example, NMEA0183 checksum settings belong to the NMEA0183 protocol block, while UDP listen host/port belong to the UDP transport block.
+
+## Defaults
+
+The built-in default connector listens for NMEA0183 UDP datagrams on all local interfaces:
+
+```text
+protocol = "nmea0183";
+transport = "udp";
+listen_host = "0.0.0.0";
+listen_port = 10110;
+```
+
+Port `10110` is the de facto NMEA0183-over-IP port used for NMEA0183 navigational data over TCP or UDP. Binding to `0.0.0.0:10110` receives packets sent directly to the host and ordinary IPv4 broadcast packets reaching that interface.
 
 ## Linux config
 
@@ -47,9 +60,9 @@ The config has one mandatory main Signal K server and optional connectors. Each 
 
 ```text
 enabled = true;
-label = "nmea0183-tcp-client";
+label = "nmea0183-udp-10110";
 protocol = "nmea0183";
-transport = "tcp_client";
+transport = "udp";
 
 access: {
   allow_rx = true;
@@ -60,9 +73,10 @@ nmea0183: {
   validate_checksum = false;
 };
 
-tcp_client: {
-  host = "127.0.0.1";
-  port = 10110;
+udp: {
+  listen_host = "0.0.0.0";
+  listen_port = 10110;
+  allow_broadcast = true;
 };
 ```
 
@@ -96,6 +110,7 @@ For NMEA0183, omitted `validate_checksum` defaults by transport:
 
 Implemented NMEA0183 transports in this stage:
 
+- `udp`
 - `tcp_client`
 - `tcp_server`
 - `serial`
@@ -110,7 +125,7 @@ ctest --test-dir build --output-on-failure
 
 Linux build dependencies: libevent, libconfig, pkg-config.
 
-Default TCP ports:
+Default TCP/UDP ports:
 
-- Signal K: `20223`
-- default NMEA0183 TCP client target: `127.0.0.1:10110`
+- Signal K TCP server: `20223`
+- NMEA0183 UDP listener: `0.0.0.0:10110`
