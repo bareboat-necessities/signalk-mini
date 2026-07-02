@@ -14,16 +14,16 @@ bool apply_aam(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     }
 
     float radius_nmi = 0.0f;
-    model.navigation.waypoint_arrival.arrival_circle_entered.value = sentence.field(0)[0] == 'A';
-    model.navigation.waypoint_arrival.perpendicular_passed.value = sentence.field(1)[0] == 'A';
+    model.route.waypoint_arrival.arrival_circle_entered.value = sentence.field(0)[0] == 'A';
+    model.route.waypoint_arrival.perpendicular_passed.value = sentence.field(1)[0] == 'A';
     if (parse_distance_nmi(sentence.field(2), sentence.field(3), radius_nmi)) {
-        model.navigation.waypoint_arrival.arrival_radius_nmi.set(static_cast<Real>(radius_nmi), now_us);
+        model.route.waypoint_arrival.arrival_radius_nmi.set(static_cast<Real>(radius_nmi), now_us);
     }
-    nmea_copy_span(model.navigation.waypoint_arrival.waypoint_id,
-                   sizeof(model.navigation.waypoint_arrival.waypoint_id),
+    nmea_copy_span(model.route.waypoint_arrival.waypoint_id,
+                   sizeof(model.route.waypoint_arrival.waypoint_id),
                    sentence.field(4));
-    set_source(model.navigation.waypoint_arrival.source, source);
-    model.navigation.waypoint_arrival.last_update_us = now_us;
+    set_source(model.route.waypoint_arrival.source, source);
+    model.route.waypoint_arrival.last_update_us = now_us;
     return true;
 }
 
@@ -60,23 +60,23 @@ bool apply_alm(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
     int32_t integer_value = 0;
     float value = 0.0f;
-    if (parse_int32(sentence.field(0), integer_value)) model.navigation.gps_almanac.total_messages.set(integer_value, now_us);
-    if (parse_int32(sentence.field(1), integer_value)) model.navigation.gps_almanac.message_number.set(integer_value, now_us);
-    if (parse_int32(sentence.field(2), integer_value)) model.navigation.gps_almanac.satellite_prn.set(integer_value, now_us);
-    if (parse_int32(sentence.field(3), integer_value)) model.navigation.gps_almanac.gps_week.set(integer_value, now_us);
-    if (parse_int32(sentence.field(4), integer_value)) model.navigation.gps_almanac.sv_health.set(integer_value, now_us);
-    if (parse_real(sentence.field(5), value)) model.navigation.gps_almanac.eccentricity.set(static_cast<Real>(value), now_us);
-    if (parse_real(sentence.field(6), value)) model.navigation.gps_almanac.reference_time_s.set(static_cast<Real>(value), now_us);
-    if (parse_real(sentence.field(7), value)) model.navigation.gps_almanac.inclination_rad.set(static_cast<Real>(value), now_us);
-    if (parse_real(sentence.field(8), value)) model.navigation.gps_almanac.right_ascension_rate_rad_s.set(static_cast<Real>(value), now_us);
-    if (parse_real(sentence.field(9), value)) model.navigation.gps_almanac.sqrt_semi_major_axis.set(static_cast<Real>(value), now_us);
-    if (parse_real(sentence.field(10), value)) model.navigation.gps_almanac.argument_of_perigee_rad.set(static_cast<Real>(value), now_us);
-    if (parse_real(sentence.field(11), value)) model.navigation.gps_almanac.longitude_ascension_node_rad.set(static_cast<Real>(value), now_us);
-    if (parse_real(sentence.field(12), value)) model.navigation.gps_almanac.mean_anomaly_rad.set(static_cast<Real>(value), now_us);
-    if (parse_real(sentence.field(13), value)) model.navigation.gps_almanac.clock_f0_s.set(static_cast<Real>(value), now_us);
-    if (parse_real(sentence.field(14), value)) model.navigation.gps_almanac.clock_f1_s_s.set(static_cast<Real>(value), now_us);
-    set_source(model.navigation.gps_almanac.source, source);
-    model.navigation.gps_almanac.last_update_us = now_us;
+    if (parse_int32(sentence.field(0), integer_value)) model.gnss.almanac.total_messages.set(integer_value, now_us);
+    if (parse_int32(sentence.field(1), integer_value)) model.gnss.almanac.message_number.set(integer_value, now_us);
+    if (parse_int32(sentence.field(2), integer_value)) model.gnss.almanac.satellite_prn.set(integer_value, now_us);
+    if (parse_int32(sentence.field(3), integer_value)) model.gnss.almanac.gnss_week.set(integer_value, now_us);
+    if (parse_int32(sentence.field(4), integer_value)) model.gnss.almanac.sv_health.set(integer_value, now_us);
+    if (parse_real(sentence.field(5), value)) model.gnss.almanac.eccentricity.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(6), value)) model.gnss.almanac.reference_time_s.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(7), value)) model.gnss.almanac.inclination_rad.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(8), value)) model.gnss.almanac.right_ascension_rate_rad_s.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(9), value)) model.gnss.almanac.sqrt_semi_major_axis.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(10), value)) model.gnss.almanac.argument_of_perigee_rad.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(11), value)) model.gnss.almanac.longitude_ascension_node_rad.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(12), value)) model.gnss.almanac.mean_anomaly_rad.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(13), value)) model.gnss.almanac.clock_f0_s.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(14), value)) model.gnss.almanac.clock_f1_s_s.set(static_cast<Real>(value), now_us);
+    set_source(model.gnss.almanac.source, source);
+    model.gnss.almanac.last_update_us = now_us;
     return true;
 }
 
@@ -95,17 +95,17 @@ bool apply_apa(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
             last_error_ = "bad APA steer direction";
             return false;
         }
-        model.navigation.apb.xte_nmi.set(static_cast<Real>(xte_nmi), now_us);
+        model.route.apb.xte_nmi.set(static_cast<Real>(xte_nmi), now_us);
     }
 
-    model.navigation.apb.arrival_circle_entered.value = sentence.field(5)[0] == 'A';
-    model.navigation.apb.perpendicular_passed.value = sentence.field(6)[0] == 'A';
+    model.route.apb.arrival_circle_entered.value = sentence.field(5)[0] == 'A';
+    model.route.apb.perpendicular_passed.value = sentence.field(6)[0] == 'A';
     if (parse_real(sentence.field(7), bearing_deg)) {
-        model.navigation.apb.origin_to_destination_bearing_deg.set(static_cast<Real>(wrap_360_deg(bearing_deg)), now_us);
+        model.route.apb.origin_to_destination_bearing_deg.set(static_cast<Real>(wrap_360_deg(bearing_deg)), now_us);
     }
-    nmea_copy_span(model.navigation.apb.destination_id, sizeof(model.navigation.apb.destination_id), sentence.field(9));
-    set_source(model.navigation.apb.source, source);
-    model.navigation.apb.last_update_us = now_us;
+    nmea_copy_span(model.route.apb.destination_id, sizeof(model.route.apb.destination_id), sentence.field(9));
+    set_source(model.route.apb.source, source);
+    model.route.apb.last_update_us = now_us;
     return true;
 }
 
@@ -121,37 +121,37 @@ bool apply_apb(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     if (parse_left_right_signed(sentence.field(2), sentence.field(3), value)) {
         if (value > 0.15f) value = 0.15f;
         if (value < -0.15f) value = -0.15f;
-        model.navigation.apb.xte_nmi.set(static_cast<Real>(value), now_us);
+        model.route.apb.xte_nmi.set(static_cast<Real>(value), now_us);
         any = true;
     }
 
-    model.navigation.apb.arrival_circle_entered.value = sentence.field(5)[0] == 'A';
-    model.navigation.apb.perpendicular_passed.value = sentence.field(6)[0] == 'A';
+    model.route.apb.arrival_circle_entered.value = sentence.field(5)[0] == 'A';
+    model.route.apb.perpendicular_passed.value = sentence.field(6)[0] == 'A';
     if (parse_real(sentence.field(7), value)) {
-        model.navigation.apb.origin_to_destination_bearing_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
+        model.route.apb.origin_to_destination_bearing_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
         any = true;
     }
-    nmea_copy_span(model.navigation.apb.destination_id, sizeof(model.navigation.apb.destination_id), sentence.field(9));
+    nmea_copy_span(model.route.apb.destination_id, sizeof(model.route.apb.destination_id), sentence.field(9));
     if (parse_real(sentence.field(10), value)) {
-        model.navigation.apb.present_to_destination_bearing_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
+        model.route.apb.present_to_destination_bearing_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
         any = true;
     }
     if (parse_real(sentence.field(12), value)) {
-        model.navigation.apb.track_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
-        model.navigation.apb.heading_to_steer_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
+        model.route.apb.track_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
+        model.route.apb.heading_to_steer_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
         any = true;
     }
 
     last_apb_mode_ = sentence.field(13)[0] == 'M' ? ship_data_model::AutopilotMode::compass : ship_data_model::AutopilotMode::gps;
-    model.navigation.apb.mode_hint.value = last_apb_mode_;
+    model.route.apb.mode_hint.value = last_apb_mode_;
     last_apb_sender_id_[0] = sentence.talker[0];
     last_apb_sender_id_[1] = sentence.talker[1];
     last_apb_sender_id_[2] = '\0';
-    model.navigation.apb.sender_id[0] = last_apb_sender_id_[0];
-    model.navigation.apb.sender_id[1] = last_apb_sender_id_[1];
-    model.navigation.apb.sender_id[2] = '\0';
-    set_source(model.navigation.apb.source, source);
-    model.navigation.apb.last_update_us = now_us;
+    model.route.apb.sender_id[0] = last_apb_sender_id_[0];
+    model.route.apb.sender_id[1] = last_apb_sender_id_[1];
+    model.route.apb.sender_id[2] = '\0';
+    set_source(model.route.apb.source, source);
+    model.route.apb.last_update_us = now_us;
     if (!any) last_error_ = "bad APB";
     return any;
 }
@@ -177,15 +177,15 @@ bool apply_bod_bww(const NmeaSentence& sentence, Model& model, uint64_t now_us, 
 
     float bearing_deg = 0.0f;
     if (parse_real(sentence.field(0), bearing_deg)) {
-        model.navigation.waypoint.bearing_true_deg.set(static_cast<Real>(wrap_360_deg(bearing_deg)), now_us);
+        model.route.waypoint.bearing_true_deg.set(static_cast<Real>(wrap_360_deg(bearing_deg)), now_us);
     }
     if (parse_real(sentence.field(2), bearing_deg)) {
-        model.navigation.waypoint.bearing_magnetic_deg.set(static_cast<Real>(wrap_360_deg(bearing_deg)), now_us);
+        model.route.waypoint.bearing_magnetic_deg.set(static_cast<Real>(wrap_360_deg(bearing_deg)), now_us);
     }
-    nmea_copy_span(model.navigation.waypoint.to_waypoint_id, sizeof(model.navigation.waypoint.to_waypoint_id), sentence.field(4));
-    nmea_copy_span(model.navigation.waypoint.from_waypoint_id, sizeof(model.navigation.waypoint.from_waypoint_id), sentence.field(5));
-    set_source(model.navigation.waypoint.source, source);
-    model.navigation.waypoint.last_update_us = now_us;
+    nmea_copy_span(model.route.waypoint.to_waypoint_id, sizeof(model.route.waypoint.to_waypoint_id), sentence.field(4));
+    nmea_copy_span(model.route.waypoint.from_waypoint_id, sizeof(model.route.waypoint.from_waypoint_id), sentence.field(5));
+    set_source(model.route.waypoint.source, source);
+    model.route.waypoint.last_update_us = now_us;
     return true;
 }
 
@@ -197,15 +197,15 @@ bool apply_bwc_bwr(const NmeaSentence& sentence, Model& model, uint64_t now_us, 
     }
 
     float value = 0.0f;
-    if (parse_utc_time_of_day_s(sentence.field(0), value)) model.navigation.waypoint.utc_time_s.set(static_cast<Real>(value), now_us);
-    if (parse_lat_lon(sentence.field(1), sentence.field(2), value)) model.navigation.waypoint.latitude_deg.set(static_cast<Real>(value), now_us);
-    if (parse_lat_lon(sentence.field(3), sentence.field(4), value)) model.navigation.waypoint.longitude_deg.set(static_cast<Real>(value), now_us);
-    if (parse_real(sentence.field(5), value)) model.navigation.waypoint.bearing_true_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
-    if (parse_real(sentence.field(7), value)) model.navigation.waypoint.bearing_magnetic_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
-    if (parse_distance_nmi(sentence.field(9), sentence.field(10), value)) model.navigation.waypoint.distance_nmi.set(static_cast<Real>(value), now_us);
-    nmea_copy_span(model.navigation.waypoint.to_waypoint_id, sizeof(model.navigation.waypoint.to_waypoint_id), sentence.field(11));
-    set_source(model.navigation.waypoint.source, source);
-    model.navigation.waypoint.last_update_us = now_us;
+    if (parse_utc_time_of_day_s(sentence.field(0), value)) model.route.waypoint.utc_time_s.set(static_cast<Real>(value), now_us);
+    if (parse_lat_lon(sentence.field(1), sentence.field(2), value)) model.route.waypoint.latitude_deg.set(static_cast<Real>(value), now_us);
+    if (parse_lat_lon(sentence.field(3), sentence.field(4), value)) model.route.waypoint.longitude_deg.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(5), value)) model.route.waypoint.bearing_true_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
+    if (parse_real(sentence.field(7), value)) model.route.waypoint.bearing_magnetic_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
+    if (parse_distance_nmi(sentence.field(9), sentence.field(10), value)) model.route.waypoint.distance_nmi.set(static_cast<Real>(value), now_us);
+    nmea_copy_span(model.route.waypoint.to_waypoint_id, sizeof(model.route.waypoint.to_waypoint_id), sentence.field(11));
+    set_source(model.route.waypoint.source, source);
+    model.route.waypoint.last_update_us = now_us;
     return true;
 }
 
@@ -229,14 +229,14 @@ bool apply_cur(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     }
     float value = 0.0f;
     if (parse_real(sentence.field(1), value)) {
-        if (sentence.field(2)[0] == 'M') model.water.current_direction_magnetic_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
-        else model.water.current_direction_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
+        if (sentence.field(2)[0] == 'M') model.sea.current_direction_magnetic_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
+        else model.sea.current_direction_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
     }
     if (parse_knots(sentence.field(3), sentence.field_count > 4 ? sentence.field(4) : NmeaSpan(), value)) {
-        model.water.current_speed_kn.set(static_cast<Real>(value), now_us);
+        model.sea.current_speed_kn.set(static_cast<Real>(value), now_us);
     }
-    set_source(model.water.source, source);
-    model.water.last_update_us = now_us;
+    set_source(model.sea.source, source);
+    model.sea.last_update_us = now_us;
     return true;
 }
 
@@ -248,9 +248,9 @@ bool apply_dbt(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
         return false;
     }
 
-    model.water.depth_m.set(static_cast<Real>(depth_m), now_us);
-    set_source(model.water.depth_source, source);
-    model.water.last_update_us = now_us;
+    model.sea.depth_m.set(static_cast<Real>(depth_m), now_us);
+    set_source(model.sea.depth_source, source);
+    model.sea.last_update_us = now_us;
     return true;
 }
 
@@ -262,9 +262,9 @@ bool apply_depth_below_keel(const NmeaSentence& sentence, Model& model, uint64_t
         return false;
     }
 
-    model.water.depth_below_keel_m.set(static_cast<Real>(depth_m), now_us);
-    set_source(model.water.depth_source, source);
-    model.water.last_update_us = now_us;
+    model.sea.depth_below_keel_m.set(static_cast<Real>(depth_m), now_us);
+    set_source(model.sea.depth_source, source);
+    model.sea.last_update_us = now_us;
     return true;
 }
 
@@ -276,9 +276,9 @@ bool apply_depth_below_surface(const NmeaSentence& sentence, Model& model, uint6
         return false;
     }
 
-    model.water.depth_below_surface_m.set(static_cast<Real>(depth_m), now_us);
-    set_source(model.water.depth_source, source);
-    model.water.last_update_us = now_us;
+    model.sea.depth_below_surface_m.set(static_cast<Real>(depth_m), now_us);
+    set_source(model.sea.depth_source, source);
+    model.sea.last_update_us = now_us;
     return true;
 }
 
@@ -291,25 +291,25 @@ bool apply_dcn(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
     float value = 0.0f;
     int32_t integer_value = 0;
-    nmea_copy_span(model.navigation.decca.chain_id, sizeof(model.navigation.decca.chain_id), sentence.field(0));
-    nmea_copy_span(model.navigation.decca.red_zone, sizeof(model.navigation.decca.red_zone), sentence.field(1));
-    if (parse_real(sentence.field(2), value)) model.navigation.decca.red_line_of_position.set(static_cast<Real>(value), now_us);
-    model.navigation.decca.red_master_status = sentence.field(3)[0];
-    nmea_copy_span(model.navigation.decca.green_zone, sizeof(model.navigation.decca.green_zone), sentence.field(4));
-    if (parse_real(sentence.field(5), value)) model.navigation.decca.green_line_of_position.set(static_cast<Real>(value), now_us);
-    model.navigation.decca.green_master_status = sentence.field(6)[0];
-    nmea_copy_span(model.navigation.decca.purple_zone, sizeof(model.navigation.decca.purple_zone), sentence.field(7));
-    if (parse_real(sentence.field(8), value)) model.navigation.decca.purple_line_of_position.set(static_cast<Real>(value), now_us);
-    model.navigation.decca.purple_master_status = sentence.field(9)[0];
-    model.navigation.decca.red_line_navigation_use = sentence.field(10)[0];
-    model.navigation.decca.green_line_navigation_use = sentence.field(11)[0];
-    model.navigation.decca.purple_line_navigation_use = sentence.field(12)[0];
+    nmea_copy_span(model.nav.decca.chain_id, sizeof(model.nav.decca.chain_id), sentence.field(0));
+    nmea_copy_span(model.nav.decca.red_zone, sizeof(model.nav.decca.red_zone), sentence.field(1));
+    if (parse_real(sentence.field(2), value)) model.nav.decca.red_line_of_position.set(static_cast<Real>(value), now_us);
+    model.nav.decca.red_master_status = sentence.field(3)[0];
+    nmea_copy_span(model.nav.decca.green_zone, sizeof(model.nav.decca.green_zone), sentence.field(4));
+    if (parse_real(sentence.field(5), value)) model.nav.decca.green_line_of_position.set(static_cast<Real>(value), now_us);
+    model.nav.decca.green_master_status = sentence.field(6)[0];
+    nmea_copy_span(model.nav.decca.purple_zone, sizeof(model.nav.decca.purple_zone), sentence.field(7));
+    if (parse_real(sentence.field(8), value)) model.nav.decca.purple_line_of_position.set(static_cast<Real>(value), now_us);
+    model.nav.decca.purple_master_status = sentence.field(9)[0];
+    model.nav.decca.red_line_navigation_use = sentence.field(10)[0];
+    model.nav.decca.green_line_navigation_use = sentence.field(11)[0];
+    model.nav.decca.purple_line_navigation_use = sentence.field(12)[0];
     if (parse_distance_nmi(sentence.field(13), sentence.field(14), value)) {
-        model.navigation.decca.position_uncertainty_nmi.set(static_cast<Real>(value), now_us);
+        model.nav.decca.position_uncertainty_nmi.set(static_cast<Real>(value), now_us);
     }
-    if (parse_int32(sentence.field(15), integer_value)) model.navigation.decca.fix_data_basis.set(integer_value, now_us);
-    set_source(model.navigation.decca.source, source);
-    model.navigation.decca.last_update_us = now_us;
+    if (parse_int32(sentence.field(15), integer_value)) model.nav.decca.fix_data_basis.set(integer_value, now_us);
+    set_source(model.nav.decca.source, source);
+    model.nav.decca.last_update_us = now_us;
     return true;
 }
 
@@ -340,10 +340,10 @@ bool apply_dpt(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
         return false;
     }
 
-    model.water.depth_m.set(static_cast<Real>(depth_m), now_us);
-    if (parse_real(sentence.field(1), offset_m)) model.water.depth_offset_m.set(static_cast<Real>(offset_m), now_us);
-    set_source(model.water.depth_source, source);
-    model.water.last_update_us = now_us;
+    model.sea.depth_m.set(static_cast<Real>(depth_m), now_us);
+    if (parse_real(sentence.field(1), offset_m)) model.sea.depth_offset_m.set(static_cast<Real>(offset_m), now_us);
+    set_source(model.sea.depth_source, source);
+    model.sea.last_update_us = now_us;
     return true;
 }
 
@@ -423,18 +423,18 @@ bool apply_dtm(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     }
 
     float value = 0.0f;
-    nmea_copy_span(model.navigation.datum.local_datum_code, sizeof(model.navigation.datum.local_datum_code), sentence.field(0));
-    nmea_copy_span(model.navigation.datum.local_datum_subcode, sizeof(model.navigation.datum.local_datum_subcode), sentence.field(1));
+    nmea_copy_span(model.nav.datum.local_datum_code, sizeof(model.nav.datum.local_datum_code), sentence.field(0));
+    nmea_copy_span(model.nav.datum.local_datum_subcode, sizeof(model.nav.datum.local_datum_subcode), sentence.field(1));
     if (parse_north_south_signed(sentence.field(2), sentence.field(3), value)) {
-        model.navigation.datum.latitude_offset_min.set(static_cast<Real>(value), now_us);
+        model.nav.datum.latitude_offset_min.set(static_cast<Real>(value), now_us);
     }
     if (parse_east_west_signed(sentence.field(4), sentence.field(5), value)) {
-        model.navigation.datum.longitude_offset_min.set(static_cast<Real>(value), now_us);
+        model.nav.datum.longitude_offset_min.set(static_cast<Real>(value), now_us);
     }
-    if (parse_real(sentence.field(6), value)) model.navigation.datum.altitude_offset_m.set(static_cast<Real>(value), now_us);
-    nmea_copy_span(model.navigation.datum.reference_datum_code, sizeof(model.navigation.datum.reference_datum_code), sentence.field(7));
-    set_source(model.navigation.datum.source, source);
-    model.navigation.datum.last_update_us = now_us;
+    if (parse_real(sentence.field(6), value)) model.nav.datum.altitude_offset_m.set(static_cast<Real>(value), now_us);
+    nmea_copy_span(model.nav.datum.reference_datum_code, sizeof(model.nav.datum.reference_datum_code), sentence.field(7));
+    set_source(model.nav.datum.source, source);
+    model.nav.datum.last_update_us = now_us;
     return true;
 }
 
