@@ -14,8 +14,15 @@ public:
     explicit Nmea0183Input(ModelStore<Real>& store) : store_(store) {}
 
     bool feed_line(const char* line, SourceId source_id, uint64_t now_us, bool validate_checksum = true) {
+        const nmea0183_connector::NmeaTokenizeResult tokens = nmea0183_connector::tokenize_nmea_line(line);
+        const nmea0183_connector::NmeaToken* token = tokens.first_sentence();
+        if (!token) return false;
+
+        char sentence_text[nmea0183_connector::NMEA_MAX_SENTENCE_LEN];
+        nmea0183_connector::nmea_copy_span(sentence_text, sizeof(sentence_text), token->text);
+
         nmea0183_connector::NmeaSentence sentence;
-        if (!parser_.parse_line(line, sentence, validate_checksum)) return false;
+        if (!parser_.parse_line(sentence_text, sentence, validate_checksum)) return false;
         const bool applied = rx_.apply_sentence(sentence, store_.model(), now_us, ship_data_model::SensorSource::serial);
         if (!applied) return false;
         mark_changed_from_sentence(sentence, source_id, now_us);
