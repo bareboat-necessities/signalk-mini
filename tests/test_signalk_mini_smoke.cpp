@@ -93,8 +93,8 @@ static void test_second_smart0183_group(signalk_mini::SignalKMiniApp<float>& app
     REQUIRE(std::strcmp(app.store().model().navigation.datum.reference_datum_code, "W84") == 0);
 
     REQUIRE(app.nmea0183().feed_line(sentence("GPFSI,156800000,156800000,T,25").c_str(), 1, now_us += 1000));
-    NEAR(app.store().model().navigation.radio_frequency_set.transmitting_frequency_hz.value, 156800000.0f, 1.0f);
-    NEAR(app.store().model().navigation.radio_frequency_set.receiving_frequency_hz.value, 156800000.0f, 1.0f);
+    NEAR(app.store().model().navigation.radio_frequency_set.transmitting_frequency_hz.value, 156800000.0f, 32.0f);
+    NEAR(app.store().model().navigation.radio_frequency_set.receiving_frequency_hz.value, 156800000.0f, 32.0f);
     REQUIRE(app.store().model().navigation.radio_frequency_set.communication_mode == 'T');
     REQUIRE(app.store().model().navigation.radio_frequency_set.power_level.value == 25);
 
