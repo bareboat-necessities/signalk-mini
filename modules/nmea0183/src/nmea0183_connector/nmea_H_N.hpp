@@ -153,9 +153,11 @@ bool apply_mda(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
         model.wind.surface.speed_m_s.set(static_cast<Real>(value), now_us);
         model.wind.truewind.speed_m_s.set(static_cast<Real>(value), now_us);
     }
+    set_source(model.env.source, source);
     set_source(model.sea.source, source);
     set_source(model.wind.surface.source, source);
     set_source(model.wind.truewind.source, source);
+    model.env.last_update_us = now_us;
     model.sea.last_update_us = now_us;
     model.wind.surface.last_update_us = now_us;
     model.wind.truewind.last_update_us = now_us;
