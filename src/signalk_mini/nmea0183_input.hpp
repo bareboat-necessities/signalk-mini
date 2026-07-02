@@ -51,6 +51,12 @@ private:
         if (nmea0183_connector::sentence_is(sentence, "DBT") || nmea0183_connector::sentence_is(sentence, "DPT")) {
             store_.mark_changed(ModelField::WaterDepthM, source_id, now_us);
         }
+        if (nmea0183_connector::sentence_is(sentence, "DBK")) {
+            store_.mark_changed(ModelField::WaterDepthBelowKeelM, source_id, now_us);
+        }
+        if (nmea0183_connector::sentence_is(sentence, "DBS")) {
+            store_.mark_changed(ModelField::WaterDepthBelowSurfaceM, source_id, now_us);
+        }
     }
 
     ModelStore<Real>& store_;
