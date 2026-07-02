@@ -27,7 +27,7 @@ Connectors are configuration entries. They describe a protocol plus transport, s
 
 Connections are runtime objects. One connector can create zero, one, or many runtime connections. For example, one TCP server connector can accept many TCP connections.
 
-Protocols may also have protocol-specific properties. For `nmea0183`, the first protocol property is `validate_checksum`.
+Connector config is separated into common connector identity, access flags, protocol-specific settings, and transport-specific settings. For example, NMEA0183 checksum settings belong to the NMEA0183 protocol block, while TCP host/port belong to the TCP transport block.
 
 ## Linux config
 
@@ -46,19 +46,47 @@ examples/linux/signalk-mini.conf
 The config has one mandatory main Signal K server and optional connectors. Each connector combines protocol plus transport, for example:
 
 ```text
+enabled = true;
+label = "nmea0183-tcp-client";
 protocol = "nmea0183";
 transport = "tcp_client";
-validate_checksum = false;
+
+access: {
+  allow_rx = true;
+  allow_tx = false;
+};
+
+nmea0183: {
+  validate_checksum = false;
+};
+
+tcp_client: {
+  host = "127.0.0.1";
+  port = 10110;
+};
 ```
 
 or:
 
 ```text
+enabled = true;
+label = "nmea0183-serial";
 protocol = "nmea0183";
 transport = "serial";
-device = "/dev/ttyUSB0";
-baud = 4800;
-validate_checksum = true;
+
+access: {
+  allow_rx = true;
+  allow_tx = false;
+};
+
+nmea0183: {
+  validate_checksum = true;
+};
+
+serial: {
+  device = "/dev/ttyUSB0";
+  baud = 4800;
+};
 ```
 
 For NMEA0183, omitted `validate_checksum` defaults by transport:
