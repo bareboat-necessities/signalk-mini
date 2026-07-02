@@ -38,6 +38,9 @@ struct WaterData {
     Stamped<Real> depth_below_keel_m;
     Stamped<Real> depth_below_surface_m;
     Stamped<Real> depth_offset_m;
+    Stamped<Real> temperature_c;
+    Stamped<Real> trawl_headrope_to_footrope_m;
+    Stamped<Real> trawl_headrope_to_bottom_m;
     uint64_t last_update_us = 0;
 };
 
