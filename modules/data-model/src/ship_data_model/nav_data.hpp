@@ -13,6 +13,11 @@ struct GpsData {
     RangeSetting<Real> rate_hz;
 
     Stamped<Real> timestamp_s;
+    Stamped<int32_t> date_day;
+    Stamped<int32_t> date_month;
+    Stamped<int32_t> date_year;
+    Stamped<int32_t> local_zone_hours;
+    Stamped<int32_t> local_zone_minutes;
     Stamped<Real> track_deg;
     Stamped<Real> speed_kn;
 
@@ -349,6 +354,10 @@ template<typename Real = float>
 struct WaypointNavigationData {
     Setting<SensorSource> source;
     Stamped<Real> utc_time_s;
+    Stamped<Real> origin_utc_time_s;
+    Stamped<Real> origin_elapsed_time_s;
+    Stamped<Real> destination_utc_time_s;
+    Stamped<Real> destination_time_remaining_s;
     Stamped<Real> latitude_deg;
     Stamped<Real> longitude_deg;
     Stamped<Real> bearing_true_deg;
