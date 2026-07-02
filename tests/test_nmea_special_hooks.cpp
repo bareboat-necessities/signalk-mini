@@ -25,13 +25,17 @@ static std::string bang_sentence(const char* body) {
 }
 
 struct Counts {
+    int query = 0;
     int ais = 0;
     int seatalk = 0;
+    int navtex = 0;
     int proprietary = 0;
 };
 
+static void count_query(const nmea0183_connector::NmeaSentence&, void* user) { static_cast<Counts*>(user)->query++; }
 static void count_ais(const nmea0183_connector::NmeaSentence&, void* user) { static_cast<Counts*>(user)->ais++; }
 static void count_seatalk(const nmea0183_connector::NmeaSentence&, void* user) { static_cast<Counts*>(user)->seatalk++; }
+static void count_navtex(const nmea0183_connector::NmeaSentence&, void* user) { static_cast<Counts*>(user)->navtex++; }
 static void count_proprietary(const nmea0183_connector::NmeaSentence&, void* user) { static_cast<Counts*>(user)->proprietary++; }
 
 int main() {
@@ -41,12 +45,21 @@ int main() {
 
     nmea0183_connector::NmeaParserHooks hooks;
     hooks.user = &counts;
+    hooks.on_query_sentence = count_query;
     hooks.on_ais_sentence = count_ais;
     hooks.on_seatalk_sentence = count_seatalk;
+    hooks.on_navtex_sentence = count_navtex;
     hooks.on_proprietary_sentence = count_proprietary;
     parser.set_hooks(hooks);
 
-    std::string line = bang_sentence("AIVDM,1,1,,A,TESTPAYLOAD,0");
+    std::string line = normal_sentence("CCGPQ,GGA");
+    REQUIRE(parser.parse_line(line.c_str(), parsed));
+    REQUIRE(parsed.family == nmea0183_connector::NmeaSentenceFamily::Query);
+    REQUIRE(nmea0183_connector::nmea_span_equals(parsed.query_requester_talker, "CC"));
+    REQUIRE(nmea0183_connector::nmea_span_equals(parsed.query_target_talker, "GP"));
+    REQUIRE(nmea0183_connector::nmea_span_equals(parsed.query_requested_sentence, "GGA"));
+
+    line = bang_sentence("AIVDM,1,1,,A,TESTPAYLOAD,0");
     REQUIRE(parser.parse_line(line.c_str(), parsed));
     REQUIRE(parsed.family == nmea0183_connector::NmeaSentenceFamily::Ais);
 
@@ -54,12 +67,18 @@ int main() {
     REQUIRE(parser.parse_line(line.c_str(), parsed));
     REQUIRE(parsed.family == nmea0183_connector::NmeaSentenceFamily::SeaTalk);
 
+    line = normal_sentence("NXNRX,1,1,01,A,TEST MESSAGE");
+    REQUIRE(parser.parse_line(line.c_str(), parsed));
+    REQUIRE(parsed.family == nmea0183_connector::NmeaSentenceFamily::NavTex);
+
     line = normal_sentence("PXYZ,1,2,3");
     REQUIRE(parser.parse_line(line.c_str(), parsed));
     REQUIRE(parsed.family == nmea0183_connector::NmeaSentenceFamily::Proprietary);
 
+    REQUIRE(counts.query == 1);
     REQUIRE(counts.ais == 1);
     REQUIRE(counts.seatalk == 1);
+    REQUIRE(counts.navtex == 1);
     REQUIRE(counts.proprietary == 1);
     return 0;
 }
