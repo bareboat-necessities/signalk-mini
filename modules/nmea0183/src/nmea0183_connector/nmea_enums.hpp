@@ -205,6 +205,7 @@ inline bool nmea_talker_code_equals(NmeaSpan talker, const char* code) {
 
 inline NmeaTalkerId nmea_talker_id_from_span(NmeaSpan talker) {
     if (talker.length == 2 && talker[0] == 'U' && talker[1] >= '0' && talker[1] <= '9') return NmeaTalkerId::UserConfigured;
+    if (nmea_talker_code_equals(talker, "GQ") || nmea_talker_code_equals(talker, "QZ") || nmea_talker_code_equals(talker, "PQ")) return NmeaTalkerId::Qzss;
     if (talker.length >= 1 && talker[0] == 'P') return NmeaTalkerId::Proprietary;
     if (nmea_talker_code_equals(talker, "AB")) return NmeaTalkerId::IndependentAisBaseStation;
     if (nmea_talker_code_equals(talker, "AD")) return NmeaTalkerId::DependentAisBaseStation;
@@ -242,7 +243,6 @@ inline NmeaTalkerId nmea_talker_id_from_span(NmeaSpan talker) {
     if (nmea_talker_code_equals(talker, "GL")) return NmeaTalkerId::Glonass;
     if (nmea_talker_code_equals(talker, "GN")) return NmeaTalkerId::CombinedGnss;
     if (nmea_talker_code_equals(talker, "GP")) return NmeaTalkerId::Gps;
-    if (nmea_talker_code_equals(talker, "GQ") || nmea_talker_code_equals(talker, "QZ") || nmea_talker_code_equals(talker, "PQ")) return NmeaTalkerId::Qzss;
     if (nmea_talker_code_equals(talker, "HC")) return NmeaTalkerId::HeadingMagneticCompass;
     if (nmea_talker_code_equals(talker, "HD")) return NmeaTalkerId::HullDoor;
     if (nmea_talker_code_equals(talker, "HE")) return NmeaTalkerId::HeadingNorthSeekingGyro;
