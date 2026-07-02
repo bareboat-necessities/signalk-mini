@@ -139,9 +139,6 @@ private:
 #include "nmea_F_G.hpp"
 #include "nmea_H_N.hpp"
 #include "nmea_O_Z.hpp"
-#include "nmea_Z.hpp"
-#include "nmea_gpsd_g_m.hpp"
-#include "nmea_gpsd_r_t.hpp"
 };
 
 } // namespace nmea0183_connector
