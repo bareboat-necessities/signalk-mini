@@ -75,6 +75,40 @@ static void test_first_smart0183_group(signalk_mini::SignalKMiniApp<float>& app,
     NEAR(app.store().model().water.depth_below_surface_m.value, 6.0f, 0.001f);
 }
 
+static void test_second_smart0183_group(signalk_mini::SignalKMiniApp<float>& app, uint64_t& now_us) {
+    REQUIRE(app.nmea0183().feed_line(sentence("GPDCN,5B,A,12.3,A,B,23.4,V,C,34.5,A,Y,N,Y,0.8,N,1").c_str(), 1, now_us += 1000));
+    REQUIRE(std::strcmp(app.store().model().navigation.decca.chain_id, "5B") == 0);
+    REQUIRE(std::strcmp(app.store().model().navigation.decca.red_zone, "A") == 0);
+    NEAR(app.store().model().navigation.decca.red_line_of_position.value, 12.3f, 0.001f);
+    REQUIRE(app.store().model().navigation.decca.green_master_status == 'V');
+    REQUIRE(app.store().model().navigation.decca.red_line_navigation_use == 'Y');
+    NEAR(app.store().model().navigation.decca.position_uncertainty_nmi.value, 0.8f, 0.001f);
+    REQUIRE(app.store().model().navigation.decca.fix_data_basis.value == 1);
+
+    REQUIRE(app.nmea0183().feed_line(sentence("GPDTM,W84,,0.10,N,0.20,W,1.5,W84").c_str(), 1, now_us += 1000));
+    REQUIRE(std::strcmp(app.store().model().navigation.datum.local_datum_code, "W84") == 0);
+    NEAR(app.store().model().navigation.datum.latitude_offset_min.value, 0.10f, 0.001f);
+    NEAR(app.store().model().navigation.datum.longitude_offset_min.value, -0.20f, 0.001f);
+    NEAR(app.store().model().navigation.datum.altitude_offset_m.value, 1.5f, 0.001f);
+    REQUIRE(std::strcmp(app.store().model().navigation.datum.reference_datum_code, "W84") == 0);
+
+    REQUIRE(app.nmea0183().feed_line(sentence("GPFSI,156800000,156800000,T,25").c_str(), 1, now_us += 1000));
+    NEAR(app.store().model().navigation.radio_frequency_set.transmitting_frequency_hz.value, 156800000.0f, 1.0f);
+    NEAR(app.store().model().navigation.radio_frequency_set.receiving_frequency_hz.value, 156800000.0f, 1.0f);
+    REQUIRE(app.store().model().navigation.radio_frequency_set.communication_mode == 'T');
+    REQUIRE(app.store().model().navigation.radio_frequency_set.power_level.value == 25);
+
+    REQUIRE(app.nmea0183().feed_line(sentence("GPGBS,225444,1.1,2.2,3.3,12,0.05,4.4,0.6").c_str(), 1, now_us += 1000));
+    NEAR(app.store().model().navigation.gps_fault.utc_time_s.value, 82484.0f, 0.001f);
+    NEAR(app.store().model().navigation.gps_fault.expected_error_lat_m.value, 1.1f, 0.001f);
+    NEAR(app.store().model().navigation.gps_fault.expected_error_lon_m.value, 2.2f, 0.001f);
+    NEAR(app.store().model().navigation.gps_fault.expected_error_alt_m.value, 3.3f, 0.001f);
+    REQUIRE(app.store().model().navigation.gps_fault.failed_satellite_prn.value == 12);
+    NEAR(app.store().model().navigation.gps_fault.missed_detection_probability.value, 0.05f, 0.001f);
+    NEAR(app.store().model().navigation.gps_fault.failed_satellite_bias_m.value, 4.4f, 0.001f);
+    NEAR(app.store().model().navigation.gps_fault.failed_satellite_bias_stddev_m.value, 0.6f, 0.001f);
+}
+
 int main() {
     using Real = float;
 
@@ -115,6 +149,7 @@ int main() {
     NEAR(model.water.depth_m.value, 5.6f, 0.001f);
 
     test_first_smart0183_group(app, now_us);
+    test_second_smart0183_group(app, now_us);
 
     signalk_mini::SignalKMapper<Real> mapper;
     signalk_mini::ModelChange change;
