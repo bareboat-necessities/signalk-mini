@@ -16,7 +16,7 @@ struct ServerIdentityConfig {
 struct SignalKProtocolServerConfig {
     const char* host = "0.0.0.0";
     uint16_t port = 20223;
-    uint16_t max_clients = 8;
+    uint16_t max_connections = 8;
     bool allow_rx = true;
     bool allow_tx = true;
 };
@@ -48,6 +48,7 @@ enum class ConnectorTransport : uint8_t {
 };
 
 struct ConnectorConfig {
+    // ConnectorConfig is static configuration. It may create zero, one, or many runtime connections.
     bool enabled = false;
     ConnectorProtocol protocol = ConnectorProtocol::None;
     ConnectorTransport transport = ConnectorTransport::None;
@@ -75,7 +76,7 @@ struct SignalKMiniConfig {
 
     PublisherConfig publisher;
 
-    // Optional connectors are added or removed by configuration.
+    // Connectors are configuration entries. Runtime TCP peers are connections.
     ConnectorConfig connectors[max_connector_configs] = {
         {true, ConnectorProtocol::Nmea0183, ConnectorTransport::TcpClient, "nmea0183-tcp-client", "127.0.0.1", 10110, nullptr, 4800, 0, 0, 0, true, false},
         {},
