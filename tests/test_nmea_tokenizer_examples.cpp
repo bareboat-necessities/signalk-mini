@@ -27,6 +27,23 @@ static void check_sentence_token(const char* raw, nmea0183_connector::NmeaSenten
     REQUIRE(token->has_checksum);
 }
 
+static void check_vendor(const char* body, nmea0183_connector::NmeaProprietaryVendor expected, const char* expected_code) {
+    const std::string line = sentence(body);
+    const nmea0183_connector::NmeaTokenizeResult tokens = nmea0183_connector::tokenize_nmea_line(line.c_str());
+    const nmea0183_connector::NmeaToken* token = tokens.first_sentence();
+    REQUIRE(token != nullptr);
+    REQUIRE(token->family == nmea0183_connector::NmeaSentenceFamily::Proprietary);
+    REQUIRE(token->proprietary_vendor == expected);
+    REQUIRE(nmea0183_connector::nmea_span_equals(token->proprietary_vendor_code, expected_code));
+
+    nmea0183_connector::Nmea0183StreamParser parser;
+    nmea0183_connector::NmeaSentence parsed;
+    REQUIRE(parser.parse_line(line.c_str(), parsed));
+    REQUIRE(parsed.family == nmea0183_connector::NmeaSentenceFamily::Proprietary);
+    REQUIRE(parsed.proprietary_vendor == expected);
+    REQUIRE(nmea0183_connector::nmea_span_equals(parsed.proprietary_vendor_code, expected_code));
+}
+
 int main() {
     check_sentence_token("$GPGGA,002153.000,3342.6618,N,11751.3858,W,1,10,1.2,27.0,M,-34.2,M,,0000*5A", nmea0183_connector::NmeaSentenceFamily::Standard, '$');
     check_sentence_token("!AIVDM,1,1,,A,13HOI:0P0000VOHLCnHQKwvL05Ip,0*23", nmea0183_connector::NmeaSentenceFamily::Ais, '!');
@@ -38,6 +55,15 @@ int main() {
 
     const std::string navtex = sentence("NXNRX,1,1,01,A,TEST MESSAGE");
     check_sentence_token(navtex.c_str(), nmea0183_connector::NmeaSentenceFamily::NavTex, '$');
+
+    check_vendor("PGRME,1.0,M,2.0,M,3.0,M", nmea0183_connector::NmeaProprietaryVendor::Garmin, "GRM");
+    check_vendor("PUBX,00,000000,0000.0000,N,00000.0000,E", nmea0183_connector::NmeaProprietaryVendor::Ublox, "UBX");
+    check_vendor("PMTK001,314,3", nmea0183_connector::NmeaProprietaryVendor::MediaTek, "MTK");
+    check_vendor("PSRF100,1,4800,8,1,0", nmea0183_connector::NmeaProprietaryVendor::SiRf, "SRF");
+    check_vendor("PASHR,123519,1.2,T,0.1,R,0.2,P,0.3,0.4,1,0", nmea0183_connector::NmeaProprietaryVendor::Ashtech, "ASH");
+    check_vendor("PAMTC,EN,HDG,1", nmea0183_connector::NmeaProprietaryVendor::Airmar, "AMT");
+    check_vendor("PFEC,GPatt,1,2,3", nmea0183_connector::NmeaProprietaryVendor::Furuno, "FEC");
+    check_vendor("PZZZ,1,2,3", nmea0183_connector::NmeaProprietaryVendor::Unknown, "ZZZ");
 
     const char* inmarsat = "/g:1-9-1234,s:egcterm1,n:213,c:1333636200*hh/$CSSM3,123456,005213,798,0,3,14,00,2012,04,05,14,30,3400,N,076,W,300*hh";
     const nmea0183_connector::NmeaTokenizeResult tokens = nmea0183_connector::tokenize_nmea_line(inmarsat);
