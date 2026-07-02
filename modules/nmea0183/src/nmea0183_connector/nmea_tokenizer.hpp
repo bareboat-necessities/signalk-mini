@@ -89,7 +89,7 @@ inline NmeaTokenizeResult tokenize_nmea_line(const char* raw_line) {
     const NmeaSpan line = nmea_trim_line(raw_line);
     if (line.empty()) return result;
 
-    if (nmea_token_start(line[0])) {
+    if (nmea_is_token_start(line[0])) {
         const NmeaSentenceFamily family = line[0] == '!' ? NmeaSentenceFamily::Ais : NmeaSentenceFamily::Standard;
         nmea_add_token(result, line, family, true);
         return result;
