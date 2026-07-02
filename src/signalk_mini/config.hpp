@@ -47,6 +47,14 @@ enum class ConnectorTransport : uint8_t {
     AnalogPin,
 };
 
+struct Nmea0183ProtocolConfig {
+    bool validate_checksum = true;
+};
+
+inline bool default_nmea0183_validate_checksum(ConnectorTransport transport) {
+    return transport == ConnectorTransport::Serial;
+}
+
 struct ConnectorConfig {
     // ConnectorConfig is static configuration. It may create zero, one, or many runtime connections.
     bool enabled = false;
@@ -66,6 +74,8 @@ struct ConnectorConfig {
 
     bool allow_rx = true;
     bool allow_tx = false;
+
+    Nmea0183ProtocolConfig nmea0183;
 };
 
 struct SignalKMiniConfig {
@@ -78,7 +88,7 @@ struct SignalKMiniConfig {
 
     // Connectors are configuration entries. Runtime TCP peers are connections.
     ConnectorConfig connectors[max_connector_configs] = {
-        {true, ConnectorProtocol::Nmea0183, ConnectorTransport::TcpClient, "nmea0183-tcp-client", "127.0.0.1", 10110, nullptr, 4800, 0, 0, 0, true, false},
+        {true, ConnectorProtocol::Nmea0183, ConnectorTransport::TcpClient, "nmea0183-tcp-client", "127.0.0.1", 10110, nullptr, 4800, 0, 0, 0, true, false, {false}},
         {},
         {},
         {}
