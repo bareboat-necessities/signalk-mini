@@ -44,7 +44,15 @@ struct WaterData {
     Stamped<Real> current_direction_deg;
     Stamped<Real> current_direction_magnetic_deg;
     Stamped<Real> wind_speed_kn;
+    Stamped<Real> wind_speed_m_s;
     Stamped<Real> wind_direction_deg;
+    Stamped<Real> wind_direction_magnetic_deg;
+    Stamped<Real> barometric_pressure_inhg;
+    Stamped<Real> barometric_pressure_bar;
+    Stamped<Real> air_temperature_c;
+    Stamped<Real> relative_humidity_percent;
+    Stamped<Real> absolute_humidity_percent;
+    Stamped<Real> dew_point_c;
     Stamped<Real> depth_m;
     Stamped<Real> depth_below_keel_m;
     Stamped<Real> depth_below_surface_m;
@@ -54,6 +62,9 @@ struct WaterData {
     Stamped<Real> trawl_headrope_to_bottom_m;
     Stamped<Real> trawl_door_centerline_offset_m;
     Stamped<Real> trawl_door_along_centerline_m;
+    Stamped<Real> trawl_cartesian_centerline_offset_m;
+    Stamped<Real> trawl_cartesian_along_centerline_m;
+    Stamped<int32_t> trawl_catch_sensor_status[3];
     Stamped<Real> trawl_depth_below_surface_m;
     Stamped<Real> trawl_relative_range_m;
     Stamped<Real> trawl_relative_bearing_deg;
