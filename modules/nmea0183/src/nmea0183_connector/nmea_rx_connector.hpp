@@ -91,6 +91,11 @@ public:
         if (sentence_is(sentence, "RTE")) return apply_rte(sentence, model, now_us, source);
         if (sentence_is(sentence, "SFI")) return apply_sfi(sentence, model, now_us, source);
         if (sentence_is(sentence, "STN")) return apply_stn(sentence, model, now_us, source);
+        if (sentence_is(sentence, "TDS")) return apply_tds(sentence, model, now_us, source);
+        if (sentence_is(sentence, "TPR")) return apply_tpr(sentence, model, now_us, source);
+        if (sentence_is(sentence, "TPT")) return apply_tpt(sentence, model, now_us, source);
+        if (sentence_is(sentence, "TRF")) return apply_trf(sentence, model, now_us, source);
+        if (sentence_is(sentence, "TTM")) return apply_ttm(sentence, model, now_us, source);
         if (sentence_is(sentence, "VHW")) return apply_vhw(sentence, model, now_us, source);
         if (sentence_is(sentence, "VTG")) return apply_vtg(sentence, model, now_us, source);
         if (sentence_is(sentence, "VWR")) return apply_vwr(sentence, model, now_us, source, false);
