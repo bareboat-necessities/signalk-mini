@@ -17,3 +17,28 @@ jobs:
         run: cmake --build build --parallel
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  arduino-atoms3r:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+      - name: Install ESP32 core and libraries
+        run: |
+          arduino-cli config init --overwrite
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32
+          arduino-cli lib update-index
+          arduino-cli lib install M5Unified
+          arduino-cli lib install ArduinoJson
+      - name: Compile AtomS3R sketch
+        run: |
+          arduino-cli compile \
+            --fqbn esp32:esp32:m5stack_atoms3r \
+            --library . \
+            --library modules/async-event-loop \
+            --library modules/data-model \
+            --library modules/nmea0183 \
+            mcu/signalk-atoms3r
