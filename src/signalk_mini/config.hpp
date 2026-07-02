@@ -76,9 +76,11 @@ struct SerialTransportConfig {
 };
 
 struct UdpTransportConfig {
-    const char* host = "127.0.0.1";
-    uint16_t port = 0;
-    uint16_t local_port = 0;
+    const char* listen_host = "0.0.0.0";
+    uint16_t listen_port = 0;
+    const char* remote_host = nullptr;
+    uint16_t remote_port = 0;
+    bool allow_broadcast = true;
 };
 
 struct I2cTransportConfig {
@@ -117,23 +119,24 @@ struct ConnectorConfig {
     ConnectorTransportConfig transport;
 };
 
-inline ConnectorConfig make_default_nmea0183_tcp_client_connector() {
+inline ConnectorConfig make_default_nmea0183_udp_listener_connector() {
     ConnectorConfig connector;
     connector.enabled = true;
-    connector.label = "nmea0183-tcp-client";
+    connector.label = "nmea0183-udp-10110";
     connector.access.allow_rx = true;
     connector.access.allow_tx = false;
     connector.protocol.kind = ConnectorProtocol::Nmea0183;
     connector.protocol.nmea0183.validate_checksum = false;
     connector.protocol.nmea0183.validate_checksum_configured = true;
-    connector.transport.kind = ConnectorTransport::TcpClient;
-    connector.transport.tcp_client.host = "127.0.0.1";
-    connector.transport.tcp_client.port = 10110;
+    connector.transport.kind = ConnectorTransport::Udp;
+    connector.transport.udp.listen_host = "0.0.0.0";
+    connector.transport.udp.listen_port = 10110;
+    connector.transport.udp.allow_broadcast = true;
     return connector;
 }
 
 inline const ConnectorConfig default_connector_configs[] = {
-    make_default_nmea0183_tcp_client_connector()
+    make_default_nmea0183_udp_listener_connector()
 };
 
 struct SignalKMiniConfig {
