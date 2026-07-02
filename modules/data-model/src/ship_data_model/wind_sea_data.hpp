@@ -35,6 +35,8 @@ struct WaterData {
     Stamped<Real> wind_speed_kn;
     Stamped<Real> wind_direction_deg;
     Stamped<Real> depth_m;
+    Stamped<Real> depth_below_keel_m;
+    Stamped<Real> depth_below_surface_m;
     Stamped<Real> depth_offset_m;
     uint64_t last_update_us = 0;
 };
