@@ -2,10 +2,20 @@
 
 #include <memory>
 #include <stddef.h>
+#include <stdint.h>
 #include <vector>
 
 #if defined(ARDUINO)
 #define ASYNC_EVENT_LOOP_ENABLE_ARDUINO_WIFI_TCP
+#else
+#include <arpa/inet.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <unistd.h>
 #endif
 
 #include <async_event_loop.hpp>
@@ -15,6 +25,123 @@
 #include "publisher.hpp"
 
 namespace signalk_mini {
+
+class UdpListenerStream final : public async_event_loop::IByteStream {
+public:
+    UdpListenerStream() = default;
+    ~UdpListenerStream() override { close(); }
+
+    UdpListenerStream(const UdpListenerStream&) = delete;
+    UdpListenerStream& operator=(const UdpListenerStream&) = delete;
+
+    bool open(const UdpTransportConfig& config) {
+        close();
+#if defined(ARDUINO)
+        (void)config;
+        return false;
+#else
+        if (config.listen_port == 0) return false;
+        const int fd = ::socket(AF_INET, SOCK_DGRAM, 0);
+        if (fd < 0) return false;
+
+        int one = 1;
+        (void)::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+        if (config.allow_broadcast) {
+            (void)::setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &one, sizeof(one));
+        }
+
+        int flags = ::fcntl(fd, F_GETFL, 0);
+        if (flags < 0 || ::fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0) {
+            ::close(fd);
+            return false;
+        }
+
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(config.listen_port);
+        if (!config.listen_host || strcmp(config.listen_host, "0.0.0.0") == 0) {
+            addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        } else if (::inet_pton(AF_INET, config.listen_host, &addr.sin_addr) != 1) {
+            ::close(fd);
+            return false;
+        }
+
+        if (::bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
+            ::close(fd);
+            return false;
+        }
+
+        fd_ = fd;
+        return true;
+#endif
+    }
+
+    void close() {
+#if !defined(ARDUINO)
+        if (fd_ >= 0) {
+            ::close(fd_);
+            fd_ = -1;
+        }
+#endif
+    }
+
+    int read(uint8_t* dst, size_t max_len) override {
+#if defined(ARDUINO)
+        (void)dst;
+        (void)max_len;
+        return 0;
+#else
+        if (fd_ < 0 || !dst || max_len == 0) return 0;
+        const ssize_t n = ::recv(fd_, dst, max_len, 0);
+        if (n < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) return 0;
+            return -1;
+        }
+        return static_cast<int>(n);
+#endif
+    }
+
+    int write(const uint8_t* src, size_t len) override {
+        (void)src;
+        (void)len;
+        return 0;
+    }
+
+    bool readable() const override {
+#if defined(ARDUINO)
+        return false;
+#else
+        if (fd_ < 0) return false;
+        int bytes = 0;
+        return ::ioctl(fd_, FIONREAD, &bytes) == 0 && bytes > 0;
+#endif
+    }
+
+    bool writable() const override { return false; }
+
+    bool valid() const override {
+#if defined(ARDUINO)
+        return false;
+#else
+        return fd_ >= 0;
+#endif
+    }
+
+    bool is_datagram() const override { return true; }
+
+    int native_fd() const override {
+#if defined(ARDUINO)
+        return -1;
+#else
+        return fd_;
+#endif
+    }
+
+private:
+#if !defined(ARDUINO)
+    int fd_ = -1;
+#endif
+};
 
 template<typename Real, size_t MaxSignalKConnections = 8, size_t MaxConnectionsPerConnector = 4>
 class MiniSignalKServer {
@@ -125,10 +252,12 @@ private:
         async_event_loop::NativeTcpClient tcp_client;
         async_event_loop::NativeSerialStream serial_stream;
         async_event_loop::LineProtocolReader<192> serial_reader;
+        UdpListenerStream udp_listener;
         ConnectorTcpServerHandler tcp_server_handler;
         ConnectorTcpClientHandler tcp_client_handler;
         async_event_loop::TcpLineServerHandler<192, MaxConnectionsPerConnector> tcp_line_handler;
         async_event_loop::EventHandle serial_event{};
+        async_event_loop::EventHandle udp_event{};
     };
 
     ConnectorRuntimeSlot& connector_slot(size_t index) { return *connector_slots_[index]; }
@@ -167,6 +296,8 @@ private:
             return listen(slot.tcp_server, slot.tcp_line_handler, slot.config.transport.tcp_server.host, slot.config.transport.tcp_server.port);
         case ConnectorTransport::Serial:
             return start_nmea0183_serial_connector(slot);
+        case ConnectorTransport::Udp:
+            return start_nmea0183_udp_listener(slot);
         default:
             return false;
         }
@@ -186,12 +317,42 @@ private:
         return static_cast<bool>(slot.serial_event);
     }
 
+    bool start_nmea0183_udp_listener(ConnectorRuntimeSlot& slot) {
+        if (!slot.udp_listener.open(slot.config.transport.udp)) return false;
+        if (!slot.connection_flags.allow_rx) return true;
+        const size_t connector_index = slot.index;
+        slot.udp_event = loop_.on_bytes_ready(slot.udp_listener, [this, connector_index]() {
+            handle_connector_udp_datagrams(connector_index);
+        });
+        return static_cast<bool>(slot.udp_event);
+    }
+
     void handle_connector_serial_line(size_t index, async_event_loop::LineView line) {
         ConnectorRuntimeSlot& slot = connector_slot(index);
         if (!slot.connection_flags.allow_rx) return;
         char text[160];
         async_event_loop::line_to_cstr(line, text);
         handle_connector_nmea_line(index, text);
+    }
+
+    void handle_connector_udp_datagrams(size_t index) {
+        ConnectorRuntimeSlot& slot = connector_slot(index);
+        if (!slot.connection_flags.allow_rx) return;
+        uint8_t buf[512];
+        while (slot.udp_listener.readable()) {
+            const int n = slot.udp_listener.read(buf, sizeof(buf) - 1);
+            if (n <= 0) break;
+            buf[n] = 0;
+            char* begin = reinterpret_cast<char*>(buf);
+            char* line = begin;
+            for (int i = 0; i <= n; ++i) {
+                if (begin[i] == '\r' || begin[i] == '\n' || begin[i] == '\0') {
+                    begin[i] = '\0';
+                    if (*line) handle_connector_nmea_line(index, line);
+                    line = begin + i + 1;
+                }
+            }
+        }
     }
 
     void handle_connector_nmea_line(size_t index, const char* text) {
