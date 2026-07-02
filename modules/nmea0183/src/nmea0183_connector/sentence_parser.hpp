@@ -213,6 +213,9 @@ private:
 
     void dispatch_hook(const NmeaSentence& out) const {
         switch (out.family) {
+        case NmeaSentenceFamily::Query:
+            if (hooks_.on_query_sentence) hooks_.on_query_sentence(out, hooks_.user);
+            break;
         case NmeaSentenceFamily::Ais:
             if (hooks_.on_ais_sentence) hooks_.on_ais_sentence(out, hooks_.user);
             break;
@@ -221,6 +224,9 @@ private:
             break;
         case NmeaSentenceFamily::Dsc:
             if (hooks_.on_dsc_sentence) hooks_.on_dsc_sentence(out, hooks_.user);
+            break;
+        case static_cast<NmeaSentenceFamily>(5):
+            if (hooks_.on_navtex_sentence) hooks_.on_navtex_sentence(out, hooks_.user);
             break;
         case NmeaSentenceFamily::Inmarsat:
             if (hooks_.on_inmarsat_sentence) hooks_.on_inmarsat_sentence(out, hooks_.user);
