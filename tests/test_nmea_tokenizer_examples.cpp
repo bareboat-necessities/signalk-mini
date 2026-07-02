@@ -53,8 +53,18 @@ int main() {
     const std::string query = sentence("CCGPQ,GGA");
     check_sentence_token(query.c_str(), nmea0183_connector::NmeaSentenceFamily::Query, '$');
 
-    const std::string navtex = sentence("NXNRX,1,1,01,A,TEST MESSAGE");
+    const std::string navtex = sentence("NXNRX,2,1,01,HELLO ");
     check_sentence_token(navtex.c_str(), nmea0183_connector::NmeaSentenceFamily::NavTex, '$');
+
+    const std::string txt1 = sentence("GPTXT,2,1,07,FIRST ");
+    const nmea0183_connector::NmeaTokenizeResult txt_tokens = nmea0183_connector::tokenize_nmea_line(txt1.c_str());
+    const nmea0183_connector::NmeaToken* txt_token = txt_tokens.first_sentence();
+    REQUIRE(txt_token != nullptr);
+    REQUIRE(txt_token->fragment.is_fragmented);
+    REQUIRE(txt_token->fragment.total == 2);
+    REQUIRE(txt_token->fragment.number == 1);
+    REQUIRE(nmea0183_connector::nmea_span_equals(txt_token->fragment.message_id, "07"));
+    REQUIRE(nmea0183_connector::nmea_span_equals(txt_token->fragment.payload, "FIRST "));
 
     check_vendor("PGRME,1.0,M,2.0,M,3.0,M", nmea0183_connector::NmeaProprietaryVendor::Garmin, "GRM");
     check_vendor("PUBX,00,000000,0000.0000,N,00000.0000,E", nmea0183_connector::NmeaProprietaryVendor::Ublox, "UBX");
@@ -93,5 +103,18 @@ int main() {
     REQUIRE(parsed.family == nmea0183_connector::NmeaSentenceFamily::NavTex);
     REQUIRE(nmea0183_connector::talker_is(parsed, "NX"));
     REQUIRE(nmea0183_connector::sentence_is(parsed, "NRX"));
+    REQUIRE(parsed.fragment.is_fragmented);
+    REQUIRE(parsed.fragment.total == 2);
+    REQUIRE(parsed.fragment.number == 1);
+    REQUIRE(nmea0183_connector::nmea_span_equals(parsed.fragment.message_id, "01"));
+    REQUIRE(nmea0183_connector::nmea_span_equals(parsed.fragment.payload, "HELLO "));
+
+    REQUIRE(parser.parse_line(txt1.c_str(), parsed));
+    REQUIRE(nmea0183_connector::sentence_is(parsed, "TXT"));
+    REQUIRE(parsed.fragment.is_fragmented);
+    REQUIRE(parsed.fragment.total == 2);
+    REQUIRE(parsed.fragment.number == 1);
+    REQUIRE(nmea0183_connector::nmea_span_equals(parsed.fragment.message_id, "07"));
+    REQUIRE(nmea0183_connector::nmea_span_equals(parsed.fragment.payload, "FIRST "));
     return 0;
 }
