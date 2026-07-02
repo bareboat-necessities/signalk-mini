@@ -30,32 +30,32 @@ int main() {
     uint64_t now_us = 0;
 
     feed(app, "GNGNS,112257.00,3844.24011,N,00908.43828,W,AN,03,10.5,100.1,45.6,2.5,1234,S", now_us);
-    NEAR(app.store().model().navigation.gps.timestamp_s.value, 40977.0f, 0.001f);
-    NEAR(app.store().model().navigation.gps.fix_lat_deg.value, 38.737335f, 0.001f);
-    NEAR(app.store().model().navigation.gps.fix_lon_deg.value, -9.140638f, 0.001f);
+    NEAR(app.store().model().gnss.fix.timestamp_s.value, 40977.0f, 0.001f);
+    NEAR(app.store().model().gnss.fix.fix_lat_deg.value, 38.737335f, 0.001f);
+    NEAR(app.store().model().gnss.fix.fix_lon_deg.value, -9.140638f, 0.001f);
 
     feed(app, "WIMDA,29.91,I,1.013,B,18.2,C,16.7,C,72.5,12.3,9.4,C,123.4,T,121.1,M,7.8,N,4.0,M", now_us);
-    NEAR(app.store().model().water.barometric_pressure_inhg.value, 29.91f, 0.001f);
-    NEAR(app.store().model().water.air_temperature_c.value, 18.2f, 0.001f);
-    NEAR(app.store().model().water.temperature_c.value, 16.7f, 0.001f);
-    NEAR(app.store().model().water.wind_speed_kn.value, 7.8f, 0.001f);
+    NEAR(app.store().model().env.barometric_pressure_inhg.value, 29.91f, 0.001f);
+    NEAR(app.store().model().env.air_temperature_c.value, 18.2f, 0.001f);
+    NEAR(app.store().model().sea.temperature_c.value, 16.7f, 0.001f);
+    NEAR(app.store().model().sea.wind_speed_kn.value, 7.8f, 0.001f);
 
     feed(app, "IITFI,0,1,2", now_us);
-    REQUIRE(app.store().model().water.trawl_catch_sensor_status[0].value == 0);
-    REQUIRE(app.store().model().water.trawl_catch_sensor_status[1].value == 1);
-    REQUIRE(app.store().model().water.trawl_catch_sensor_status[2].value == 2);
+    REQUIRE(app.store().model().sea.trawl_catch_sensor_status[0].value == 0);
+    REQUIRE(app.store().model().sea.trawl_catch_sensor_status[1].value == 1);
+    REQUIRE(app.store().model().sea.trawl_catch_sensor_status[2].value == 2);
 
     feed(app, "RATLL,7,4917.24,N,12309.57,W,TARGET7,123520,T,R", now_us);
-    REQUIRE(app.store().model().navigation.tracked_target.target_number.value == 7);
-    NEAR(app.store().model().navigation.tracked_target.latitude_deg.value, 49.287333f, 0.001f);
-    NEAR(app.store().model().navigation.tracked_target.longitude_deg.value, -123.1595f, 0.001f);
+    REQUIRE(app.store().model().ais.tracked_target.target_number.value == 7);
+    NEAR(app.store().model().ais.tracked_target.latitude_deg.value, 49.287333f, 0.001f);
+    NEAR(app.store().model().ais.tracked_target.longitude_deg.value, -123.1595f, 0.001f);
 
     feed(app, "ALACK,42", now_us);
     feed(app, "AIADS,DEV1,A,OK", now_us);
 
     feed(app, "VCCUR,1,123.4,T,2.5,N,10.0,M", now_us);
-    NEAR(app.store().model().water.current_direction_deg.value, 123.4f, 0.001f);
-    NEAR(app.store().model().water.current_speed_kn.value, 2.5f, 0.001f);
+    NEAR(app.store().model().sea.current_direction_deg.value, 123.4f, 0.001f);
+    NEAR(app.store().model().sea.current_speed_kn.value, 2.5f, 0.001f);
 
     feed(app, "CDDSC,12,3380400790,12,06,00,1423108312,2019,,,S,E", now_us);
     REQUIRE(app.nmea0183().dsc_state().message.format_specifier.value == 12);
@@ -73,9 +73,9 @@ int main() {
     feed(app, "GPZDL,000930,12.3,N,VP1", now_us);
 
     feed(app, "GPZFO,123520,000315,ORIG1", now_us);
-    NEAR(app.store().model().navigation.waypoint.origin_utc_time_s.value, 45320.0f, 0.001f);
+    NEAR(app.store().model().route.waypoint.origin_utc_time_s.value, 45320.0f, 0.001f);
 
     feed(app, "GPZTG,123521,000930,DEST2", now_us);
-    NEAR(app.store().model().navigation.waypoint.destination_utc_time_s.value, 45321.0f, 0.001f);
+    NEAR(app.store().model().route.waypoint.destination_utc_time_s.value, 45321.0f, 0.001f);
     return 0;
 }
