@@ -71,6 +71,54 @@ struct GpsFaultDetectionData {
 };
 
 template<typename Real = float>
+struct GpsRangeResidualData {
+    Setting<SensorSource> source;
+    Stamped<Real> utc_time_s;
+    Stamped<int32_t> mode;
+    Stamped<Real> satellite_residual_m[12];
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct GpsNoiseStatisticsData {
+    Setting<SensorSource> source;
+    Stamped<Real> utc_time_s;
+    Stamped<Real> rms_range_stddev_m;
+    Stamped<Real> semi_major_stddev_m;
+    Stamped<Real> semi_minor_stddev_m;
+    Stamped<Real> semi_major_orientation_deg;
+    Stamped<Real> latitude_error_stddev_m;
+    Stamped<Real> longitude_error_stddev_m;
+    Stamped<Real> altitude_error_stddev_m;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct GpsDopActiveSatellitesData {
+    Setting<SensorSource> source;
+    char selection_mode = 0;
+    Stamped<int32_t> fix_mode;
+    Stamped<int32_t> satellite_prn[12];
+    Stamped<Real> pdop;
+    Stamped<Real> hdop;
+    Stamped<Real> vdop;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct GpsSatellitesInViewData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> total_messages;
+    Stamped<int32_t> message_number;
+    Stamped<int32_t> satellites_in_view;
+    Stamped<int32_t> satellite_prn[4];
+    Stamped<Real> elevation_deg[4];
+    Stamped<Real> azimuth_true_deg[4];
+    Stamped<Real> snr_db[4];
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
 struct DatumReferenceData {
     Setting<SensorSource> source;
     char local_datum_code[8] = {0};
@@ -100,6 +148,35 @@ struct DeccaPositionData {
     char purple_line_navigation_use = 0;
     Stamped<Real> position_uncertainty_nmi;
     Stamped<int32_t> fix_data_basis;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct LegacyTimingData {
+    Setting<SensorSource> source;
+    Stamped<Real> gri_us_div_10;
+    Stamped<Real> master_toa_us;
+    char master_toa_status = 0;
+    Stamped<Real> delta_us[5];
+    char delta_status[5] = {0, 0, 0, 0, 0};
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct LegacyDeltaData {
+    Setting<SensorSource> source;
+    Stamped<Real> value[5];
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct TransitFixData {
+    Setting<SensorSource> source;
+    Stamped<Real> utc_time_s;
+    Stamped<Real> latitude_deg;
+    Stamped<Real> longitude_deg;
+    char waypoint_id[16] = {0};
+    Stamped<int32_t> satellite_number;
     uint64_t last_update_us = 0;
 };
 
@@ -174,8 +251,15 @@ struct NavigationData {
     GpsData<Real> gps;
     GpsAlmanacData<Real> gps_almanac;
     GpsFaultDetectionData<Real> gps_fault;
+    GpsRangeResidualData<Real> gps_range_residual;
+    GpsNoiseStatisticsData<Real> gps_noise;
+    GpsDopActiveSatellitesData<Real> gps_dop;
+    GpsSatellitesInViewData<Real> gps_satellites_in_view;
     DatumReferenceData<Real> datum;
     DeccaPositionData<Real> decca;
+    LegacyTimingData<Real> legacy_timing;
+    LegacyDeltaData<Real> legacy_delta;
+    TransitFixData<Real> transit_fix;
     RadioFrequencySetData<Real> radio_frequency_set;
     WaypointArrivalData<Real> waypoint_arrival;
     WaypointNavigationData<Real> waypoint;
