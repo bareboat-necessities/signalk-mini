@@ -210,7 +210,14 @@ struct TimedCommand {
         value = v;
         valid = true;
         last_update_us = now_us;
+        use_period = true;
     }
+};
+
+template<typename Real = float>
+struct ValuePublicationState {
+    Stamped<uint32_t> published_value_count;
+    Stamped<uint32_t> published_byte_count;
 };
 
 } // namespace ship_data_model
