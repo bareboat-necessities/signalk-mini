@@ -11,8 +11,8 @@ bool apply_hdt(const NmeaSentence& sentence, Model& model, uint64_t now_us) {
     }
 
     const Real value = static_cast<Real>(wrap_360_deg(heading_deg));
-    model.imu.heading_deg.set(value, now_us);
-    model.imu.heading_true_deg.set(value, now_us);
+    model.ins.imu.heading_deg.set(value, now_us);
+    model.ins.imu.heading_true_deg.set(value, now_us);
     return true;
 }
 
@@ -25,8 +25,8 @@ bool apply_hdm(const NmeaSentence& sentence, Model& model, uint64_t now_us) {
     }
 
     const Real value = static_cast<Real>(wrap_360_deg(heading_deg));
-    model.imu.heading_deg.set(value, now_us);
-    model.imu.heading_magnetic_deg.set(value, now_us);
+    model.ins.imu.heading_deg.set(value, now_us);
+    model.ins.imu.heading_magnetic_deg.set(value, now_us);
     return true;
 }
 
@@ -39,10 +39,10 @@ bool apply_hdg(const NmeaSentence& sentence, Model& model, uint64_t now_us) {
 
     float value = 0.0f;
     if (sentence.field_count >= 3 && parse_east_west_signed(sentence.field(1), sentence.field(2), value)) {
-        model.imu.magnetic_deviation_deg.set(static_cast<Real>(value), now_us);
+        model.ins.imu.magnetic_deviation_deg.set(static_cast<Real>(value), now_us);
     }
     if (sentence.field_count >= 5 && parse_east_west_signed(sentence.field(3), sentence.field(4), value)) {
-        model.imu.magnetic_variation_deg.set(static_cast<Real>(value), now_us);
+        model.ins.imu.magnetic_variation_deg.set(static_cast<Real>(value), now_us);
         model.gnss.fix.declination_deg.set(static_cast<Real>(value), now_us);
     }
     return true;
