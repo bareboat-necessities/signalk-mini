@@ -30,6 +30,13 @@ struct AutopilotModelData {
 };
 
 template<typename Real = float>
+struct InsData {
+    ShipImuData<Real> imu;
+    ImuStateData<Real> imu_state;
+    ImuCalibrationData<Real> imu_calibration;
+};
+
+template<typename Real = float>
 struct FluidsData {
 };
 
@@ -90,6 +97,7 @@ struct DataModel {
     RouteData<Real> route;
     GnssModelData<Real> gnss;
     AisData<Real> ais;
+    InsData<Real> ins;
 
     WindData<Real> wind;
     SeaData<Real> sea;
@@ -104,11 +112,6 @@ struct DataModel {
     ElectricalData<Real> electrical;
     CommData<Real> comm;
     NotificationsData<Real> notifications;
-
-    // IMU remains in top-level storage until the inertial/navigation split is modeled separately.
-    ShipImuData<Real> imu;
-    ImuStateData<Real> imu_state;
-    ImuCalibrationData<Real> imu_calibration;
 };
 
 } // namespace ship_data_model
