@@ -8,22 +8,15 @@
 #include "ais/ais_data.hpp"
 #include "wind_sea/wind_sea_data.hpp"
 #include "env/env_data.hpp"
+#include "propulsion/propulsion_data.hpp"
 #include "steering/steering_model_data.hpp"
+#include "fluids/fluids_data.hpp"
+#include "batteries/batteries_data.hpp"
+#include "electrical/electrical_data.hpp"
+#include "comm/comm_data.hpp"
 #include "notifications/notifications_data.hpp"
 
 namespace ship_data_model {
-
-template<typename Real = float>
-struct FluidsData {
-};
-
-template<typename Real = float>
-struct BatteriesData {
-};
-
-template<typename Real = float>
-struct ElectricalData {
-};
 
 template<typename Real = float>
 struct DataModel {
