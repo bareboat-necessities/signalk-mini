@@ -79,6 +79,10 @@ int main() {
     REQUIRE(std::strcmp(app.store().model().nmea.fir.sentence_id, "FIR") == 0);
     REQUIRE(app.store().model().nmea.fir.field_count.value == 2);
 
+    feed(app, "GPTXT,01,01,02,hello", now_us);
+    REQUIRE(std::strcmp(app.store().model().nmea.txt.sentence_id, "TXT") == 0);
+    REQUIRE(app.store().model().nmea.txt.field_count.value == 4);
+
     feed(app, "GPWDC,12.3,N,22.7796,K,TO1,FROM1", now_us);
     REQUIRE(std::strcmp(app.store().model().nmea.wdc.sentence_id, "WDC") == 0);
     feed(app, "GPWDR,12.4,N,22.9648,K,TO2,FROM2", now_us);
