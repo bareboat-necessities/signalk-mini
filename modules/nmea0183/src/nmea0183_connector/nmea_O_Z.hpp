@@ -18,7 +18,7 @@ bool apply_osd(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     float v = 0.0f;
     if (sentence.field(1)[0] == 'A' && parse_real(sentence.field(0), v)) {
         const Real h = static_cast<Real>(wrap_360_deg(v));
-        model.nav.own_ship.heading_true_deg.set(h, now_us); model.imu.heading_deg.set(h, now_us); model.imu.heading_true_deg.set(h, now_us);
+        model.nav.own_ship.heading_true_deg.set(h, now_us); model.ins.imu.heading_deg.set(h, now_us); model.ins.imu.heading_true_deg.set(h, now_us);
     }
     model.nav.own_ship.heading_status = sentence.field(1)[0];
     model.nav.own_ship.course_reference = sentence.field(3)[0];
@@ -52,7 +52,7 @@ bool apply_rma(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     if (parse_real(sentence.field(6), v)) model.nav.rma.time_difference_b_us.set(static_cast<Real>(v), now_us);
     if (parse_real(sentence.field(7), v)) { model.nav.rma.speed_kn.set(static_cast<Real>(v), now_us); model.gnss.fix.speed_kn.set(static_cast<Real>(v), now_us); }
     if (parse_real(sentence.field(8), v)) { model.nav.rma.track_deg.set(static_cast<Real>(wrap_360_deg(v)), now_us); model.gnss.fix.track_deg.set(static_cast<Real>(wrap_360_deg(v)), now_us); }
-    if (parse_east_west_signed(sentence.field(9), sentence.field(10), v)) { model.nav.rma.magnetic_variation_deg.set(static_cast<Real>(v), now_us); model.gnss.fix.declination_deg.set(static_cast<Real>(v), now_us); model.imu.magnetic_variation_deg.set(static_cast<Real>(v), now_us); }
+    if (parse_east_west_signed(sentence.field(9), sentence.field(10), v)) { model.nav.rma.magnetic_variation_deg.set(static_cast<Real>(v), now_us); model.gnss.fix.declination_deg.set(static_cast<Real>(v), now_us); model.ins.imu.magnetic_variation_deg.set(static_cast<Real>(v), now_us); }
     set_source(model.nav.rma.source, source); set_source(model.gnss.fix.source, source); model.nav.rma.last_update_us = now_us; model.gnss.fix.last_update_us = now_us;
     return true;
 }
@@ -92,7 +92,7 @@ template<typename Model>
 bool apply_rlm(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) { if (sentence.field_count < 4) { last_error_ = "short RLM"; return false; } float v = 0.0f; nmea_copy_span(model.comm.return_link_message.beacon_id, sizeof(model.comm.return_link_message.beacon_id), sentence.field(0)); if (parse_utc_time_of_day_s(sentence.field(1), v)) model.comm.return_link_message.reception_time_s.set(static_cast<Real>(v), now_us); model.comm.return_link_message.message_code = sentence.field(2)[0]; nmea_copy_span(model.comm.return_link_message.message_body, sizeof(model.comm.return_link_message.message_body), sentence.field(3)); set_source(model.comm.return_link_message.source, source); model.comm.return_link_message.last_update_us = now_us; return true; }
 
 template<typename Model>
-bool apply_rot(const NmeaSentence& sentence, Model& model, uint64_t now_us) { float v = 0.0f; if (sentence.field_count < 2 || sentence.field(1)[0] != 'A' || !parse_real(sentence.field(0), v)) { last_error_ = "bad ROT"; return false; } model.imu.heading_rate_lowpass_deg_s.set(static_cast<Real>(v / 60.0f), now_us); return true; }
+bool apply_rot(const NmeaSentence& sentence, Model& model, uint64_t now_us) { float v = 0.0f; if (sentence.field_count < 2 || sentence.field(1)[0] != 'A' || !parse_real(sentence.field(0), v)) { last_error_ = "bad ROT"; return false; } model.ins.imu.heading_rate_lowpass_deg_s.set(static_cast<Real>(v / 60.0f), now_us); return true; }
 
 template<typename Model>
 bool apply_rpm(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) { if (sentence.field_count < 5 || sentence.field(4)[0] != 'A') { last_error_ = "bad RPM"; return false; } int32_t n = 0; float v = 0.0f; model.propulsion.revolutions.source_type = sentence.field(0)[0]; model.propulsion.revolutions.status = sentence.field(4)[0]; if (parse_int32(sentence.field(1), n)) model.propulsion.revolutions.number.set(n, now_us); if (parse_real(sentence.field(2), v)) model.propulsion.revolutions.speed_rpm.set(static_cast<Real>(v), now_us); if (parse_real(sentence.field(3), v)) model.propulsion.revolutions.propeller_pitch_percent.set(static_cast<Real>(v), now_us); set_source(model.propulsion.revolutions.source, source); model.propulsion.revolutions.last_update_us = now_us; return true; }
@@ -179,7 +179,7 @@ template<typename Model>
 bool apply_wpl(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) { if (sentence.field_count < 5) { last_error_ = "short WPL"; return false; } float v = 0.0f; if (parse_lat_lon(sentence.field(0), sentence.field(1), v)) model.route.waypoint.latitude_deg.set(static_cast<Real>(v), now_us); if (parse_lat_lon(sentence.field(2), sentence.field(3), v)) model.route.waypoint.longitude_deg.set(static_cast<Real>(v), now_us); nmea_copy_span(model.route.waypoint.to_waypoint_id, sizeof(model.route.waypoint.to_waypoint_id), sentence.field(4)); set_source(model.route.waypoint.source, source); model.route.waypoint.last_update_us = now_us; return true; }
 
 template<typename Model>
-bool apply_xdr(const NmeaSentence& sentence, Model& model, uint64_t now_us) { bool any = false; float v = 0.0f; for (uint8_t i = 0; i + 3 < sentence.field_count; i = static_cast<uint8_t>(i + 4)) if (sentence.field(i)[0] == 'A' && parse_real(sentence.field(i + 1), v) && sentence.field(i + 2)[0] == 'D') { if (nmea_span_equals(sentence.field(i + 3), "PTCH")) { model.imu.pitch_deg.set(static_cast<Real>(v), now_us); any = true; } else if (nmea_span_equals(sentence.field(i + 3), "ROLL")) { model.imu.roll_deg.set(static_cast<Real>(v), now_us); any = true; } } if (!any) last_error_ = "bad XDR"; return any; }
+bool apply_xdr(const NmeaSentence& sentence, Model& model, uint64_t now_us) { bool any = false; float v = 0.0f; for (uint8_t i = 0; i + 3 < sentence.field_count; i = static_cast<uint8_t>(i + 4)) if (sentence.field(i)[0] == 'A' && parse_real(sentence.field(i + 1), v) && sentence.field(i + 2)[0] == 'D') { if (nmea_span_equals(sentence.field(i + 3), "PTCH")) { model.ins.imu.pitch_deg.set(static_cast<Real>(v), now_us); any = true; } else if (nmea_span_equals(sentence.field(i + 3), "ROLL")) { model.ins.imu.roll_deg.set(static_cast<Real>(v), now_us); any = true; } } if (!any) last_error_ = "bad XDR"; return any; }
 
 template<typename Model>
 bool apply_xte(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) { float v = 0.0f; if (sentence.field_count < 5 || sentence.field(0)[0] != 'A' || sentence.field(1)[0] != 'A' || !parse_left_right_signed(sentence.field(2), sentence.field(3), v)) { last_error_ = "bad XTE"; return false; } model.route.apb.xte_nmi.set(static_cast<Real>(v), now_us); set_source(model.route.apb.source, source); model.route.apb.last_update_us = now_us; return true; }
