@@ -49,7 +49,7 @@ struct ElectricalData {
 };
 
 template<typename Real = float>
-struct NotificationTextData {
+struct ModeledTextData {
     Setting<SensorSource> source;
     char id[24] = {0};
     char code[16] = {0};
@@ -60,35 +60,43 @@ struct NotificationTextData {
 };
 
 template<typename Real = float>
-struct AlarmNotificationsData {
-    NotificationTextData<Real> acknowledgement;
-    NotificationTextData<Real> alarm;
-    NotificationTextData<Real> equipment_status;
-    NotificationTextData<Real> event_log;
-    NotificationTextData<Real> event;
-    NotificationTextData<Real> fire;
+struct AlertingData {
+    ModeledTextData<Real> acknowledgement;
+    ModeledTextData<Real> alarm_condition;
 };
 
 template<typename Real = float>
-struct MessageNotificationsData {
-    NotificationTextData<Real> text;
-    NotificationTextData<Real> device_status;
-    NotificationTextData<Real> device_acknowledgement;
-    NotificationTextData<Real> safety;
-    NotificationTextData<Real> route_estimate;
-    NotificationTextData<Real> control;
-    NotificationTextData<Real> command;
-    NotificationTextData<Real> response;
-    NotificationTextData<Real> display_control;
-    NotificationTextData<Real> door_status;
-    NotificationTextData<Real> dsc_interrogation;
-    NotificationTextData<Real> dsc_response;
+struct EventModelData {
+    ModeledTextData<Real> log;
+    ModeledTextData<Real> event;
+    ModeledTextData<Real> fire;
 };
 
 template<typename Real = float>
-struct NotificationsData {
-    AlarmNotificationsData<Real> alarms;
-    MessageNotificationsData<Real> messages;
+struct EquipmentModelData {
+    ModeledTextData<Real> ais_data_status;
+    ModeledTextData<Real> device_acknowledgement;
+    ModeledTextData<Real> control_command;
+    ModeledTextData<Real> control_operation;
+    ModeledTextData<Real> control_response;
+    ModeledTextData<Real> display_control;
+    ModeledTextData<Real> door_status;
+};
+
+template<typename Real = float>
+struct SafetyModelData {
+    ModeledTextData<Real> addressed_safety;
+};
+
+template<typename Real = float>
+struct DscModelData {
+    ModeledTextData<Real> interrogation;
+    ModeledTextData<Real> response;
+};
+
+template<typename Real = float>
+struct MessageModelData {
+    ModeledTextData<Real> text;
 };
 
 template<typename Real = float>
@@ -111,7 +119,12 @@ struct DataModel {
     BatteriesData<Real> batteries;
     ElectricalData<Real> electrical;
     CommData<Real> comm;
-    NotificationsData<Real> notifications;
+    AlertingData<Real> alerting;
+    EventModelData<Real> events;
+    EquipmentModelData<Real> equipment;
+    SafetyModelData<Real> safety;
+    DscModelData<Real> dsc;
+    MessageModelData<Real> messages;
 };
 
 } // namespace ship_data_model
