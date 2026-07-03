@@ -25,22 +25,22 @@ bool apply_aam(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
 template<typename Model>
 bool apply_ack(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    return apply_modeled_sentence_record(sentence, model.nmea.ack, now_us, source);
+    return apply_notification_text_record(sentence, model.notifications.alarms.acknowledgement, now_us, source);
 }
 
 template<typename Model>
 bool apply_ads(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    return apply_modeled_sentence_record(sentence, model.nmea.ads, now_us, source);
+    return apply_notification_text_record(sentence, model.notifications.messages.device_status, now_us, source);
 }
 
 template<typename Model>
 bool apply_akd(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    return apply_modeled_sentence_record(sentence, model.nmea.akd, now_us, source);
+    return apply_notification_text_record(sentence, model.notifications.messages.device_acknowledgement, now_us, source);
 }
 
 template<typename Model>
 bool apply_ala(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    return apply_modeled_sentence_record(sentence, model.nmea.ala, now_us, source);
+    return apply_notification_text_record(sentence, model.notifications.alarms.alarm, now_us, source);
 }
 
 template<typename Model>
@@ -150,12 +150,12 @@ bool apply_apb(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
 template<typename Model>
 bool apply_asd(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    return apply_modeled_sentence_record(sentence, model.nmea.asd, now_us, source);
+    return apply_notification_text_record(sentence, model.notifications.messages.safety, now_us, source);
 }
 
 template<typename Model>
 bool apply_bec(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    return apply_modeled_sentence_record(sentence, model.nmea.bec, now_us, source);
+    return apply_notification_text_record(sentence, model.notifications.messages.route_estimate, now_us, source);
 }
 
 template<typename Model>
@@ -201,12 +201,12 @@ bool apply_bwc_bwr(const NmeaSentence& sentence, Model& model, uint64_t now_us, 
 
 template<typename Model>
 bool apply_cek(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    return apply_modeled_sentence_record(sentence, model.nmea.cek, now_us, source);
+    return apply_notification_text_record(sentence, model.notifications.messages.command, now_us, source);
 }
 
 template<typename Model>
 bool apply_cop(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    return apply_modeled_sentence_record(sentence, model.nmea.cop, now_us, source);
+    return apply_notification_text_record(sentence, model.notifications.messages.control, now_us, source);
 }
 
 template<typename Model>
@@ -303,17 +303,17 @@ bool apply_dcn(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
 template<typename Model>
 bool apply_dcr(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    return apply_modeled_sentence_record(sentence, model.nmea.dcr, now_us, source);
+    return apply_notification_text_record(sentence, model.notifications.messages.response, now_us, source);
 }
 
 template<typename Model>
 bool apply_ddc(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    return apply_modeled_sentence_record(sentence, model.nmea.ddc, now_us, source);
+    return apply_notification_text_record(sentence, model.notifications.messages.display_control, now_us, source);
 }
 
 template<typename Model>
 bool apply_dor(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    return apply_modeled_sentence_record(sentence, model.nmea.dor, now_us, source);
+    return apply_notification_text_record(sentence, model.notifications.messages.door_status, now_us, source);
 }
 
 template<typename Model>
@@ -390,12 +390,12 @@ bool apply_dse(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
 template<typename Model>
 bool apply_dsi(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    return apply_modeled_sentence_record(sentence, model.nmea.dsi, now_us, source);
+    return apply_notification_text_record(sentence, model.notifications.messages.dsc_interrogation, now_us, source);
 }
 
 template<typename Model>
 bool apply_dsr(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    return apply_modeled_sentence_record(sentence, model.nmea.dsr, now_us, source);
+    return apply_notification_text_record(sentence, model.notifications.messages.dsc_response, now_us, source);
 }
 
 template<typename Model>
@@ -423,10 +423,10 @@ bool apply_dtm(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
 template<typename Model>
 bool apply_etl(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    return apply_modeled_sentence_record(sentence, model.nmea.etl, now_us, source);
+    return apply_notification_text_record(sentence, model.notifications.alarms.event_log, now_us, source);
 }
 
 template<typename Model>
 bool apply_eve(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    return apply_modeled_sentence_record(sentence, model.nmea.eve, now_us, source);
+    return apply_notification_text_record(sentence, model.notifications.alarms.event, now_us, source);
 }
