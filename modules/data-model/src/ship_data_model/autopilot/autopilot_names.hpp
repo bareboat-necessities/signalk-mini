@@ -2,6 +2,7 @@
 
 #include <string.h>
 #include "../core_data_types.hpp"
+#include "autopilot_types.hpp"
 
 namespace ship_data_model {
 
