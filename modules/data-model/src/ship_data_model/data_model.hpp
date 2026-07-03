@@ -15,6 +15,10 @@
 #include "electrical/electrical_data.hpp"
 #include "comm/comm_data.hpp"
 #include "notifications/notifications_data.hpp"
+#include "appliances/appliances_data.hpp"
+#include "audio_video/audio_video_data.hpp"
+#include "anchors/anchors_data.hpp"
+#include "dinghy_lifeboat_etc/dinghy_lifeboat_etc_data.hpp"
 
 namespace ship_data_model {
 
@@ -39,6 +43,11 @@ struct DataModel {
     ElectricalData<Real> electrical;
     CommData<Real> comm;
     NotificationsData<Real> notifications;
+
+    AppliancesData<Real> appliances;
+    AudioVideoData<Real> audio_video;
+    AnchorsData<Real> anchors;
+    DinghyLifeboatEtcData<Real> dinghy_lifeboat_etc;
 };
 
 } // namespace ship_data_model
