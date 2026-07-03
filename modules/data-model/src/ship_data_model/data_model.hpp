@@ -1,6 +1,6 @@
 #pragma once
 
-#include "autopilot_data.hpp"
+#include "autopilot/autopilot_data.hpp"
 #include "ship_imu_data.hpp"
 #include "nav_data.hpp"
 #include "wind_sea_data.hpp"
