@@ -5,9 +5,6 @@
 namespace ship_data_model {
 
 template<typename Real = float>
-struct NavData;
-
-template<typename Real = float>
 struct GnssData {
     Setting<SensorSource> source;
     RangeSetting<Real> rate_hz;

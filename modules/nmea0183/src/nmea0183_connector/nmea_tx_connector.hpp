@@ -153,11 +153,12 @@ inline size_t make_ap_rmc(char* out,
                           const char* utc_time,
                           const char* date_ddmmyy,
                           const char* gps_id = "APRMC") {
-    bool valid = model.navigation.gps.fix_lat_deg.valid && model.navigation.gps.fix_lon_deg.valid;
-    float lat = static_cast<float>(model.navigation.gps.fix_lat_deg.value);
-    float lon = static_cast<float>(model.navigation.gps.fix_lon_deg.value);
-    float speed = model.navigation.gps.speed_kn.valid ? static_cast<float>(model.navigation.gps.speed_kn.value) : 0.0f;
-    float track = model.navigation.gps.track_deg.valid ? static_cast<float>(model.navigation.gps.track_deg.value) : 0.0f;
+    const auto& fix = model.gnss.fix;
+    bool valid = fix.fix_lat_deg.valid && fix.fix_lon_deg.valid;
+    float lat = static_cast<float>(fix.fix_lat_deg.value);
+    float lon = static_cast<float>(fix.fix_lon_deg.value);
+    float speed = fix.speed_kn.valid ? static_cast<float>(fix.speed_kn.value) : 0.0f;
+    float track = fix.track_deg.valid ? static_cast<float>(fix.track_deg.value) : 0.0f;
     return make_rmc(out, out_size, gps_id, utc_time, valid, lat, lon, speed, track, date_ddmmyy);
 }
 
