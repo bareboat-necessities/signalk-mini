@@ -16,22 +16,64 @@ bool apply_aam(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
 template<typename Model>
 bool apply_ack(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    return apply_nmea_text_record(sentence, model.notifications.alerts.acknowledgement, now_us, source);
+    if (sentence.field_count < 1) { last_error_ = "short ACK"; return false; }
+    auto& ack = model.notifications.alerts.acknowledgement;
+    int32_t alarm_number = 0;
+    nmea_copy_span(ack.alarm_identifier, sizeof(ack.alarm_identifier), sentence.field(0));
+    if (parse_int32(sentence.field(0), alarm_number)) ack.local_alarm_number.set(alarm_number, now_us);
+    ack.field_count.set(static_cast<int32_t>(sentence.field_count), now_us);
+    set_source(ack.source, source);
+    ack.last_update_us = now_us;
+    return true;
 }
 
 template<typename Model>
 bool apply_ads(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    return apply_nmea_text_record(sentence, model.ais.data_link_status, now_us, source);
+    auto& ads = model.ais.data_link_status;
+    if (sentence.field_count > 0) nmea_copy_span(ads.id, sizeof(ads.id), sentence.field(0));
+    if (sentence.field_count > 1) nmea_copy_span(ads.code, sizeof(ads.code), sentence.field(1));
+    if (sentence.field_count > 2) nmea_copy_span(ads.value, sizeof(ads.value), sentence.field(2));
+    if (sentence.field_count > 3) nmea_copy_span(ads.text, sizeof(ads.text), sentence.field(3));
+    else if (sentence.field_count > 2) nmea_copy_span(ads.text, sizeof(ads.text), sentence.field(2));
+    ads.field_count.set(static_cast<int32_t>(sentence.field_count), now_us);
+    set_source(ads.source, source);
+    ads.last_update_us = now_us;
+    return true;
 }
 
 template<typename Model>
 bool apply_akd(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    return apply_nmea_text_record(sentence, model.notifications.alerts.acknowledgement_detail, now_us, source);
+    if (sentence.field_count < 1) { last_error_ = "short AKD"; return false; }
+    auto& akd = model.notifications.alerts.acknowledgement_detail;
+    int32_t parsed = 0;
+    nmea_copy_span(akd.alarm_identifier, sizeof(akd.alarm_identifier), sentence.field(0));
+    if (parse_int32(sentence.field(0), parsed)) akd.local_alarm_number.set(parsed, now_us);
+    if (sentence.field_count > 1 && parse_int32(sentence.field(1), parsed)) akd.alert_instance.set(parsed, now_us);
+    if (sentence.field_count > 2) akd.acknowledgement_state = sentence.field(2)[0];
+    if (sentence.field_count > 3) nmea_copy_span(akd.operator_id, sizeof(akd.operator_id), sentence.field(3));
+    if (sentence.field_count > 4) nmea_copy_span(akd.detail, sizeof(akd.detail), sentence.field(4));
+    akd.field_count.set(static_cast<int32_t>(sentence.field_count), now_us);
+    set_source(akd.source, source);
+    akd.last_update_us = now_us;
+    return true;
 }
 
 template<typename Model>
 bool apply_ala(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    return apply_nmea_text_record(sentence, model.notifications.alerts.condition, now_us, source);
+    if (sentence.field_count < 1) { last_error_ = "short ALA"; return false; }
+    auto& alarm = model.notifications.alerts.condition;
+    int32_t parsed = 0;
+    nmea_copy_span(alarm.alarm_identifier, sizeof(alarm.alarm_identifier), sentence.field(0));
+    if (parse_int32(sentence.field(0), parsed)) alarm.local_alarm_number.set(parsed, now_us);
+    if (sentence.field_count > 1 && parse_int32(sentence.field(1), parsed)) alarm.alert_instance.set(parsed, now_us);
+    if (sentence.field_count > 2) alarm.condition_state = sentence.field(2)[0];
+    if (sentence.field_count > 3) alarm.priority = sentence.field(3)[0];
+    if (sentence.field_count > 4) nmea_copy_span(alarm.description, sizeof(alarm.description), sentence.field(4));
+    else if (sentence.field_count > 3) nmea_copy_span(alarm.description, sizeof(alarm.description), sentence.field(3));
+    alarm.field_count.set(static_cast<int32_t>(sentence.field_count), now_us);
+    set_source(alarm.source, source);
+    alarm.last_update_us = now_us;
+    return true;
 }
 
 template<typename Model>
