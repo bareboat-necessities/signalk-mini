@@ -254,6 +254,15 @@ struct ReturnLinkMessageData {
 };
 
 template<typename Real = float>
+struct CommEquipmentData {
+    NmeaTextRecordData<Real> control_command;
+    NmeaTextRecordData<Real> control_operation;
+    NmeaTextRecordData<Real> control_response;
+    NmeaTextRecordData<Real> display_control;
+    NmeaTextRecordData<Real> door_status;
+};
+
+template<typename Real = float>
 struct OmegaLaneNumbersData {
     Setting<SensorSource> source;
     char pair[3][16] = {{0}, {0}, {0}};
@@ -454,6 +463,8 @@ struct RouteData {
 template<typename Real = float>
 struct AisData {
     TrackedTargetData<Real> tracked_target;
+    NmeaTextRecordData<Real> data_link_status;
+    NmeaTextRecordData<Real> addressed_safety;
 };
 
 template<typename Real = float>
@@ -467,6 +478,7 @@ struct CommData {
     BeaconReceiverControlData<Real> beacon_control;
     BeaconReceiverStatusData<Real> beacon_status;
     ReturnLinkMessageData<Real> return_link_message;
+    CommEquipmentData<Real> equipment;
 };
 
 } // namespace ship_data_model
