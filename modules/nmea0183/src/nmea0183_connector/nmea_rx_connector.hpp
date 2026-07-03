@@ -122,7 +122,7 @@ public:
         NMEA_APPLY("TPC", apply_tpc);
         NMEA_APPLY("TPR", apply_tpr);
         NMEA_APPLY("TPT", apply_tpt);
-        NMEA_APPLY("TRF", apply_trf);
+        NMEA_APPLY("TRF", apply_trf_full);
         NMEA_APPLY("TTM", apply_ttm);
         NMEA_APPLY("TXT", apply_txt);
         NMEA_APPLY("VBW", apply_vbw);
@@ -164,6 +164,22 @@ private:
     template<typename Setting>
     void set_source(Setting& setting, ship_data_model::SensorSource source) {
         if (source != ship_data_model::SensorSource::none) setting.value = source;
+    }
+
+    template<typename Record>
+    bool apply_nmea_text_record(const NmeaSentence& sentence,
+                                Record& record,
+                                uint64_t now_us,
+                                ship_data_model::SensorSource source) {
+        if (sentence.field_count > 0) nmea_copy_span(record.id, sizeof(record.id), sentence.field(0));
+        if (sentence.field_count > 1) nmea_copy_span(record.code, sizeof(record.code), sentence.field(1));
+        if (sentence.field_count > 2) nmea_copy_span(record.value, sizeof(record.value), sentence.field(2));
+        if (sentence.field_count > 3) nmea_copy_span(record.text, sizeof(record.text), sentence.field(3));
+        else if (sentence.field_count > 2) nmea_copy_span(record.text, sizeof(record.text), sentence.field(2));
+        record.field_count.set(static_cast<int32_t>(sentence.field_count), now_us);
+        set_source(record.source, source);
+        record.last_update_us = now_us;
+        return true;
     }
 
     bool accepts_fragment_only_family(NmeaSentenceFamily family) const {
@@ -239,6 +255,7 @@ private:
 #include "nmea_A_E.hpp"
 #include "nmea_F_G.hpp"
 #include "nmea_H_N.hpp"
+#include "nmea_trf_override.hpp"
 #include "nmea_O_Z.hpp"
 };
 

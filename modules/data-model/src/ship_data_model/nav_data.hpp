@@ -254,6 +254,70 @@ struct ReturnLinkMessageData {
 };
 
 template<typename Real = float>
+struct CommEquipmentControlCommandData {
+    Setting<SensorSource> source;
+    char equipment_id[24] = {0};
+    char command_id[24] = {0};
+    char command_state = 0;
+    char parameter[48] = {0};
+    Stamped<int32_t> field_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct CommEquipmentControlOperationData {
+    Setting<SensorSource> source;
+    char equipment_id[24] = {0};
+    char operation_id[24] = {0};
+    char operation_state = 0;
+    char value[48] = {0};
+    Stamped<int32_t> field_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct CommEquipmentControlResponseData {
+    Setting<SensorSource> source;
+    char equipment_id[24] = {0};
+    char command_id[24] = {0};
+    char response_state = 0;
+    char result[48] = {0};
+    Stamped<int32_t> field_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct CommEquipmentDisplayControlData {
+    Setting<SensorSource> source;
+    char display_id[24] = {0};
+    char page_id[24] = {0};
+    char control_state = 0;
+    char value[48] = {0};
+    Stamped<int32_t> field_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct CommEquipmentDoorStatusData {
+    Setting<SensorSource> source;
+    char door_id[24] = {0};
+    char door_state = 0;
+    char lock_state = 0;
+    char description[48] = {0};
+    Stamped<int32_t> field_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct CommEquipmentData {
+    CommEquipmentControlCommandData<Real> control_command;
+    CommEquipmentControlOperationData<Real> control_operation;
+    CommEquipmentControlResponseData<Real> control_response;
+    CommEquipmentDisplayControlData<Real> display_control;
+    CommEquipmentDoorStatusData<Real> door_status;
+};
+
+template<typename Real = float>
 struct OmegaLaneNumbersData {
     Setting<SensorSource> source;
     char pair[3][16] = {{0}, {0}, {0}};
@@ -349,6 +413,29 @@ struct TrackedTargetData {
     Stamped<int32_t> label_target_number[8];
     char label[8][24] = {{0}};
     Stamped<int32_t> label_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct AisDataLinkStatusData {
+    Setting<SensorSource> source;
+    char station_id[24] = {0};
+    char slot_status[16] = {0};
+    char status_text[48] = {0};
+    Stamped<int32_t> field_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct AisAddressedSafetyData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> total_messages;
+    Stamped<int32_t> message_number;
+    char sequential_message_id[16] = {0};
+    char destination_mmsi[16] = {0};
+    char retransmit_flag = 0;
+    char safety_text[72] = {0};
+    Stamped<int32_t> field_count;
     uint64_t last_update_us = 0;
 };
 
@@ -454,6 +541,8 @@ struct RouteData {
 template<typename Real = float>
 struct AisData {
     TrackedTargetData<Real> tracked_target;
+    AisDataLinkStatusData<Real> data_link_status;
+    AisAddressedSafetyData<Real> addressed_safety;
 };
 
 template<typename Real = float>
@@ -467,6 +556,7 @@ struct CommData {
     BeaconReceiverControlData<Real> beacon_control;
     BeaconReceiverStatusData<Real> beacon_status;
     ReturnLinkMessageData<Real> return_link_message;
+    CommEquipmentData<Real> equipment;
 };
 
 } // namespace ship_data_model
