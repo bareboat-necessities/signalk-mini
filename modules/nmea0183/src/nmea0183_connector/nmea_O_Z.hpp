@@ -33,7 +33,25 @@ template<typename Model>
 bool apply_rsa(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) { float v = 0.0f; if (sentence.field_count >= 2 && sentence.field(1)[0] == 'A' && parse_real(sentence.field(0), v)) model.steering.rudder.angle_deg.set(static_cast<Real>(-v), now_us); else if (sentence.field_count >= 4 && sentence.field(3)[0] == 'A' && parse_real(sentence.field(2), v)) model.steering.rudder.angle_deg.set(static_cast<Real>(-v), now_us); else { last_error_ = "bad RSA"; return false; } set_source(model.steering.rudder.source, source); model.steering.rudder.last_update_us = now_us; return true; }
 
 template<typename Model>
-bool apply_rsd(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) { if (sentence.field_count < 12) { last_error_ = "short RSD"; return false; } float v = 0.0f; model.nav.radar_system.range_units = sentence.field(11)[0]; if (parse_distance_nmi(sentence.field(0), sentence.field(11), v)) model.nav.radar_system.origin_range_nmi[0].set(static_cast<Real>(v), now_us); if (parse_real(sentence.field(1), v)) model.nav.radar_system.origin_bearing_deg[0].set(static_cast<Real>(wrap_360_deg(v)), now_us); if (parse_distance_nmi(sentence.field(10), sentence.field(11), v)) model.nav.radar_system.range_scale_nmi.set(static_cast<Real>(v), now_us); set_source(model.nav.radar_system.source, source); model.nav.radar_system.last_update_us = now_us; return true; }
+bool apply_rsd(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 12) { last_error_ = "short RSD"; return false; }
+    float v = 0.0f;
+    model.nav.radar_system.range_units = sentence.field(11)[0];
+    if (parse_distance_nmi(sentence.field(0), sentence.field(11), v)) model.nav.radar_system.origin_range_nmi[0].set(static_cast<Real>(v), now_us);
+    if (parse_real(sentence.field(1), v)) model.nav.radar_system.origin_bearing_deg[0].set(static_cast<Real>(wrap_360_deg(v)), now_us);
+    if (parse_distance_nmi(sentence.field(2), sentence.field(11), v)) model.nav.radar_system.variable_range_marker_nmi[0].set(static_cast<Real>(v), now_us);
+    if (parse_real(sentence.field(3), v)) model.nav.radar_system.electronic_bearing_line_deg[0].set(static_cast<Real>(wrap_360_deg(v)), now_us);
+    if (parse_distance_nmi(sentence.field(4), sentence.field(11), v)) model.nav.radar_system.origin_range_nmi[1].set(static_cast<Real>(v), now_us);
+    if (parse_real(sentence.field(5), v)) model.nav.radar_system.origin_bearing_deg[1].set(static_cast<Real>(wrap_360_deg(v)), now_us);
+    if (parse_distance_nmi(sentence.field(6), sentence.field(11), v)) model.nav.radar_system.variable_range_marker_nmi[1].set(static_cast<Real>(v), now_us);
+    if (parse_real(sentence.field(7), v)) model.nav.radar_system.electronic_bearing_line_deg[1].set(static_cast<Real>(wrap_360_deg(v)), now_us);
+    if (parse_distance_nmi(sentence.field(8), sentence.field(11), v)) model.nav.radar_system.cursor_range_nmi.set(static_cast<Real>(v), now_us);
+    if (parse_real(sentence.field(9), v)) model.nav.radar_system.cursor_bearing_deg.set(static_cast<Real>(wrap_360_deg(v)), now_us);
+    if (parse_distance_nmi(sentence.field(10), sentence.field(11), v)) model.nav.radar_system.range_scale_nmi.set(static_cast<Real>(v), now_us);
+    set_source(model.nav.radar_system.source, source);
+    model.nav.radar_system.last_update_us = now_us;
+    return true;
+}
 
 template<typename Model>
 bool apply_rte(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) { if (sentence.field_count < 4) { last_error_ = "short RTE"; return false; } int32_t n = 0; if (parse_int32(sentence.field(0), n)) model.route.active.total_messages.set(n, now_us); if (parse_int32(sentence.field(1), n)) model.route.active.message_number.set(n, now_us); model.route.active.mode = sentence.field(2)[0]; const uint8_t count = static_cast<uint8_t>((sentence.field_count - 3) < 16 ? (sentence.field_count - 3) : 16); for (uint8_t i = 0; i < count; ++i) nmea_copy_span(model.route.active.waypoint_id[i], sizeof(model.route.active.waypoint_id[i]), sentence.field(static_cast<uint8_t>(3 + i))); model.route.active.waypoint_count.set(static_cast<int32_t>(count), now_us); set_source(model.route.active.source, source); model.route.active.last_update_us = now_us; return true; }
