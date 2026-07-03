@@ -35,8 +35,8 @@ public:
             return model.gnss.fix.track_deg.valid;
         case ModelField::ImuHeadingDeg:
             out.path = "navigation.headingTrue";
-            out.number = deg_to_rad<Real>(model.imu.heading_deg.value);
-            return model.imu.heading_deg.valid;
+            out.number = deg_to_rad<Real>(model.ins.imu.heading_deg.value);
+            return model.ins.imu.heading_deg.valid;
         case ModelField::WindApparentDirectionDeg:
             out.path = "environment.wind.angleApparent";
             out.number = deg_to_rad<Real>(model.wind.apparent.direction_deg.value);
