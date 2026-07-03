@@ -49,10 +49,45 @@ struct ElectricalData {
 };
 
 template<typename Real = float>
+struct AlertAcknowledgementData {
+    Setting<SensorSource> source;
+    char alarm_identifier[24] = {0};
+    Stamped<int32_t> local_alarm_number;
+    Stamped<int32_t> field_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct AlertAcknowledgementDetailData {
+    Setting<SensorSource> source;
+    char alarm_identifier[24] = {0};
+    Stamped<int32_t> local_alarm_number;
+    Stamped<int32_t> alert_instance;
+    char acknowledgement_state = 0;
+    char operator_id[24] = {0};
+    char detail[72] = {0};
+    Stamped<int32_t> field_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct AlertConditionData {
+    Setting<SensorSource> source;
+    char alarm_identifier[24] = {0};
+    Stamped<int32_t> local_alarm_number;
+    Stamped<int32_t> alert_instance;
+    char condition_state = 0;
+    char priority = 0;
+    char description[72] = {0};
+    Stamped<int32_t> field_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
 struct NotificationAlertsData {
-    NmeaTextRecordData<Real> acknowledgement;
-    NmeaTextRecordData<Real> acknowledgement_detail;
-    NmeaTextRecordData<Real> condition;
+    AlertAcknowledgementData<Real> acknowledgement;
+    AlertAcknowledgementDetailData<Real> acknowledgement_detail;
+    AlertConditionData<Real> condition;
     NmeaTextRecordData<Real> fire;
 };
 
