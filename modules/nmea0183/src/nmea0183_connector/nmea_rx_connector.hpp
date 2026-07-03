@@ -125,7 +125,7 @@ public:
         NMEA_APPLY("TPT", apply_tpt);
         NMEA_APPLY("TRF", apply_trf);
         NMEA_APPLY("TTM", apply_ttm);
-        NMEA_APPLY("TXT", apply_txt);
+        NMEA_STORE("TXT", txt);
         NMEA_APPLY("VBW", apply_vbw);
         NMEA_APPLY("VDR", apply_vdr);
         NMEA_APPLY("VHW", apply_vhw);
