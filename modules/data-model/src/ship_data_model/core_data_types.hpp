@@ -172,6 +172,17 @@ struct Setting {
     T value{};
 };
 
+template<typename Real = float>
+struct NmeaTextRecordData {
+    Setting<SensorSource> source;
+    char id[24] = {0};
+    char code[16] = {0};
+    char value[16] = {0};
+    char text[72] = {0};
+    Stamped<int32_t> field_count;
+    uint64_t last_update_us = 0;
+};
+
 template<typename T>
 struct RangeSetting {
     T value{};
@@ -199,14 +210,7 @@ struct TimedCommand {
         value = v;
         valid = true;
         last_update_us = now_us;
-        use_period = true;
     }
-};
-
-template<typename Real = float>
-struct ValuePublicationState {
-    Stamped<uint32_t> published_value_count;
-    Stamped<uint32_t> published_byte_count;
 };
 
 } // namespace ship_data_model
