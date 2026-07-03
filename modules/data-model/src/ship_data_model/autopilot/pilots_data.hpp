@@ -1,6 +1,7 @@
 #pragma once
 
 #include "basic_pilot_data.hpp"
+#include "simple_data.hpp"
 #include "wind_pilot_data.hpp"
 #include "rate_data.hpp"
 
@@ -14,7 +15,7 @@ struct PilotsData {
     BasicPilotData<Real> absolute;
     WindPilotData<Real> wind;
     BasicPilotData<Real> gps;
-    BasicPilotData<Real> simple;
+    SimplePilotData<Real> simple;
     RatePilotData<Real> rate;
     BasicPilotData<Real> SHIP_DATA_MODEL_JOIN_FIELD(v, mg);
 };
