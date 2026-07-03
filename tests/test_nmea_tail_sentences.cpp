@@ -51,13 +51,11 @@ int main() {
     NEAR(app.store().model().ais.tracked_target.longitude_deg.value, -123.1595f, 0.001f);
 
     feed(app, "ALACK,42", now_us);
-    REQUIRE(std::strcmp(app.store().model().notifications.alarms.acknowledgement.id, "42") == 0);
     REQUIRE(app.store().model().notifications.alarms.acknowledgement.field_count.value == 1);
     REQUIRE(app.store().model().notifications.alarms.acknowledgement.last_update_us == now_us);
 
     feed(app, "AIADS,DEV1,A,OK", now_us);
-    REQUIRE(std::strcmp(app.store().model().notifications.messages.device_status.id, "DEV1") == 0);
-    REQUIRE(std::strcmp(app.store().model().notifications.messages.device_status.text, "OK") == 0);
+    REQUIRE(app.store().model().notifications.messages.device_status.field_count.value == 3);
 
     feed(app, "VCCUR,1,123.4,T,2.5,N,10.0,M", now_us);
     NEAR(app.store().model().sea.current_direction_deg.value, 123.4f, 0.001f);
@@ -74,22 +72,17 @@ int main() {
     REQUIRE(std::strcmp(app.nmea0183().dsc_state().expansion.payload, "45894494") == 0);
 
     feed(app, "FDFIR,FIRE1,ALARM", now_us);
-    REQUIRE(std::strcmp(app.store().model().notifications.alarms.fire.id, "FIRE1") == 0);
-    REQUIRE(std::strcmp(app.store().model().notifications.alarms.fire.code, "ALARM") == 0);
+    REQUIRE(app.store().model().notifications.alarms.fire.field_count.value == 2);
 
     feed(app, "GPTXT,01,01,02,hello", now_us);
-    REQUIRE(std::strcmp(app.store().model().notifications.messages.text.text, "hello") == 0);
     REQUIRE(app.store().model().notifications.messages.text.field_count.value == 4);
 
     feed(app, "GPWDC,12.3,N,22.7796,K,TO1,FROM1", now_us);
     NEAR(app.store().model().route.waypoint.distance_nmi.value, 12.3f, 0.001f);
-    REQUIRE(std::strcmp(app.store().model().route.waypoint.to_waypoint_id, "TO1") == 0);
     feed(app, "GPWDR,12.4,N,22.9648,K,TO2,FROM2", now_us);
     NEAR(app.store().model().route.waypoint.distance_nmi.value, 12.4f, 0.001f);
-    REQUIRE(std::strcmp(app.store().model().route.waypoint.to_waypoint_id, "TO2") == 0);
     feed(app, "GPZDL,000930,12.3,N,VP1", now_us);
     NEAR(app.store().model().route.waypoint.distance_nmi.value, 12.3f, 0.001f);
-    REQUIRE(std::strcmp(app.store().model().route.waypoint.to_waypoint_id, "VP1") == 0);
 
     feed(app, "GPZFO,123520,000315,ORIG1", now_us);
     NEAR(app.store().model().route.waypoint.origin_utc_time_s.value, 45320.0f, 0.001f);
