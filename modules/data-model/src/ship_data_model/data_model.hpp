@@ -92,10 +92,32 @@ struct NotificationAlertsData {
 };
 
 template<typename Real = float>
+struct EventLogData {
+    Setting<SensorSource> source;
+    char event_id[24] = {0};
+    char event_type[16] = {0};
+    char event_state = 0;
+    char event_text[72] = {0};
+    Stamped<int32_t> field_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct EventData {
+    Setting<SensorSource> source;
+    char event_id[24] = {0};
+    char event_source[24] = {0};
+    char event_state = 0;
+    char event_text[72] = {0};
+    Stamped<int32_t> field_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
 struct NotificationMessagesData {
     NmeaTextRecordData<Real> text;
-    NmeaTextRecordData<Real> event_log;
-    NmeaTextRecordData<Real> event;
+    EventLogData<Real> event_log;
+    EventData<Real> event;
 };
 
 template<typename Real = float>
