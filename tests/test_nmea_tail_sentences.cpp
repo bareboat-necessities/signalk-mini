@@ -51,11 +51,11 @@ int main() {
     NEAR(app.store().model().ais.tracked_target.longitude_deg.value, -123.1595f, 0.001f);
 
     feed(app, "ALACK,42", now_us);
-    REQUIRE(app.store().model().notifications.alarms.acknowledgement.field_count.value == 1);
-    REQUIRE(app.store().model().notifications.alarms.acknowledgement.last_update_us == now_us);
+    REQUIRE(app.store().model().alerting.acknowledgement.field_count.value == 1);
+    REQUIRE(app.store().model().alerting.acknowledgement.last_update_us == now_us);
 
     feed(app, "AIADS,DEV1,A,OK", now_us);
-    REQUIRE(app.store().model().notifications.messages.device_status.field_count.value == 3);
+    REQUIRE(app.store().model().equipment.ais_data_status.field_count.value == 3);
 
     feed(app, "VCCUR,1,123.4,T,2.5,N,10.0,M", now_us);
     NEAR(app.store().model().sea.current_direction_deg.value, 123.4f, 0.001f);
@@ -71,11 +71,16 @@ int main() {
     REQUIRE(app.nmea0183().dsc_state().expansion.total_messages.value == 1);
     REQUIRE(std::strcmp(app.nmea0183().dsc_state().expansion.payload, "45894494") == 0);
 
+    feed(app, "CDDSI,REQ1,3380400790", now_us);
+    REQUIRE(app.store().model().dsc.interrogation.field_count.value == 2);
+    feed(app, "CDDSR,RSP1,3380400790", now_us);
+    REQUIRE(app.store().model().dsc.response.field_count.value == 2);
+
     feed(app, "FDFIR,FIRE1,ALARM", now_us);
-    REQUIRE(app.store().model().notifications.alarms.fire.field_count.value == 2);
+    REQUIRE(app.store().model().events.fire.field_count.value == 2);
 
     feed(app, "GPTXT,01,01,02,hello", now_us);
-    REQUIRE(app.store().model().notifications.messages.text.field_count.value == 4);
+    REQUIRE(app.store().model().messages.text.field_count.value == 4);
 
     feed(app, "GPWDC,12.3,N,22.7796,K,TO1,FROM1", now_us);
     NEAR(app.store().model().route.waypoint.distance_nmi.value, 12.3f, 0.001f);
