@@ -65,6 +65,17 @@ struct AlarmNotificationsData {
 template<typename Real = float>
 struct MessageNotificationsData {
     NotificationTextData<Real> text;
+    NotificationTextData<Real> device_status;
+    NotificationTextData<Real> device_acknowledgement;
+    NotificationTextData<Real> safety;
+    NotificationTextData<Real> route_estimate;
+    NotificationTextData<Real> control;
+    NotificationTextData<Real> command;
+    NotificationTextData<Real> response;
+    NotificationTextData<Real> display_control;
+    NotificationTextData<Real> door_status;
+    NotificationTextData<Real> dsc_interrogation;
+    NotificationTextData<Real> dsc_response;
 };
 
 template<typename Real = float>
