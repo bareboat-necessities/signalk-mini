@@ -43,40 +43,39 @@ public:
 
 #define NMEA_APPLY(ID, FN) if (sentence_is(sentence, ID)) return FN(sentence, model, now_us, source)
 #define NMEA_APPLY_NO_SOURCE(ID, FN) if (sentence_is(sentence, ID)) return FN(sentence, model, now_us)
-#define NMEA_STORE(ID, REC) if (sentence_is(sentence, ID)) return apply_modeled_sentence_record(sentence, model.nmea.REC, now_us, source)
         NMEA_APPLY("AAM", apply_aam);
-        NMEA_STORE("ACK", ack);
-        NMEA_STORE("ADS", ads);
-        NMEA_STORE("AKD", akd);
-        NMEA_STORE("ALA", ala);
+        NMEA_APPLY("ACK", apply_ack);
+        NMEA_APPLY("ADS", apply_ads);
+        NMEA_APPLY("AKD", apply_akd);
+        NMEA_APPLY("ALA", apply_ala);
         NMEA_APPLY("ALM", apply_alm);
         NMEA_APPLY("APA", apply_apa);
         NMEA_APPLY("APB", apply_apb);
-        NMEA_STORE("ASD", asd);
-        NMEA_STORE("BEC", bec);
+        NMEA_APPLY("ASD", apply_asd);
+        NMEA_APPLY("BEC", apply_bec);
         if (sentence_is(sentence, "BOD")) return apply_bod_bww(sentence, model, now_us, source);
         if (sentence_is(sentence, "BWC")) return apply_bwc_bwr(sentence, model, now_us, source);
         if (sentence_is(sentence, "BWR")) return apply_bwc_bwr(sentence, model, now_us, source);
         if (sentence_is(sentence, "BWW")) return apply_bod_bww(sentence, model, now_us, source);
-        NMEA_STORE("CEK", cek);
-        NMEA_STORE("COP", cop);
+        NMEA_APPLY("CEK", apply_cek);
+        NMEA_APPLY("COP", apply_cop);
         NMEA_APPLY("CUR", apply_cur);
         NMEA_APPLY("DBK", apply_depth_below_keel);
         NMEA_APPLY("DBS", apply_depth_below_surface);
         NMEA_APPLY("DBT", apply_dbt);
         NMEA_APPLY("DCN", apply_dcn);
-        NMEA_STORE("DCR", dcr);
-        NMEA_STORE("DDC", ddc);
-        NMEA_STORE("DOR", dor);
+        NMEA_APPLY("DCR", apply_dcr);
+        NMEA_APPLY("DDC", apply_ddc);
+        NMEA_APPLY("DOR", apply_dor);
         NMEA_APPLY("DPT", apply_dpt);
         NMEA_APPLY("DSC", apply_dsc);
         NMEA_APPLY("DSE", apply_dse);
-        NMEA_STORE("DSI", dsi);
-        NMEA_STORE("DSR", dsr);
+        NMEA_APPLY("DSI", apply_dsi);
+        NMEA_APPLY("DSR", apply_dsr);
         NMEA_APPLY("DTM", apply_dtm);
-        NMEA_STORE("ETL", etl);
-        NMEA_STORE("EVE", eve);
-        NMEA_STORE("FIR", fir);
+        NMEA_APPLY("ETL", apply_etl);
+        NMEA_APPLY("EVE", apply_eve);
+        NMEA_APPLY("FIR", apply_fir);
         NMEA_APPLY("FSI", apply_fsi);
         NMEA_APPLY("GBS", apply_gbs);
         NMEA_APPLY("GGA", apply_gga);
@@ -125,7 +124,7 @@ public:
         NMEA_APPLY("TPT", apply_tpt);
         NMEA_APPLY("TRF", apply_trf);
         NMEA_APPLY("TTM", apply_ttm);
-        NMEA_STORE("TXT", txt);
+        NMEA_APPLY("TXT", apply_txt);
         NMEA_APPLY("VBW", apply_vbw);
         NMEA_APPLY("VDR", apply_vdr);
         NMEA_APPLY("VHW", apply_vhw);
@@ -135,18 +134,17 @@ public:
         if (sentence_is(sentence, "VWR")) return apply_vwr(sentence, model, now_us, source, false);
         if (sentence_is(sentence, "VWT")) return apply_vwr(sentence, model, now_us, source, true);
         NMEA_APPLY("WCV", apply_wcv);
-        NMEA_STORE("WDC", wdc);
-        NMEA_STORE("WDR", wdr);
+        NMEA_APPLY("WDC", apply_wdc);
+        NMEA_APPLY("WDR", apply_wdr);
         NMEA_APPLY("WNC", apply_wnc);
         NMEA_APPLY("WPL", apply_wpl);
         NMEA_APPLY_NO_SOURCE("XDR", apply_xdr);
         NMEA_APPLY("XTE", apply_xte);
         NMEA_APPLY("XTR", apply_xtr);
         NMEA_APPLY("ZDA", apply_zda);
-        NMEA_STORE("ZDL", zdl);
+        NMEA_APPLY("ZDL", apply_zdl);
         NMEA_APPLY("ZFO", apply_zfo);
         NMEA_APPLY("ZTG", apply_ztg);
-#undef NMEA_STORE
 #undef NMEA_APPLY
 #undef NMEA_APPLY_NO_SOURCE
 
@@ -169,13 +167,15 @@ private:
     }
 
     template<typename Record>
-    bool apply_modeled_sentence_record(const NmeaSentence& sentence,
-                                       Record& record,
-                                       uint64_t now_us,
-                                       ship_data_model::SensorSource source) {
-        nmea_copy_span(record.talker, sizeof(record.talker), sentence.talker);
-        nmea_copy_span(record.sentence_id, sizeof(record.sentence_id), sentence.sentence);
-        nmea_copy_span(record.raw, sizeof(record.raw), NmeaSpan(sentence.raw, sentence.raw_length));
+    bool apply_notification_text_record(const NmeaSentence& sentence,
+                                        Record& record,
+                                        uint64_t now_us,
+                                        ship_data_model::SensorSource source) {
+        if (sentence.field_count > 0) nmea_copy_span(record.id, sizeof(record.id), sentence.field(0));
+        if (sentence.field_count > 1) nmea_copy_span(record.code, sizeof(record.code), sentence.field(1));
+        if (sentence.field_count > 2) nmea_copy_span(record.value, sizeof(record.value), sentence.field(2));
+        if (sentence.field_count > 3) nmea_copy_span(record.text, sizeof(record.text), sentence.field(3));
+        else if (sentence.field_count > 2) nmea_copy_span(record.text, sizeof(record.text), sentence.field(2));
         record.field_count.set(static_cast<int32_t>(sentence.field_count), now_us);
         set_source(record.source, source);
         record.last_update_us = now_us;
