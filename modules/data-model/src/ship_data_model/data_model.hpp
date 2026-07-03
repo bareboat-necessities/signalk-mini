@@ -1,10 +1,11 @@
 #pragma once
 
 #include "autopilot/autopilot_data.hpp"
-#include "ship_imu_data.hpp"
-#include "nav_data.hpp"
-#include "wind_sea_data.hpp"
-#include "steering_data.hpp"
+#include "ins/ship_imu_data.hpp"
+#include "nav/nav_data.hpp"
+#include "route/route_data.hpp"
+#include "wind_sea/wind_sea_data.hpp"
+#include "steering/steering_data.hpp"
 
 namespace ship_data_model {
 
