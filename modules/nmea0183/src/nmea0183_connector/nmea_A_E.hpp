@@ -2,10 +2,6 @@
 
 // Included inside Nmea0183RxConnector.
 
-bool accept_unmodeled_sentence(const NmeaSentence&) {
-    return true;
-}
-
 template<typename Model>
 bool apply_aam(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 5) {
@@ -29,26 +25,22 @@ bool apply_aam(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
 template<typename Model>
 bool apply_ack(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model; (void)now_us; (void)source;
-    return accept_unmodeled_sentence(sentence);
+    return apply_modeled_sentence_record(sentence, model.nmea.ack, now_us, source);
 }
 
 template<typename Model>
 bool apply_ads(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model; (void)now_us; (void)source;
-    return accept_unmodeled_sentence(sentence);
+    return apply_modeled_sentence_record(sentence, model.nmea.ads, now_us, source);
 }
 
 template<typename Model>
 bool apply_akd(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model; (void)now_us; (void)source;
-    return accept_unmodeled_sentence(sentence);
+    return apply_modeled_sentence_record(sentence, model.nmea.akd, now_us, source);
 }
 
 template<typename Model>
 bool apply_ala(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model; (void)now_us; (void)source;
-    return accept_unmodeled_sentence(sentence);
+    return apply_modeled_sentence_record(sentence, model.nmea.ala, now_us, source);
 }
 
 template<typename Model>
@@ -158,14 +150,12 @@ bool apply_apb(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
 template<typename Model>
 bool apply_asd(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model; (void)now_us; (void)source;
-    return accept_unmodeled_sentence(sentence);
+    return apply_modeled_sentence_record(sentence, model.nmea.asd, now_us, source);
 }
 
 template<typename Model>
 bool apply_bec(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model; (void)now_us; (void)source;
-    return accept_unmodeled_sentence(sentence);
+    return apply_modeled_sentence_record(sentence, model.nmea.bec, now_us, source);
 }
 
 template<typename Model>
@@ -211,14 +201,12 @@ bool apply_bwc_bwr(const NmeaSentence& sentence, Model& model, uint64_t now_us, 
 
 template<typename Model>
 bool apply_cek(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model; (void)now_us; (void)source;
-    return accept_unmodeled_sentence(sentence);
+    return apply_modeled_sentence_record(sentence, model.nmea.cek, now_us, source);
 }
 
 template<typename Model>
 bool apply_cop(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model; (void)now_us; (void)source;
-    return accept_unmodeled_sentence(sentence);
+    return apply_modeled_sentence_record(sentence, model.nmea.cop, now_us, source);
 }
 
 template<typename Model>
@@ -315,20 +303,17 @@ bool apply_dcn(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
 template<typename Model>
 bool apply_dcr(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model; (void)now_us; (void)source;
-    return accept_unmodeled_sentence(sentence);
+    return apply_modeled_sentence_record(sentence, model.nmea.dcr, now_us, source);
 }
 
 template<typename Model>
 bool apply_ddc(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model; (void)now_us; (void)source;
-    return accept_unmodeled_sentence(sentence);
+    return apply_modeled_sentence_record(sentence, model.nmea.ddc, now_us, source);
 }
 
 template<typename Model>
 bool apply_dor(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model; (void)now_us; (void)source;
-    return accept_unmodeled_sentence(sentence);
+    return apply_modeled_sentence_record(sentence, model.nmea.dor, now_us, source);
 }
 
 template<typename Model>
@@ -405,14 +390,12 @@ bool apply_dse(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
 template<typename Model>
 bool apply_dsi(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model; (void)now_us; (void)source;
-    return accept_unmodeled_sentence(sentence);
+    return apply_modeled_sentence_record(sentence, model.nmea.dsi, now_us, source);
 }
 
 template<typename Model>
 bool apply_dsr(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model; (void)now_us; (void)source;
-    return accept_unmodeled_sentence(sentence);
+    return apply_modeled_sentence_record(sentence, model.nmea.dsr, now_us, source);
 }
 
 template<typename Model>
@@ -440,12 +423,10 @@ bool apply_dtm(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
 template<typename Model>
 bool apply_etl(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model; (void)now_us; (void)source;
-    return accept_unmodeled_sentence(sentence);
+    return apply_modeled_sentence_record(sentence, model.nmea.etl, now_us, source);
 }
 
 template<typename Model>
 bool apply_eve(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    (void)model; (void)now_us; (void)source;
-    return accept_unmodeled_sentence(sentence);
+    return apply_modeled_sentence_record(sentence, model.nmea.eve, now_us, source);
 }
