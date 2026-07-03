@@ -130,12 +130,12 @@ static void test_third_smart0183_group(signalk_mini::SignalKMiniApp<float>& app,
     REQUIRE(std::strcmp(app.store().model().nav.transit_fix.waypoint_id, "WPX") == 0);
 
     feed(app, "HCHDT,081.7,T", now_us);
-    NEAR(app.store().model().imu.heading_true_deg.value, 81.7f, 0.001f);
+    NEAR(app.store().model().ins.imu.heading_true_deg.value, 81.7f, 0.001f);
     feed(app, "HCHDM,082.3,M", now_us);
-    NEAR(app.store().model().imu.heading_magnetic_deg.value, 82.3f, 0.001f);
+    NEAR(app.store().model().ins.imu.heading_magnetic_deg.value, 82.3f, 0.001f);
     feed(app, "HCHDG,083.4,1.2,E,13.1,W", now_us);
-    NEAR(app.store().model().imu.magnetic_deviation_deg.value, 1.2f, 0.001f);
-    NEAR(app.store().model().imu.magnetic_variation_deg.value, -13.1f, 0.001f);
+    NEAR(app.store().model().ins.imu.magnetic_deviation_deg.value, 1.2f, 0.001f);
+    NEAR(app.store().model().ins.imu.magnetic_variation_deg.value, -13.1f, 0.001f);
 }
 
 static void test_fourth_smart0183_group(signalk_mini::SignalKMiniApp<float>& app, uint64_t& now_us) {
@@ -314,7 +314,7 @@ int main() {
     REQUIRE(model.gnss.fix.fix_lat_deg.valid);
     REQUIRE(model.gnss.fix.fix_lon_deg.valid);
     REQUIRE(model.gnss.fix.speed_kn.valid);
-    REQUIRE(model.imu.heading_deg.valid);
+    REQUIRE(model.ins.imu.heading_deg.valid);
     REQUIRE(model.wind.apparent.speed_kn.valid);
     REQUIRE(model.sea.depth_m.valid);
     NEAR(model.gnss.fix.fix_lat_deg.value, 40.7102367f, 0.0002f);
