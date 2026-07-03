@@ -167,10 +167,10 @@ private:
     }
 
     template<typename Record>
-    bool apply_notification_text_record(const NmeaSentence& sentence,
-                                        Record& record,
-                                        uint64_t now_us,
-                                        ship_data_model::SensorSource source) {
+    bool apply_nmea_text_record(const NmeaSentence& sentence,
+                                Record& record,
+                                uint64_t now_us,
+                                ship_data_model::SensorSource source) {
         if (sentence.field_count > 0) nmea_copy_span(record.id, sizeof(record.id), sentence.field(0));
         if (sentence.field_count > 1) nmea_copy_span(record.code, sizeof(record.code), sentence.field(1));
         if (sentence.field_count > 2) nmea_copy_span(record.value, sizeof(record.value), sentence.field(2));
