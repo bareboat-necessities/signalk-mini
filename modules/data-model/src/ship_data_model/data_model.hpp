@@ -5,6 +5,7 @@
 #include "nav_data.hpp"
 #include "wind_sea_data.hpp"
 #include "steering_data.hpp"
+#include "nmea_sentence_data.hpp"
 
 namespace ship_data_model {
 
@@ -75,6 +76,7 @@ struct DataModel {
     ElectricalData<Real> electrical;
     CommData<Real> comm;
     NotificationsData<Real> notifications;
+    NmeaModeledSentenceData<Real> nmea;
 
     // IMU remains in top-level storage until the inertial/navigation split is modeled separately.
     ShipImuData<Real> imu;
