@@ -22,6 +22,7 @@
 #include "charts/charts_data.hpp"
 #include "lights/lights_data.hpp"
 #include "sails/sails_data.hpp"
+#include "bilges/bilges_data.hpp"
 
 namespace ship_data_model {
 
@@ -54,6 +55,7 @@ struct DataModel {
     ChartsData<Real> charts;
     LightsData<Real> lights;
     SailsData<Real> sails;
+    BilgesData<Real> bilges;
 };
 
 } // namespace ship_data_model
