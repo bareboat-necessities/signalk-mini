@@ -34,6 +34,7 @@ struct NmeaModeledSentenceData {
     NmeaSentenceRecordData<Real> etl;
     NmeaSentenceRecordData<Real> eve;
     NmeaSentenceRecordData<Real> fir;
+    NmeaSentenceRecordData<Real> txt;
     NmeaSentenceRecordData<Real> wdc;
     NmeaSentenceRecordData<Real> wdr;
     NmeaSentenceRecordData<Real> zdl;
