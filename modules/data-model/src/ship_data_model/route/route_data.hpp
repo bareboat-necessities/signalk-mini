@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../core_data_types.hpp"
+#include "../autopilot/autopilot_types.hpp"
 
 namespace ship_data_model {
 
