@@ -111,6 +111,62 @@ static AisPayload make_type27_long_range_payload() {
     return make_payload(bits);
 }
 
+static AisPayload make_type7_ack_payload() {
+    std::string bits;
+    append_bits(bits, 7, 6);
+    append_bits(bits, 0, 2);
+    append_bits(bits, 444555666u, 30);
+    append_bits(bits, 0, 2);
+    append_bits(bits, 123456789u, 30);
+    append_bits(bits, 2, 2);
+    return make_payload(bits);
+}
+
+static AisPayload make_type10_utc_inquiry_payload() {
+    std::string bits;
+    append_bits(bits, 10, 6);
+    append_bits(bits, 0, 2);
+    append_bits(bits, 555666777u, 30);
+    append_bits(bits, 0, 2);
+    append_bits(bits, 123456789u, 30);
+    append_bits(bits, 0, 2);
+    return make_payload(bits);
+}
+
+static AisPayload make_type20_data_link_payload() {
+    std::string bits;
+    append_bits(bits, 20, 6);
+    append_bits(bits, 0, 2);
+    append_bits(bits, 666777888u, 30);
+    append_bits(bits, 0, 2);
+    append_bits(bits, 123, 12);
+    append_bits(bits, 3, 4);
+    append_bits(bits, 5, 3);
+    append_bits(bits, 99, 11);
+    return make_payload(bits);
+}
+
+static AisPayload make_type22_channel_management_payload() {
+    std::string bits;
+    append_bits(bits, 22, 6);
+    append_bits(bits, 0, 2);
+    append_bits(bits, 777888999u, 30);
+    append_bits(bits, 0, 2);
+    append_bits(bits, 2087, 12);
+    append_bits(bits, 2088, 12);
+    append_bits(bits, 1, 4);
+    append_bits(bits, 1, 1);
+    append_signed_bits(bits, static_cast<int32_t>(std::lround(-73.0 * 600.0)), 18);
+    append_signed_bits(bits, static_cast<int32_t>(std::lround(41.0 * 600.0)), 17);
+    append_signed_bits(bits, static_cast<int32_t>(std::lround(-74.0 * 600.0)), 18);
+    append_signed_bits(bits, static_cast<int32_t>(std::lround(40.0 * 600.0)), 17);
+    append_bits(bits, 0, 1);
+    append_bits(bits, 1, 1);
+    append_bits(bits, 0, 1);
+    append_bits(bits, 4, 3);
+    return make_payload(bits);
+}
+
 static const ship_data_model::AisTargetData<float>* find_target(const ship_data_model::AisTargetTableData<float>& table, int32_t mmsi) {
     for (uint8_t i = 0; i < ship_data_model::AIS_TARGET_TABLE_CAPACITY; ++i) {
         if (table.targets[i].occupied && table.targets[i].mmsi.valid && table.targets[i].mmsi.value == mmsi) {
@@ -219,6 +275,52 @@ int main() {
     REQUIRE(target != nullptr);
     NEAR(target->longitude_deg.value, -73.9f, 0.001f);
     REQUIRE(app.store().model().ais.targets.target_count.value == 4);
+
+    const std::string type7 = single_vdm_body(make_type7_ack_payload());
+    feed_ais(app, type7.c_str(), now_us);
+    const auto& ack = app.store().model().ais.acknowledgement;
+    REQUIRE(ack.message_type.value == 7);
+    REQUIRE(ack.mmsi.value == 444555666);
+    REQUIRE(ack.acknowledgement_count.value == 1);
+    REQUIRE(ack.destination_mmsi[0].value == 123456789);
+    REQUIRE(ack.sequence_number[0].value == 2);
+    REQUIRE(find_target(app.store().model().ais.targets, 444555666) != nullptr);
+
+    const std::string type10 = single_vdm_body(make_type10_utc_inquiry_payload());
+    feed_ais(app, type10.c_str(), now_us);
+    const auto& utc = app.store().model().ais.utc_inquiry;
+    REQUIRE(utc.message_type.value == 10);
+    REQUIRE(utc.mmsi.value == 555666777);
+    REQUIRE(utc.destination_mmsi.value == 123456789);
+
+    const std::string type20 = single_vdm_body(make_type20_data_link_payload());
+    feed_ais(app, type20.c_str(), now_us);
+    const auto& dlm = app.store().model().ais.data_link_management;
+    REQUIRE(dlm.message_type.value == 20);
+    REQUIRE(dlm.mmsi.value == 666777888);
+    REQUIRE(dlm.reservation_count.value == 1);
+    REQUIRE(dlm.slot_offset[0].value == 123);
+    REQUIRE(dlm.slot_count[0].value == 3);
+    REQUIRE(dlm.timeout_min[0].value == 5);
+    REQUIRE(dlm.increment[0].value == 99);
+
+    const std::string type22 = single_vdm_body(make_type22_channel_management_payload());
+    feed_ais(app, type22.c_str(), now_us);
+    const auto& ch = app.store().model().ais.channel_management;
+    REQUIRE(ch.message_type.value == 22);
+    REQUIRE(ch.mmsi.value == 777888999);
+    REQUIRE(ch.channel_a.value == 2087);
+    REQUIRE(ch.channel_b.value == 2088);
+    REQUIRE(ch.txrx_mode.value == 1);
+    REQUIRE(ch.high_power == true);
+    REQUIRE(ch.addressed == false);
+    NEAR(ch.northeast_lon_deg.value, -73.0f, 0.001f);
+    NEAR(ch.northeast_lat_deg.value, 41.0f, 0.001f);
+    NEAR(ch.southwest_lon_deg.value, -74.0f, 0.001f);
+    NEAR(ch.southwest_lat_deg.value, 40.0f, 0.001f);
+    REQUIRE(ch.bandwidth_a_12_5khz == true);
+    REQUIRE(ch.bandwidth_b_12_5khz == false);
+    REQUIRE(ch.transitional_zone_size_nmi.value == 4);
 
     return 0;
 }
