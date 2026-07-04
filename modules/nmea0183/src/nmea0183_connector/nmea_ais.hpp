@@ -2,6 +2,12 @@
 
 // Included inside Nmea0183RxConnector.
 
+struct AisDecodedHeader {
+    int32_t message_type = 0;
+    int32_t repeat_indicator = 0;
+    int32_t mmsi = 0;
+};
+
 int ais_sixbit_value(char c) const {
     if (c >= '0' && c <= 'W') return c - '0';
     if (c >= '`' && c <= 'w') return c - '8';
@@ -50,6 +56,14 @@ int32_t ais_get_s(const char* payload, size_t payload_len, size_t bit_offset, ui
     return -static_cast<int32_t>(((~raw) & mask) + 1u);
 }
 
+bool ais_decode_header(const char* payload, size_t payload_len, AisDecodedHeader& out) const {
+    bool ok = true;
+    out.message_type = static_cast<int32_t>(ais_get_u(payload, payload_len, 0, 6, ok));
+    out.repeat_indicator = static_cast<int32_t>(ais_get_u(payload, payload_len, 6, 2, ok));
+    out.mmsi = static_cast<int32_t>(ais_get_u(payload, payload_len, 8, 30, ok));
+    return ok && out.message_type >= 1 && out.message_type <= 27;
+}
+
 char ais_text_char(uint32_t value) const {
     value &= 0x3fu;
     if (value < 32u) return static_cast<char>('@' + value);
@@ -80,31 +94,6 @@ bool ais_position_deg(int32_t raw, bool longitude, Real& out_deg) const {
     return true;
 }
 
-void ais_set_common_raw(const NmeaSentence& sentence,
-                        ship_data_model::AisRawMessageData<Real>& raw,
-                        const char* payload,
-                        size_t payload_len,
-                        int32_t fill_bits,
-                        int32_t message_type,
-                        int32_t repeat_indicator,
-                        int32_t mmsi,
-                        uint64_t now_us,
-                        ship_data_model::SensorSource source) {
-    set_source(raw.source, source);
-    nmea_copy_span(raw.sentence_id, sizeof(raw.sentence_id), sentence.sentence);
-    raw.radio_channel = sentence.field_count > 3 ? sentence.field(3)[0] : 0;
-    raw.own_vessel = sentence_is(sentence, "VDO");
-    raw.complete = true;
-    raw.overflow = sentence.fragment.is_fragmented ? state_.ais_message.overflow : false;
-    nmea_copy_span(raw.payload, sizeof(raw.payload), NmeaSpan(payload, payload_len));
-    raw.payload_bit_count.set(static_cast<int32_t>(payload_len * 6u - static_cast<size_t>(fill_bits)), now_us);
-    raw.fill_bits.set(fill_bits, now_us);
-    raw.message_type.set(message_type, now_us);
-    raw.repeat_indicator.set(repeat_indicator, now_us);
-    raw.mmsi.set(mmsi, now_us);
-    raw.last_update_us = now_us;
-}
-
 void ais_update_legacy_target_from_position(const ship_data_model::AisPositionReportData<Real>& pos,
                                             ship_data_model::TrackedTargetData<Real>& target,
                                             uint64_t now_us,
@@ -123,20 +112,18 @@ void ais_update_legacy_target_from_position(const ship_data_model::AisPositionRe
 
 bool ais_parse_position_report(const char* payload,
                                size_t payload_len,
+                               const AisDecodedHeader& header,
                                uint64_t now_us,
                                ship_data_model::SensorSource source,
                                ship_data_model::AisPositionReportData<Real>& out,
                                ship_data_model::TrackedTargetData<Real>& legacy_target) {
     bool ok = true;
-    const int32_t message_type = static_cast<int32_t>(ais_get_u(payload, payload_len, 0, 6, ok));
-    const int32_t mmsi = static_cast<int32_t>(ais_get_u(payload, payload_len, 8, 30, ok));
-    if (!ok) return false;
-
     set_source(out.source, source);
-    out.message_type.set(message_type, now_us);
-    out.mmsi.set(mmsi, now_us);
+    out.message_type.set(header.message_type, now_us);
+    out.repeat_indicator.set(header.repeat_indicator, now_us);
+    out.mmsi.set(header.mmsi, now_us);
 
-    if (message_type == 1 || message_type == 2 || message_type == 3) {
+    if (header.message_type == 1 || header.message_type == 2 || header.message_type == 3) {
         const int32_t nav_status = static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 4, ok));
         const int32_t rot_raw = ais_get_s(payload, payload_len, 42, 8, ok);
         const int32_t sog_raw = static_cast<int32_t>(ais_get_u(payload, payload_len, 50, 10, ok));
@@ -165,7 +152,7 @@ bool ais_parse_position_report(const char* payload,
         if (heading_raw < 511) out.true_heading_deg.set(static_cast<Real>(heading_raw), now_us);
         if (timestamp < 60) out.timestamp_s.set(timestamp, now_us);
         out.maneuver_indicator.set(maneuver, now_us);
-    } else if (message_type == 18 || message_type == 19) {
+    } else if (header.message_type == 18 || header.message_type == 19) {
         const int32_t sog_raw = static_cast<int32_t>(ais_get_u(payload, payload_len, 46, 10, ok));
         const bool accuracy = ais_get_u(payload, payload_len, 56, 1, ok) != 0u;
         const int32_t lon_raw = ais_get_s(payload, payload_len, 57, 28, ok);
@@ -194,11 +181,11 @@ bool ais_parse_position_report(const char* payload,
 
 bool ais_parse_base_station(const char* payload,
                             size_t payload_len,
+                            const AisDecodedHeader& header,
                             uint64_t now_us,
                             ship_data_model::SensorSource source,
                             ship_data_model::AisBaseStationData<Real>& out) {
     bool ok = true;
-    const int32_t mmsi = static_cast<int32_t>(ais_get_u(payload, payload_len, 8, 30, ok));
     const int32_t year = static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 14, ok));
     const int32_t month = static_cast<int32_t>(ais_get_u(payload, payload_len, 52, 4, ok));
     const int32_t day = static_cast<int32_t>(ais_get_u(payload, payload_len, 56, 5, ok));
@@ -212,7 +199,9 @@ bool ais_parse_base_station(const char* payload,
     const bool raim = ais_get_u(payload, payload_len, 148, 1, ok) != 0u;
     if (!ok) return false;
     set_source(out.source, source);
-    out.mmsi.set(mmsi, now_us);
+    out.message_type.set(header.message_type, now_us);
+    out.repeat_indicator.set(header.repeat_indicator, now_us);
+    out.mmsi.set(header.mmsi, now_us);
     out.year.set(year, now_us);
     out.month.set(month, now_us);
     out.day.set(day, now_us);
@@ -232,12 +221,12 @@ bool ais_parse_base_station(const char* payload,
 
 bool ais_parse_static_voyage(const char* payload,
                              size_t payload_len,
+                             const AisDecodedHeader& header,
                              uint64_t now_us,
                              ship_data_model::SensorSource source,
                              ship_data_model::AisStaticVoyageData<Real>& out,
                              ship_data_model::TrackedTargetData<Real>& legacy_target) {
     bool ok = true;
-    const int32_t mmsi = static_cast<int32_t>(ais_get_u(payload, payload_len, 8, 30, ok));
     const int32_t ais_version = static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 2, ok));
     const int32_t imo = static_cast<int32_t>(ais_get_u(payload, payload_len, 40, 30, ok));
     const int32_t ship_type = static_cast<int32_t>(ais_get_u(payload, payload_len, 232, 8, ok));
@@ -254,7 +243,9 @@ bool ais_parse_static_voyage(const char* payload,
     const bool dte_not_ready = ais_get_u(payload, payload_len, 422, 1, ok) != 0u;
     if (!ok) return false;
     set_source(out.source, source);
-    out.mmsi.set(mmsi, now_us);
+    out.message_type.set(header.message_type, now_us);
+    out.repeat_indicator.set(header.repeat_indicator, now_us);
+    out.mmsi.set(header.mmsi, now_us);
     out.ais_version.set(ais_version, now_us);
     out.imo_number.set(imo, now_us);
     ais_copy_text(out.call_sign, sizeof(out.call_sign), payload, payload_len, 70, 7);
@@ -274,7 +265,7 @@ bool ais_parse_static_voyage(const char* payload,
     out.dte_ready = !dte_not_ready;
     out.last_update_us = now_us;
     set_source(legacy_target.source, source);
-    legacy_target.target_number.set(mmsi, now_us);
+    legacy_target.target_number.set(header.mmsi, now_us);
     nmea_copy_cstr(legacy_target.target_name, sizeof(legacy_target.target_name), out.vessel_name);
     legacy_target.last_update_us = now_us;
     return true;
@@ -282,16 +273,18 @@ bool ais_parse_static_voyage(const char* payload,
 
 bool ais_parse_class_b_static(const char* payload,
                               size_t payload_len,
+                              const AisDecodedHeader& header,
                               uint64_t now_us,
                               ship_data_model::SensorSource source,
                               ship_data_model::AisClassBStaticData<Real>& out,
                               ship_data_model::TrackedTargetData<Real>& legacy_target) {
     bool ok = true;
-    const int32_t mmsi = static_cast<int32_t>(ais_get_u(payload, payload_len, 8, 30, ok));
     const int32_t part = static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 2, ok));
     if (!ok) return false;
     set_source(out.source, source);
-    out.mmsi.set(mmsi, now_us);
+    out.message_type.set(header.message_type, now_us);
+    out.repeat_indicator.set(header.repeat_indicator, now_us);
+    out.mmsi.set(header.mmsi, now_us);
     out.part_number.set(part, now_us);
     if (part == 0) {
         ais_copy_text(out.vessel_name, sizeof(out.vessel_name), payload, payload_len, 40, 20);
@@ -311,7 +304,7 @@ bool ais_parse_class_b_static(const char* payload,
         out.dimension_to_port_m.set(port, now_us);
         out.dimension_to_starboard_m.set(starboard, now_us);
     }
-    legacy_target.target_number.set(mmsi, now_us);
+    legacy_target.target_number.set(header.mmsi, now_us);
     set_source(legacy_target.source, source);
     legacy_target.last_update_us = now_us;
     out.last_update_us = now_us;
@@ -320,11 +313,11 @@ bool ais_parse_class_b_static(const char* payload,
 
 bool ais_parse_aid_to_navigation(const char* payload,
                                  size_t payload_len,
+                                 const AisDecodedHeader& header,
                                  uint64_t now_us,
                                  ship_data_model::SensorSource source,
                                  ship_data_model::AisAidToNavigationData<Real>& out) {
     bool ok = true;
-    const int32_t mmsi = static_cast<int32_t>(ais_get_u(payload, payload_len, 8, 30, ok));
     const int32_t aid_type = static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 5, ok));
     const bool accuracy = ais_get_u(payload, payload_len, 163, 1, ok) != 0u;
     const int32_t lon_raw = ais_get_s(payload, payload_len, 164, 28, ok);
@@ -341,7 +334,9 @@ bool ais_parse_aid_to_navigation(const char* payload,
     const bool assigned_mode = ais_get_u(payload, payload_len, 270, 1, ok) != 0u;
     if (!ok) return false;
     set_source(out.source, source);
-    out.mmsi.set(mmsi, now_us);
+    out.message_type.set(header.message_type, now_us);
+    out.repeat_indicator.set(header.repeat_indicator, now_us);
+    out.mmsi.set(header.mmsi, now_us);
     out.aid_type.set(aid_type, now_us);
     ais_copy_text(out.name, sizeof(out.name), payload, payload_len, 43, 20);
     out.position_accuracy = accuracy;
@@ -365,16 +360,16 @@ bool ais_parse_aid_to_navigation(const char* payload,
 
 bool ais_parse_safety_text(const char* payload,
                            size_t payload_len,
+                           const AisDecodedHeader& header,
                            uint64_t now_us,
                            ship_data_model::SensorSource source,
                            ship_data_model::AisSafetyTextData<Real>& out) {
     bool ok = true;
-    const int32_t message_type = static_cast<int32_t>(ais_get_u(payload, payload_len, 0, 6, ok));
-    const int32_t mmsi = static_cast<int32_t>(ais_get_u(payload, payload_len, 8, 30, ok));
     set_source(out.source, source);
-    out.message_type.set(message_type, now_us);
-    out.mmsi.set(mmsi, now_us);
-    if (message_type == 12) {
+    out.message_type.set(header.message_type, now_us);
+    out.repeat_indicator.set(header.repeat_indicator, now_us);
+    out.mmsi.set(header.mmsi, now_us);
+    if (header.message_type == 12) {
         const int32_t sequence = static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 2, ok));
         const int32_t destination = static_cast<int32_t>(ais_get_u(payload, payload_len, 40, 30, ok));
         const bool retransmit = ais_get_u(payload, payload_len, 70, 1, ok) != 0u;
@@ -383,47 +378,8 @@ bool ais_parse_safety_text(const char* payload,
         out.destination_mmsi.set(destination, now_us);
         out.retransmit = retransmit;
         ais_copy_text(out.text, sizeof(out.text), payload, payload_len, 72, static_cast<uint8_t>((payload_len * 6u - 72u) / 6u));
-    } else if (message_type == 14) {
-        if (!ok) return false;
+    } else if (header.message_type == 14) {
         ais_copy_text(out.text, sizeof(out.text), payload, payload_len, 40, static_cast<uint8_t>((payload_len * 6u - 40u) / 6u));
-    } else {
-        return false;
-    }
-    out.last_update_us = now_us;
-    return true;
-}
-
-bool ais_parse_binary_metadata(const char* payload,
-                               size_t payload_len,
-                               uint64_t now_us,
-                               ship_data_model::SensorSource source,
-                               ship_data_model::AisBinaryData<Real>& out) {
-    bool ok = true;
-    const int32_t message_type = static_cast<int32_t>(ais_get_u(payload, payload_len, 0, 6, ok));
-    const int32_t mmsi = static_cast<int32_t>(ais_get_u(payload, payload_len, 8, 30, ok));
-    set_source(out.source, source);
-    out.message_type.set(message_type, now_us);
-    out.mmsi.set(mmsi, now_us);
-    if (message_type == 6) {
-        const int32_t sequence = static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 2, ok));
-        const int32_t destination = static_cast<int32_t>(ais_get_u(payload, payload_len, 40, 30, ok));
-        const bool retransmit = ais_get_u(payload, payload_len, 70, 1, ok) != 0u;
-        const int32_t dac = static_cast<int32_t>(ais_get_u(payload, payload_len, 72, 10, ok));
-        const int32_t function_id = static_cast<int32_t>(ais_get_u(payload, payload_len, 82, 6, ok));
-        if (!ok) return false;
-        out.sequence_number.set(sequence, now_us);
-        out.destination_mmsi.set(destination, now_us);
-        out.retransmit = retransmit;
-        out.dac.set(dac, now_us);
-        out.function_id.set(function_id, now_us);
-        out.payload_bit_count.set(static_cast<int32_t>(payload_len * 6u - 88u), now_us);
-    } else if (message_type == 8) {
-        const int32_t dac = static_cast<int32_t>(ais_get_u(payload, payload_len, 40, 10, ok));
-        const int32_t function_id = static_cast<int32_t>(ais_get_u(payload, payload_len, 50, 6, ok));
-        if (!ok) return false;
-        out.dac.set(dac, now_us);
-        out.function_id.set(function_id, now_us);
-        out.payload_bit_count.set(static_cast<int32_t>(payload_len * 6u - 56u), now_us);
     } else {
         return false;
     }
@@ -467,56 +423,50 @@ bool apply_ais_vdm_vdo(const NmeaSentence& sentence,
         return false;
     }
 
-    bool ok = true;
-    const int32_t message_type = static_cast<int32_t>(ais_get_u(payload, payload_len, 0, 6, ok));
-    const int32_t repeat_indicator = static_cast<int32_t>(ais_get_u(payload, payload_len, 6, 2, ok));
-    const int32_t mmsi = static_cast<int32_t>(ais_get_u(payload, payload_len, 8, 30, ok));
-    if (!ok || message_type < 1 || message_type > 27) {
+    AisDecodedHeader header;
+    if (!ais_decode_header(payload, payload_len, header)) {
         last_error_ = "bad AIS header";
         return false;
     }
 
-    ais_set_common_raw(sentence, model.ais.raw, payload, payload_len, fill_bits, message_type, repeat_indicator, mmsi, now_us, source);
-
-    bool parsed = true;
-    switch (message_type) {
+    bool parsed = false;
+    switch (header.message_type) {
     case 1:
     case 2:
     case 3:
-        parsed = ais_parse_position_report(payload, payload_len, now_us, source, model.ais.position_report, model.ais.tracked_target);
+        parsed = ais_parse_position_report(payload, payload_len, header, now_us, source, model.ais.position_report, model.ais.tracked_target);
         break;
     case 4:
-        parsed = ais_parse_base_station(payload, payload_len, now_us, source, model.ais.base_station);
+        parsed = ais_parse_base_station(payload, payload_len, header, now_us, source, model.ais.base_station);
         break;
     case 5:
-        parsed = ais_parse_static_voyage(payload, payload_len, now_us, source, model.ais.static_voyage, model.ais.tracked_target);
-        break;
-    case 6:
-    case 8:
-        parsed = ais_parse_binary_metadata(payload, payload_len, now_us, source, model.ais.binary);
+        parsed = ais_parse_static_voyage(payload, payload_len, header, now_us, source, model.ais.static_voyage, model.ais.tracked_target);
         break;
     case 12:
     case 14:
-        parsed = ais_parse_safety_text(payload, payload_len, now_us, source, model.ais.safety_text);
+        parsed = ais_parse_safety_text(payload, payload_len, header, now_us, source, model.ais.safety_text);
         break;
     case 18:
     case 19:
-        parsed = ais_parse_position_report(payload, payload_len, now_us, source, model.ais.class_b_position_report, model.ais.tracked_target);
-        if (parsed && message_type == 19) {
+        parsed = ais_parse_position_report(payload, payload_len, header, now_us, source, model.ais.class_b_position_report, model.ais.tracked_target);
+        if (parsed && header.message_type == 19) {
+            set_source(model.ais.class_b_static.source, source);
+            model.ais.class_b_static.message_type.set(header.message_type, now_us);
+            model.ais.class_b_static.repeat_indicator.set(header.repeat_indicator, now_us);
+            model.ais.class_b_static.mmsi.set(header.mmsi, now_us);
             ais_copy_text(model.ais.class_b_static.vessel_name, sizeof(model.ais.class_b_static.vessel_name), payload, payload_len, 143, 20);
-            model.ais.class_b_static.mmsi.set(mmsi, now_us);
             model.ais.class_b_static.last_update_us = now_us;
         }
         break;
     case 21:
-        parsed = ais_parse_aid_to_navigation(payload, payload_len, now_us, source, model.ais.aid_to_navigation);
+        parsed = ais_parse_aid_to_navigation(payload, payload_len, header, now_us, source, model.ais.aid_to_navigation);
         break;
     case 24:
-        parsed = ais_parse_class_b_static(payload, payload_len, now_us, source, model.ais.class_b_static, model.ais.tracked_target);
+        parsed = ais_parse_class_b_static(payload, payload_len, header, now_us, source, model.ais.class_b_static, model.ais.tracked_target);
         break;
     default:
-        parsed = true;
-        break;
+        last_error_ = "unsupported AIS message type";
+        return false;
     }
 
     if (!parsed) {
