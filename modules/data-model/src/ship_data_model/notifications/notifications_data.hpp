@@ -77,9 +77,27 @@ struct NotificationMessagesData {
 };
 
 template<typename Real = float>
+struct DscInterrogationData {
+    Setting<SensorSource> source;
+    char request_id[24] = {0};
+    char remote_mmsi[16] = {0};
+    Stamped<int32_t> field_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct DscResponseData {
+    Setting<SensorSource> source;
+    char response_id[24] = {0};
+    char remote_mmsi[16] = {0};
+    Stamped<int32_t> field_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
 struct NotificationDscData {
-    NmeaTextRecordData<Real> interrogation;
-    NmeaTextRecordData<Real> response;
+    DscInterrogationData<Real> interrogation;
+    DscResponseData<Real> response;
 };
 
 template<typename Real = float>
