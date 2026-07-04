@@ -217,7 +217,7 @@ private:
         if (!nmea_span_equals(sentence.sentence, record.sentence_id)) return false;
         if (!nmea_span_equals(sentence.talker, record.talker_id)) return false;
         if (!nmea_span_equals(sentence.fragment.message_id, record.message_id)) return false;
-        if (ais_radio_channel(sentence) != record.radio_channel) return false;
+        if (sentence.family == NmeaSentenceFamily::Ais && ais_radio_channel(sentence) != record.radio_channel) return false;
         return true;
     }
 
@@ -251,6 +251,38 @@ private:
         }
         state_.active_ais_slot.set(static_cast<int32_t>(slot), now_us);
         return state_.ais_messages[slot];
+    }
+
+    NmeaMultipartMessageRecord& select_navtex_multipart_record(const NmeaSentence& sentence, uint64_t now_us) {
+        for (uint8_t i = 0; i < NMEA_NAVTEX_MULTIPART_SLOT_COUNT; ++i) {
+            if (multipart_record_matches(sentence, state_.navtex_messages[i])) {
+                state_.active_navtex_slot.set(static_cast<int32_t>(i), now_us);
+                return state_.navtex_messages[i];
+            }
+        }
+
+        uint8_t slot = NMEA_NAVTEX_MULTIPART_SLOT_COUNT;
+        if (sentence.fragment.is_first()) {
+            for (uint8_t i = 0; i < NMEA_NAVTEX_MULTIPART_SLOT_COUNT; ++i) {
+                if (!state_.navtex_messages[i].in_progress) {
+                    slot = i;
+                    break;
+                }
+            }
+        }
+        if (slot == NMEA_NAVTEX_MULTIPART_SLOT_COUNT) {
+            uint64_t oldest = state_.navtex_messages[0].last_update_us;
+            slot = 0;
+            for (uint8_t i = 1; i < NMEA_NAVTEX_MULTIPART_SLOT_COUNT; ++i) {
+                if (state_.navtex_messages[i].last_update_us < oldest) {
+                    oldest = state_.navtex_messages[i].last_update_us;
+                    slot = i;
+                }
+            }
+            state_.navtex_multipart_replacement_count.set(state_.navtex_multipart_replacement_count.value + 1, now_us);
+        }
+        state_.active_navtex_slot.set(static_cast<int32_t>(slot), now_us);
+        return state_.navtex_messages[slot];
     }
 
     template<typename Multipart>
@@ -304,13 +336,21 @@ private:
         state_.ais_message = selected;
     }
 
+    void update_navtex_multipart_message_state(const NmeaSentence& sentence,
+                                               uint64_t now_us,
+                                               ship_data_model::SensorSource source) {
+        auto& selected = select_navtex_multipart_record(sentence, now_us);
+        update_multipart_record(sentence, selected, now_us, source);
+        state_.navtex_message = selected;
+    }
+
     void update_multipart_message_state(const NmeaSentence& sentence,
                                         uint64_t now_us,
                                         ship_data_model::SensorSource source) {
         if (!sentence.fragment.is_fragmented) return;
         if (sentence_is(sentence, "TXT")) update_multipart_record(sentence, state_.text_message, now_us, source);
         else if (sentence.family == NmeaSentenceFamily::Ais) update_ais_multipart_message_state(sentence, now_us, source);
-        else if (sentence.family == NmeaSentenceFamily::NavTex) update_multipart_record(sentence, state_.navtex_message, now_us, source);
+        else if (sentence.family == NmeaSentenceFamily::NavTex) update_navtex_multipart_message_state(sentence, now_us, source);
         else if (sentence.family == NmeaSentenceFamily::Dsc) update_multipart_record(sentence, dsc_state_.multipart, now_us, source);
         else if (sentence.family == NmeaSentenceFamily::SeaTalk) update_multipart_record(sentence, state_.seatalk_message, now_us, source);
         else if (sentence.family == NmeaSentenceFamily::Inmarsat) update_multipart_record(sentence, state_.inmarsat_message, now_us, source);
