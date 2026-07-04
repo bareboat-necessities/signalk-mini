@@ -44,6 +44,9 @@ int main() {
     REQUIRE(std::strcmp(single.navtex_message_id, "QA12") == 0);
     REQUIRE(single.transmitter_id == 'Q');
     REQUIRE(single.subject_indicator == 'A');
+    REQUIRE(single.subject_category.value == 1);
+    REQUIRE(std::strcmp(single.subject_label, "navigation") == 0);
+    REQUIRE(single.subject_is_service == false);
     REQUIRE(single.serial_number.value == 12);
     REQUIRE(std::strcmp(single.message_text, "ZCZC QA12 WEATHER NOTE NNNN") == 0);
     REQUIRE(std::strcmp(single.body_text, "WEATHER NOTE") == 0);
@@ -59,6 +62,7 @@ int main() {
     REQUIRE(history1.next_index.value == 1);
     REQUIRE(std::strcmp(history1.messages[0].navtex_message_id, "QA12") == 0);
     REQUIRE(std::strcmp(history1.messages[0].body_text, "WEATHER NOTE") == 0);
+    REQUIRE(std::strcmp(history1.messages[0].subject_label, "navigation") == 0);
 
     feed(app, "CRNRX,2,1,77,ZCZC QB34 ROUTE ", now_us);
     REQUIRE(app.nmea0183().message_state().navtex_message.complete == false);
@@ -71,6 +75,8 @@ int main() {
     REQUIRE(std::strcmp(multi.navtex_message_id, "QB34") == 0);
     REQUIRE(multi.transmitter_id == 'Q');
     REQUIRE(multi.subject_indicator == 'B');
+    REQUIRE(multi.subject_category.value == 2);
+    REQUIRE(std::strcmp(multi.subject_label, "meteorology") == 0);
     REQUIRE(multi.serial_number.value == 34);
     REQUIRE(std::strcmp(multi.message_text, "ZCZC QB34 ROUTE UPDATE NNNN") == 0);
     REQUIRE(std::strcmp(multi.body_text, "ROUTE UPDATE") == 0);
@@ -115,6 +121,11 @@ int main() {
     REQUIRE(std::strcmp(mask.receiver_id, "RX1") == 0);
     REQUIRE(std::strcmp(mask.station_mask, "ABCDE") == 0);
     REQUIRE(std::strcmp(mask.subject_mask, "FGHIJ") == 0);
+    REQUIRE(mask.enabled_station_count.value == 5);
+    REQUIRE(mask.enabled_subject_count.value == 5);
+    REQUIRE((mask.station_mask_bits & 0x1fu) == 0x1fu);
+    REQUIRE((mask.subject_mask_bits & (1u << ('F' - 'A'))) != 0u);
+    REQUIRE((mask.subject_mask_bits & (1u << ('J' - 'A'))) != 0u);
     REQUIRE(std::strcmp(mask.status_text, "ENABLED") == 0);
     REQUIRE(mask.complete == true);
 
