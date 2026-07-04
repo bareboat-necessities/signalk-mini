@@ -70,8 +70,8 @@ public:
         NMEA_APPLY("DPT", apply_dpt);
         NMEA_APPLY("DSC", apply_dsc);
         NMEA_APPLY("DSE", apply_dse);
-        NMEA_APPLY("DSI", apply_dsi);
-        NMEA_APPLY("DSR", apply_dsr);
+        NMEA_APPLY("DSI", apply_dsi_typed);
+        NMEA_APPLY("DSR", apply_dsr_typed);
         NMEA_APPLY("DTM", apply_dtm);
         NMEA_APPLY("ETL", apply_etl);
         NMEA_APPLY("EVE", apply_eve);
@@ -252,6 +252,7 @@ private:
         else update_multipart_record(sentence, state_.generic_multipart_message, now_us, source);
     }
 
+#include "nmea_dsc_notifications.hpp"
 #include "nmea_A_E.hpp"
 #include "nmea_F_G.hpp"
 #include "nmea_H_N.hpp"
