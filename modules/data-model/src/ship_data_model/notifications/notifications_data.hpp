@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string.h>
+
 #include "../core_data_types.hpp"
 
 namespace ship_data_model {
@@ -172,5 +174,78 @@ struct NotificationsData {
     NotificationDscData<Real> dsc;
     NotificationNavtexData<Real> navtex;
 };
+
+template<typename Real, uint8_t Capacity>
+int32_t navtex_find_message_index(const NavtexMessageHistoryData<Real, Capacity>& history,
+                                  const char* navtex_message_id) {
+    if (!navtex_message_id || navtex_message_id[0] == '\0') return -1;
+    for (uint8_t i = 0; i < Capacity; ++i) {
+        const auto& slot = history.messages[i];
+        if (slot.first_seen_us != 0 && strcmp(slot.navtex_message_id, navtex_message_id) == 0) {
+            return static_cast<int32_t>(i);
+        }
+    }
+    return -1;
+}
+
+template<typename Real, uint8_t Capacity>
+bool navtex_message_id_matches_latest(const NotificationNavtexData<Real>& navtex,
+                                       const char* navtex_message_id) {
+    return navtex_message_id &&
+           navtex_message_id[0] != '\0' &&
+           navtex.received.first_seen_us != 0 &&
+           strcmp(navtex.received.navtex_message_id, navtex_message_id) == 0;
+}
+
+template<typename Real, uint8_t Capacity>
+bool navtex_acknowledge_message(NotificationNavtexData<Real>& navtex,
+                                const char* navtex_message_id,
+                                uint64_t now_us) {
+    const int32_t index = navtex_find_message_index(navtex.history, navtex_message_id);
+    if (index < 0) return false;
+    auto& slot = navtex.history.messages[static_cast<uint8_t>(index)];
+    slot.acknowledged = true;
+    slot.last_update_us = now_us;
+    if (navtex_message_id_matches_latest<Real, Capacity>(navtex, navtex_message_id)) {
+        navtex.received.acknowledged = true;
+        navtex.received.last_update_us = now_us;
+    }
+    return true;
+}
+
+template<typename Real, uint8_t Capacity>
+bool navtex_clear_message(NotificationNavtexData<Real>& navtex,
+                          const char* navtex_message_id,
+                          uint64_t now_us) {
+    const int32_t index = navtex_find_message_index(navtex.history, navtex_message_id);
+    if (index < 0) return false;
+    navtex.history.messages[static_cast<uint8_t>(index)] = NavtexReceivedMessageData<Real>{};
+    const int32_t count = navtex.history.count.valid ? navtex.history.count.value : 0;
+    if (count > 0) navtex.history.count.set(count - 1, now_us);
+    if (navtex_message_id_matches_latest<Real, Capacity>(navtex, navtex_message_id)) {
+        navtex.received = NavtexReceivedMessageData<Real>{};
+    }
+    return true;
+}
+
+template<typename Real>
+bool navtex_acknowledge_message(NotificationNavtexData<Real>& navtex,
+                                const char* navtex_message_id,
+                                uint64_t now_us) {
+    return navtex_acknowledge_message<Real, NAVTEX_MESSAGE_HISTORY_CAPACITY>(navtex, navtex_message_id, now_us);
+}
+
+template<typename Real>
+bool navtex_clear_message(NotificationNavtexData<Real>& navtex,
+                          const char* navtex_message_id,
+                          uint64_t now_us) {
+    return navtex_clear_message<Real, NAVTEX_MESSAGE_HISTORY_CAPACITY>(navtex, navtex_message_id, now_us);
+}
+
+template<typename Real>
+void navtex_clear_history(NotificationNavtexData<Real>& navtex) {
+    navtex.received = NavtexReceivedMessageData<Real>{};
+    navtex.history = NavtexMessageHistoryData<Real>{};
+}
 
 } // namespace ship_data_model
