@@ -111,6 +111,9 @@ struct NavtexReceivedMessageData {
     char navtex_message_id[8] = {0};
     char transmitter_id = 0;
     char subject_indicator = 0;
+    Stamped<int32_t> subject_category;
+    char subject_label[32] = {0};
+    bool subject_is_service = false;
     Stamped<int32_t> serial_number;
     char message_text[192] = {0};
     char body_text[192] = {0};
@@ -145,6 +148,10 @@ struct NavtexReceiverMaskData {
     char receiver_id[24] = {0};
     char station_mask[32] = {0};
     char subject_mask[32] = {0};
+    Stamped<int32_t> enabled_station_count;
+    Stamped<int32_t> enabled_subject_count;
+    uint32_t station_mask_bits = 0;
+    uint32_t subject_mask_bits = 0;
     char status_text[72] = {0};
     bool complete = false;
     bool overflow = false;
