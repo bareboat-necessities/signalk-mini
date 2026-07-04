@@ -265,3 +265,106 @@ bool apply_mwv(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     if (sentence.field(1)[0] == 'T') return set_wind(model.wind.truewind, angle_deg, speed_kn, now_us, source);
     return set_wind(model.wind.apparent, angle_deg, speed_kn, now_us, source);
 }
+
+bool navtex_text_has_eom(const char* text) const {
+    return text && strstr(text, "NNNN") != nullptr;
+}
+
+bool navtex_is_id_char(char c) const {
+    return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+}
+
+void parse_navtex_message_id(const char* text, char out[8], char& transmitter_id, char& subject_indicator, int32_t& serial_number, bool& has_serial) const {
+    out[0] = '\0';
+    transmitter_id = 0;
+    subject_indicator = 0;
+    serial_number = 0;
+    has_serial = false;
+    if (!text) return;
+
+    const char* p = strstr(text, "ZCZC");
+    if (p) p += 4;
+    else p = text;
+    while (*p == ' ') ++p;
+
+    if (!navtex_is_id_char(p[0]) || !navtex_is_id_char(p[1]) || p[2] < '0' || p[2] > '9' || p[3] < '0' || p[3] > '9') return;
+    out[0] = p[0];
+    out[1] = p[1];
+    out[2] = p[2];
+    out[3] = p[3];
+    out[4] = '\0';
+    transmitter_id = p[0];
+    subject_indicator = p[1];
+    serial_number = static_cast<int32_t>((p[2] - '0') * 10 + (p[3] - '0'));
+    has_serial = true;
+}
+
+template<typename Model>
+bool apply_nrx(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 4) {
+        last_error_ = "short NRX";
+        return false;
+    }
+
+    auto& received = model.notifications.navtex.received;
+    int32_t value = 0;
+    if (parse_int32(sentence.field(0), value)) received.total_fragments.set(value, now_us);
+    if (parse_int32(sentence.field(1), value)) received.fragment_number.set(value, now_us);
+    nmea_copy_span(received.sentence_message_id, sizeof(received.sentence_message_id), sentence.field(2));
+
+    const char* text = nullptr;
+    size_t text_len = 0;
+    if (sentence.fragment.is_fragmented) {
+        if (!state_.navtex_message.complete) return true;
+        text = state_.navtex_message.text;
+        text_len = strlen(state_.navtex_message.text);
+        received.complete = state_.navtex_message.complete;
+        received.overflow = state_.navtex_message.overflow;
+    } else {
+        text = sentence.field(3).data;
+        text_len = sentence.field(3).length;
+        received.complete = true;
+        received.overflow = false;
+    }
+
+    nmea_copy_span(received.message_text, sizeof(received.message_text), NmeaSpan(text, text_len));
+    received.text_length.set(static_cast<int32_t>(strlen(received.message_text)), now_us);
+    received.end_of_message = navtex_text_has_eom(received.message_text);
+
+    int32_t serial = 0;
+    bool has_serial = false;
+    parse_navtex_message_id(received.message_text,
+                            received.navtex_message_id,
+                            received.transmitter_id,
+                            received.subject_indicator,
+                            serial,
+                            has_serial);
+    if (has_serial) received.serial_number.set(serial, now_us);
+
+    set_source(received.source, source);
+    received.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
+bool apply_nrm(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 4) {
+        last_error_ = "short NRM";
+        return false;
+    }
+
+    auto& mask = model.notifications.navtex.receiver_mask;
+    int32_t value = 0;
+    if (parse_int32(sentence.field(0), value)) mask.total_fragments.set(value, now_us);
+    if (parse_int32(sentence.field(1), value)) mask.fragment_number.set(value, now_us);
+    nmea_copy_span(mask.sentence_message_id, sizeof(mask.sentence_message_id), sentence.field(2));
+    nmea_copy_span(mask.receiver_id, sizeof(mask.receiver_id), sentence.field(3));
+    if (sentence.field_count > 4) nmea_copy_span(mask.station_mask, sizeof(mask.station_mask), sentence.field(4));
+    if (sentence.field_count > 5) nmea_copy_span(mask.subject_mask, sizeof(mask.subject_mask), sentence.field(5));
+    if (sentence.field_count > 6) nmea_copy_span(mask.status_text, sizeof(mask.status_text), sentence.field(6));
+    mask.complete = !sentence.fragment.is_fragmented || state_.navtex_message.complete;
+    mask.overflow = sentence.fragment.is_fragmented && state_.navtex_message.overflow;
+    set_source(mask.source, source);
+    mask.last_update_us = now_us;
+    return true;
+}
