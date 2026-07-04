@@ -6,6 +6,7 @@
 namespace nmea0183_connector {
 
 static const uint8_t NMEA_MESSAGE_MULTIPART_TEXT_BYTES = 96;
+static const uint16_t NMEA_NAVTEX_MULTIPART_TEXT_BYTES = 256;
 static const uint8_t NMEA_MESSAGE_MULTIPART_ID_BYTES = 16;
 static const uint8_t NMEA_AIS_MULTIPART_SLOT_COUNT = 4;
 static const uint8_t NMEA_NAVTEX_MULTIPART_SLOT_COUNT = 4;
@@ -24,7 +25,8 @@ struct NmeaMessageStampedInt {
     }
 };
 
-struct NmeaMultipartMessageRecord {
+template<uint16_t TextBytes>
+struct NmeaMultipartMessageRecordT {
     NmeaMessageSource source;
     char sentence_id[4] = {0};
     char talker_id[3] = {0};
@@ -36,10 +38,13 @@ struct NmeaMultipartMessageRecord {
     bool in_progress = false;
     bool complete = false;
     bool overflow = false;
-    char text[NMEA_MESSAGE_MULTIPART_TEXT_BYTES] = {0};
+    char text[TextBytes] = {0};
     NmeaMessageStampedInt text_length;
     uint64_t last_update_us = 0;
 };
+
+using NmeaMultipartMessageRecord = NmeaMultipartMessageRecordT<NMEA_MESSAGE_MULTIPART_TEXT_BYTES>;
+using NmeaNavtexMultipartMessageRecord = NmeaMultipartMessageRecordT<NMEA_NAVTEX_MULTIPART_TEXT_BYTES>;
 
 struct NmeaMessageState {
     NmeaMultipartMessageRecord text_message;
@@ -47,8 +52,8 @@ struct NmeaMessageState {
     NmeaMultipartMessageRecord ais_messages[NMEA_AIS_MULTIPART_SLOT_COUNT];
     NmeaMessageStampedInt active_ais_slot;
     NmeaMessageStampedInt ais_multipart_replacement_count;
-    NmeaMultipartMessageRecord navtex_message;
-    NmeaMultipartMessageRecord navtex_messages[NMEA_NAVTEX_MULTIPART_SLOT_COUNT];
+    NmeaNavtexMultipartMessageRecord navtex_message;
+    NmeaNavtexMultipartMessageRecord navtex_messages[NMEA_NAVTEX_MULTIPART_SLOT_COUNT];
     NmeaMessageStampedInt active_navtex_slot;
     NmeaMessageStampedInt navtex_multipart_replacement_count;
     NmeaMultipartMessageRecord seatalk_message;
