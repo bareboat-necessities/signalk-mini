@@ -253,7 +253,7 @@ private:
         return state_.ais_messages[slot];
     }
 
-    NmeaMultipartMessageRecord& select_navtex_multipart_record(const NmeaSentence& sentence, uint64_t now_us) {
+    NmeaNavtexMultipartMessageRecord& select_navtex_multipart_record(const NmeaSentence& sentence, uint64_t now_us) {
         for (uint8_t i = 0; i < NMEA_NAVTEX_MULTIPART_SLOT_COUNT; ++i) {
             if (multipart_record_matches(sentence, state_.navtex_messages[i])) {
                 state_.active_navtex_slot.set(static_cast<int32_t>(i), now_us);
@@ -306,7 +306,7 @@ private:
         }
 
         size_t current = strlen(record.text);
-        const size_t capacity = NMEA_MESSAGE_MULTIPART_TEXT_BYTES;
+        const size_t capacity = sizeof(record.text);
         size_t append = sentence.fragment.payload.length;
         if (current + append + 1u > capacity) {
             append = current < capacity ? capacity - current - 1u : 0u;
