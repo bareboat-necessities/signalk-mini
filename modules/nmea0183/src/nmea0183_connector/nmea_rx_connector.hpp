@@ -44,10 +44,7 @@ public:
 #define NMEA_APPLY(ID, FN) if (sentence_is(sentence, ID)) return FN(sentence, model, now_us, source)
 #define NMEA_APPLY_NO_SOURCE(ID, FN) if (sentence_is(sentence, ID)) return FN(sentence, model, now_us)
         if (sentence_is(sentence, "VDM") || sentence_is(sentence, "VDO")) {
-            if (ais_sentence_is_control(sentence)) {
-                return apply_ais_control_vdm_vdo(sentence, model, now_us, source);
-            }
-            return apply_ais_vdm_vdo(sentence, model, now_us, source);
+            return apply_ais_vdm_vdo_with_own_vessel(sentence, model, now_us, source);
         }
         NMEA_APPLY("AAM", apply_aam);
         NMEA_APPLY("ACK", apply_ack);
@@ -322,6 +319,7 @@ private:
 
 #include "nmea_ais.hpp"
 #include "nmea_ais_control.hpp"
+#include "nmea_ais_own_vessel.hpp"
 #include "nmea_A_E.hpp"
 #include "nmea_F_G.hpp"
 #include "nmea_H_N.hpp"
