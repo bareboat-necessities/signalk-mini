@@ -173,5 +173,37 @@ int main() {
     REQUIRE(bad_id.subject_indicator == 0);
     REQUIRE(std::strcmp(bad_id.body_text, "QXAB BAD ID") == 0);
 
+    signalk_mini::SignalKMiniApp<float> lifecycle_app;
+    uint64_t lifecycle_now_us = 0;
+    feed(lifecycle_app, "CRNRX,1,1,11,ZCZC QC10 FIRST NNNN", lifecycle_now_us);
+    feed(lifecycle_app, "CRNRX,1,1,12,ZCZC QD11 SECOND NNNN", lifecycle_now_us);
+    auto& lifecycle = lifecycle_app.store().model().notifications.navtex;
+    REQUIRE(lifecycle.history.count.value == 2);
+    REQUIRE(ship_data_model::navtex_acknowledge_message(lifecycle, "QD11", lifecycle_now_us + 100) == true);
+    REQUIRE(find_navtex_id(lifecycle.history, "QD11") != nullptr);
+    REQUIRE(find_navtex_id(lifecycle.history, "QD11")->acknowledged == true);
+    REQUIRE(lifecycle.received.acknowledged == true);
+    REQUIRE(lifecycle.received.last_update_us == lifecycle_now_us + 100);
+    REQUIRE(ship_data_model::navtex_acknowledge_message(lifecycle, "QZ99", lifecycle_now_us + 200) == false);
+
+    REQUIRE(ship_data_model::navtex_clear_message(lifecycle, "QC10", lifecycle_now_us + 300) == true);
+    REQUIRE(lifecycle.history.count.value == 1);
+    REQUIRE(find_navtex_id(lifecycle.history, "QC10") == nullptr);
+    REQUIRE(find_navtex_id(lifecycle.history, "QD11") != nullptr);
+    REQUIRE(lifecycle.received.navtex_message_id[0] != '\0');
+
+    REQUIRE(ship_data_model::navtex_clear_message(lifecycle, "QD11", lifecycle_now_us + 400) == true);
+    REQUIRE(lifecycle.history.count.value == 0);
+    REQUIRE(find_navtex_id(lifecycle.history, "QD11") == nullptr);
+    REQUIRE(lifecycle.received.navtex_message_id[0] == '\0');
+    REQUIRE(ship_data_model::navtex_clear_message(lifecycle, "QD11", lifecycle_now_us + 500) == false);
+
+    feed(lifecycle_app, "CRNRX,1,1,13,ZCZC QE12 THIRD NNNN", lifecycle_now_us);
+    REQUIRE(lifecycle.history.count.value == 1);
+    ship_data_model::navtex_clear_history(lifecycle);
+    REQUIRE(lifecycle.received.navtex_message_id[0] == '\0');
+    REQUIRE(lifecycle.history.count.valid == false);
+    REQUIRE(find_navtex_id(lifecycle.history, "QE12") == nullptr);
+
     return 0;
 }
