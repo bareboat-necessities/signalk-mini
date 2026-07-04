@@ -33,6 +33,7 @@ template<typename Real = float>
 struct AisPositionReportData {
     Setting<SensorSource> source;
     Stamped<int32_t> message_type;
+    Stamped<int32_t> repeat_indicator;
     Stamped<int32_t> mmsi;
     Stamped<int32_t> navigation_status;
     Stamped<Real> rate_of_turn_deg_min;
@@ -52,6 +53,7 @@ template<typename Real = float>
 struct AisBaseStationData {
     Setting<SensorSource> source;
     Stamped<int32_t> message_type;
+    Stamped<int32_t> repeat_indicator;
     Stamped<int32_t> mmsi;
     Stamped<int32_t> year;
     Stamped<int32_t> month;
@@ -71,6 +73,7 @@ template<typename Real = float>
 struct AisStaticVoyageData {
     Setting<SensorSource> source;
     Stamped<int32_t> message_type;
+    Stamped<int32_t> repeat_indicator;
     Stamped<int32_t> mmsi;
     Stamped<int32_t> ais_version;
     Stamped<int32_t> imo_number;
@@ -96,6 +99,7 @@ template<typename Real = float>
 struct AisClassBStaticData {
     Setting<SensorSource> source;
     Stamped<int32_t> message_type;
+    Stamped<int32_t> repeat_indicator;
     Stamped<int32_t> mmsi;
     Stamped<int32_t> part_number;
     char vendor_id[8] = {0};
@@ -113,6 +117,7 @@ template<typename Real = float>
 struct AisAidToNavigationData {
     Setting<SensorSource> source;
     Stamped<int32_t> message_type;
+    Stamped<int32_t> repeat_indicator;
     Stamped<int32_t> mmsi;
     Stamped<int32_t> aid_type;
     char name[40] = {0};
@@ -136,6 +141,7 @@ template<typename Real = float>
 struct AisSafetyTextData {
     Setting<SensorSource> source;
     Stamped<int32_t> message_type;
+    Stamped<int32_t> repeat_indicator;
     Stamped<int32_t> mmsi;
     Stamped<int32_t> destination_mmsi;
     Stamped<int32_t> sequence_number;
