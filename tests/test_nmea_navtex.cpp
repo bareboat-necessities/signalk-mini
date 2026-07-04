@@ -9,12 +9,13 @@
 #define REQUIRE(x) do { if (!(x)) { std::fprintf(stderr, "FAILED %s:%d: %s\n", __FILE__, __LINE__, #x); std::exit(1); } } while (0)
 
 static std::string sentence(const char* body) {
-    char out[240];
     const uint8_t cs = nmea0183_connector::nmea_checksum_body(body);
-    std::snprintf(out, sizeof(out), "$%s*%c%c", body,
-                  nmea0183_connector::to_hex((cs >> 4) & 0x0f),
-                  nmea0183_connector::to_hex(cs & 0x0f));
-    return std::string(out);
+    std::string out = "$";
+    out += body;
+    out += "*";
+    out.push_back(nmea0183_connector::to_hex((cs >> 4) & 0x0f));
+    out.push_back(nmea0183_connector::to_hex(cs & 0x0f));
+    return out;
 }
 
 static void feed(signalk_mini::SignalKMiniApp<float>& app, const char* body, uint64_t& now_us) {
@@ -84,11 +85,27 @@ int main() {
     REQUIRE(multi.end_of_message == true);
     REQUIRE(app.store().model().notifications.navtex.history.count.value == 2);
 
+    feed(app, "CRNRX,2,1,88,ZCZC QE03 ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFGHIJKLMNOPQRSTUVWXYZ ", now_us);
+    REQUIRE(app.nmea0183().message_state().navtex_message.complete == false);
+    feed(app, "CRNRX,2,2,88,ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFGHIJKLMNOPQRSTUVWXYZ NNNN", now_us);
+    const auto& long_msg = app.store().model().notifications.navtex.received;
+    REQUIRE(app.nmea0183().message_state().navtex_message.complete == true);
+    REQUIRE(app.nmea0183().message_state().navtex_message.overflow == false);
+    REQUIRE(app.nmea0183().message_state().navtex_message.text_length.value > 96);
+    REQUIRE(long_msg.text_length.value > 96);
+    REQUIRE(long_msg.body_length.value > 96);
+    REQUIRE(std::strcmp(long_msg.navtex_message_id, "QE03") == 0);
+    REQUIRE(long_msg.subject_category.value == 5);
+    REQUIRE(std::strcmp(long_msg.subject_label, "forecast") == 0);
+    REQUIRE(long_msg.framing_valid == true);
+    REQUIRE(long_msg.end_of_message == true);
+    REQUIRE(app.store().model().notifications.navtex.history.count.value == 3);
+
     feed(app, "CRNRX,1,1,43,ZCZC QA12 WEATHER NOTE NNNN", now_us);
     const auto& duplicate = app.store().model().notifications.navtex.received;
     REQUIRE(duplicate.duplicate == true);
     REQUIRE(duplicate.repeat_count.value == 2);
-    REQUIRE(app.store().model().notifications.navtex.history.count.value == 2);
+    REQUIRE(app.store().model().notifications.navtex.history.count.value == 3);
     REQUIRE(app.store().model().notifications.navtex.history.duplicate_count.value == 1);
     const auto* qa12 = find_navtex_id(app.store().model().notifications.navtex.history, "QA12");
     REQUIRE(qa12 != nullptr);
@@ -97,7 +114,7 @@ int main() {
 
     feed(app, "CRNRX,1,1,1,ZCZC QC01 MSG1 NNNN", now_us);
     feed(app, "CRNRX,1,1,2,ZCZC QD02 MSG2 NNNN", now_us);
-    feed(app, "CRNRX,1,1,3,ZCZC QE03 MSG3 NNNN", now_us);
+    feed(app, "CRNRX,1,1,3,ZCZC QE04 MSG3 NNNN", now_us);
     feed(app, "CRNRX,1,1,4,ZCZC QF04 MSG4 NNNN", now_us);
     feed(app, "CRNRX,1,1,5,ZCZC QG05 MSG5 NNNN", now_us);
     feed(app, "CRNRX,1,1,6,ZCZC QH06 MSG6 NNNN", now_us);
@@ -106,10 +123,11 @@ int main() {
 
     const auto& history = app.store().model().notifications.navtex.history;
     REQUIRE(history.count.value == ship_data_model::NAVTEX_MESSAGE_HISTORY_CAPACITY);
-    REQUIRE(history.overwrite_count.value == 2);
-    REQUIRE(history.next_index.value == 2);
+    REQUIRE(history.overwrite_count.value == 3);
+    REQUIRE(history.next_index.value == 3);
     REQUIRE(find_navtex_id(history, "QA12") == nullptr);
     REQUIRE(find_navtex_id(history, "QB34") == nullptr);
+    REQUIRE(find_navtex_id(history, "QE03") == nullptr);
     REQUIRE(find_navtex_id(history, "QJ08") != nullptr);
     REQUIRE(std::strcmp(app.store().model().notifications.navtex.received.body_text, "MSG8") == 0);
 
@@ -128,6 +146,32 @@ int main() {
     REQUIRE((mask.subject_mask_bits & (1u << ('J' - 'A'))) != 0u);
     REQUIRE(std::strcmp(mask.status_text, "ENABLED") == 0);
     REQUIRE(mask.complete == true);
+
+    signalk_mini::SignalKMiniApp<float> malformed_app;
+    uint64_t malformed_now_us = 0;
+    feed(malformed_app, "CRNRX,1,1,90,QA12 BODY NNNN", malformed_now_us);
+    const auto& missing_zczc = malformed_app.store().model().notifications.navtex.received;
+    REQUIRE(missing_zczc.framing_valid == false);
+    REQUIRE(missing_zczc.end_of_message == true);
+    REQUIRE(std::strcmp(missing_zczc.navtex_message_id, "QA12") == 0);
+    REQUIRE(std::strcmp(missing_zczc.body_text, "QA12 BODY") == 0);
+
+    feed(malformed_app, "CRNRX,1,1,91,ZCZC QB35 OPEN TEXT", malformed_now_us);
+    const auto& missing_eom = malformed_app.store().model().notifications.navtex.received;
+    REQUIRE(missing_eom.framing_valid == false);
+    REQUIRE(missing_eom.end_of_message == false);
+    REQUIRE(std::strcmp(missing_eom.navtex_message_id, "QB35") == 0);
+    REQUIRE(std::strcmp(missing_eom.body_text, "OPEN TEXT") == 0);
+
+    signalk_mini::SignalKMiniApp<float> bad_id_app;
+    uint64_t bad_id_now_us = 0;
+    feed(bad_id_app, "CRNRX,1,1,92,ZCZC QXAB BAD ID NNNN", bad_id_now_us);
+    const auto& bad_id = bad_id_app.store().model().notifications.navtex.received;
+    REQUIRE(bad_id.framing_valid == true);
+    REQUIRE(bad_id.end_of_message == true);
+    REQUIRE(bad_id.navtex_message_id[0] == '\0');
+    REQUIRE(bad_id.subject_indicator == 0);
+    REQUIRE(std::strcmp(bad_id.body_text, "QXAB BAD ID") == 0);
 
     return 0;
 }
