@@ -43,6 +43,8 @@ public:
 
 #define NMEA_APPLY(ID, FN) if (sentence_is(sentence, ID)) return FN(sentence, model, now_us, source)
 #define NMEA_APPLY_NO_SOURCE(ID, FN) if (sentence_is(sentence, ID)) return FN(sentence, model, now_us)
+        NMEA_APPLY("VDM", apply_ais_vdm_vdo);
+        NMEA_APPLY("VDO", apply_ais_vdm_vdo);
         NMEA_APPLY("AAM", apply_aam);
         NMEA_APPLY("ACK", apply_ack);
         NMEA_APPLY("ADS", apply_ads);
@@ -252,6 +254,7 @@ private:
         else update_multipart_record(sentence, state_.generic_multipart_message, now_us, source);
     }
 
+#include "nmea_ais.hpp"
 #include "nmea_A_E.hpp"
 #include "nmea_F_G.hpp"
 #include "nmea_H_N.hpp"
