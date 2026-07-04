@@ -72,6 +72,18 @@ void ais_copy_own_position_from_base_station(ship_data_model::AisOwnVesselData<R
     own.last_position_update_us = now_us;
 }
 
+void ais_copy_own_position_from_aton(ship_data_model::AisOwnVesselData<Real>& own,
+                                     const ship_data_model::AisAidToNavigationData<Real>& aton,
+                                     uint64_t now_us) {
+    if (aton.latitude_deg.valid) own.latitude_deg.set(aton.latitude_deg.value, now_us);
+    if (aton.longitude_deg.valid) own.longitude_deg.set(aton.longitude_deg.value, now_us);
+    if (aton.timestamp_s.valid) own.timestamp_s.set(aton.timestamp_s.value, now_us);
+    own.position_accuracy = aton.position_accuracy;
+    own.raim = aton.raim;
+    own.aid_to_navigation = true;
+    own.last_position_update_us = now_us;
+}
+
 void ais_copy_own_position_from_long_range(ship_data_model::AisOwnVesselData<Real>& own,
                                            const ship_data_model::AisLongRangeBroadcastData<Real>& lr,
                                            uint64_t now_us) {
@@ -144,7 +156,7 @@ void ais_update_own_vessel_from_latest(ship_data_model::AisData<Real>& ais,
         if (header.message_type == 19) ais_copy_own_static_from_class_b(own, ais.class_b_static, now_us);
         break;
     case 21:
-        ais_copy_own_position_from_base_station(own, reinterpret_cast<const ship_data_model::AisBaseStationData<Real>&>(ais.base_station), now_us);
+        ais_copy_own_position_from_aton(own, ais.aid_to_navigation, now_us);
         ais_copy_own_static_from_aton(own, ais.aid_to_navigation, now_us);
         break;
     case 24:
