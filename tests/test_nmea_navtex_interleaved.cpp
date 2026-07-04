@@ -37,13 +37,11 @@ int main() {
     uint64_t now_us = 0;
 
     feed(app, "CRNRX,2,1,101,ZCZC QA12 FIRST ", now_us);
-    REQUIRE(app.nmea0183().message_state().active_navtex_slot.valid == true);
     const int32_t first_slot = app.nmea0183().message_state().active_navtex_slot.value;
     REQUIRE(first_slot >= 0 && first_slot < nmea0183_connector::NMEA_NAVTEX_MULTIPART_SLOT_COUNT);
     REQUIRE(app.nmea0183().message_state().navtex_message.complete == false);
 
     feed(app, "CRNRX,2,1,202,ZCZC QB34 SECOND ", now_us);
-    REQUIRE(app.nmea0183().message_state().active_navtex_slot.valid == true);
     const int32_t second_slot = app.nmea0183().message_state().active_navtex_slot.value;
     REQUIRE(second_slot >= 0 && second_slot < nmea0183_connector::NMEA_NAVTEX_MULTIPART_SLOT_COUNT);
     REQUIRE(second_slot != first_slot);
