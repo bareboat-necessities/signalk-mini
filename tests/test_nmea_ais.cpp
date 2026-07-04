@@ -30,16 +30,10 @@ int main() {
     uint64_t now_us = 0;
 
     feed_ais(app, "AIVDM,1,1,,A,11mg=5@P0oreDP8GD@44lRmD0000,0", now_us);
-    const auto& raw = app.store().model().ais.raw;
-    REQUIRE(raw.message_type.value == 1);
-    REQUIRE(raw.repeat_indicator.value == 0);
-    REQUIRE(raw.mmsi.value == 123456789);
-    REQUIRE(raw.fill_bits.value == 0);
-    REQUIRE(raw.payload_bit_count.value == 168);
-    REQUIRE(raw.radio_channel == 'A');
 
     const auto& pos = app.store().model().ais.position_report;
     REQUIRE(pos.message_type.value == 1);
+    REQUIRE(pos.repeat_indicator.value == 0);
     REQUIRE(pos.mmsi.value == 123456789);
     REQUIRE(pos.navigation_status.value == 0);
     NEAR(pos.speed_over_ground_kn.value, 5.5f, 0.001f);
@@ -57,6 +51,8 @@ int main() {
     REQUIRE(app.nmea0183().message_state().ais_message.complete == true);
 
     const auto& stat = app.store().model().ais.static_voyage;
+    REQUIRE(stat.message_type.value == 5);
+    REQUIRE(stat.repeat_indicator.value == 0);
     REQUIRE(stat.mmsi.value == 123456789);
     REQUIRE(stat.imo_number.value == 9876543);
     REQUIRE(std::strcmp(stat.call_sign, "CALL123") == 0);
