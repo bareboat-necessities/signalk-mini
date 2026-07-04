@@ -80,6 +80,34 @@ struct AisTargetTableData {
 };
 
 template<typename Real = float>
+struct AisOwnVesselData : AisMessageHeaderData<Real> {
+    bool valid = false;
+    Stamped<int32_t> navigation_status;
+    Stamped<Real> latitude_deg;
+    Stamped<Real> longitude_deg;
+    Stamped<Real> speed_over_ground_kn;
+    Stamped<Real> course_over_ground_deg;
+    Stamped<Real> true_heading_deg;
+    Stamped<int32_t> timestamp_s;
+    Stamped<int32_t> ship_type;
+    Stamped<int32_t> imo_number;
+    Stamped<int32_t> aid_type;
+    char vessel_name[24] = {0};
+    char call_sign[8] = {0};
+    char destination[24] = {0};
+    bool position_accuracy = false;
+    bool raim = false;
+    bool class_b = false;
+    bool base_station = false;
+    bool aid_to_navigation = false;
+    bool sar_aircraft = false;
+    uint64_t first_seen_us = 0;
+    uint64_t last_seen_us = 0;
+    uint64_t last_position_update_us = 0;
+    uint64_t last_static_update_us = 0;
+};
+
+template<typename Real = float>
 struct AisPositionReportData : AisMessageHeaderData<Real> {
     Stamped<int32_t> navigation_status;
     Stamped<Real> rate_of_turn_deg_min;
@@ -331,6 +359,7 @@ struct AisAddressedSafetyData {
 template<typename Real = float>
 struct AisData {
     TrackedTargetData<Real> tracked_target;
+    AisOwnVesselData<Real> own_vessel;
     AisTargetTableData<Real> targets;
     AisPositionReportData<Real> position_report;
     AisPositionReportData<Real> class_b_position_report;
