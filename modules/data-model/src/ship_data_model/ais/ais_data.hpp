@@ -247,6 +247,125 @@ struct AisBinaryEnvelopeData {
 };
 
 template<typename Real = float>
+struct AisAcknowledgementData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> message_type;
+    Stamped<int32_t> repeat_indicator;
+    Stamped<int32_t> mmsi;
+    Stamped<int32_t> acknowledgement_count;
+    Stamped<int32_t> destination_mmsi[4];
+    Stamped<int32_t> sequence_number[4];
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct AisUtcInquiryData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> message_type;
+    Stamped<int32_t> repeat_indicator;
+    Stamped<int32_t> mmsi;
+    Stamped<int32_t> destination_mmsi;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct AisInterrogationData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> message_type;
+    Stamped<int32_t> repeat_indicator;
+    Stamped<int32_t> mmsi;
+    Stamped<int32_t> first_destination_mmsi;
+    Stamped<int32_t> first_message_type;
+    Stamped<int32_t> first_slot_offset;
+    Stamped<int32_t> second_message_type;
+    Stamped<int32_t> second_slot_offset;
+    Stamped<int32_t> second_destination_mmsi;
+    Stamped<int32_t> third_message_type;
+    Stamped<int32_t> third_slot_offset;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct AisAssignmentCommandData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> message_type;
+    Stamped<int32_t> repeat_indicator;
+    Stamped<int32_t> mmsi;
+    Stamped<int32_t> assignment_count;
+    Stamped<int32_t> destination_mmsi[2];
+    Stamped<int32_t> offset[2];
+    Stamped<int32_t> increment[2];
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct AisDataLinkManagementData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> message_type;
+    Stamped<int32_t> repeat_indicator;
+    Stamped<int32_t> mmsi;
+    Stamped<int32_t> reservation_count;
+    Stamped<int32_t> slot_offset[4];
+    Stamped<int32_t> slot_count[4];
+    Stamped<int32_t> timeout_min[4];
+    Stamped<int32_t> increment[4];
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct AisDgnssBroadcastData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> message_type;
+    Stamped<int32_t> repeat_indicator;
+    Stamped<int32_t> mmsi;
+    Stamped<Real> longitude_deg;
+    Stamped<Real> latitude_deg;
+    Stamped<int32_t> payload_bit_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct AisChannelManagementData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> message_type;
+    Stamped<int32_t> repeat_indicator;
+    Stamped<int32_t> mmsi;
+    Stamped<int32_t> channel_a;
+    Stamped<int32_t> channel_b;
+    Stamped<int32_t> txrx_mode;
+    bool high_power = false;
+    bool addressed = false;
+    Stamped<Real> northeast_lon_deg;
+    Stamped<Real> northeast_lat_deg;
+    Stamped<Real> southwest_lon_deg;
+    Stamped<Real> southwest_lat_deg;
+    Stamped<int32_t> first_destination_mmsi;
+    Stamped<int32_t> second_destination_mmsi;
+    bool bandwidth_a_12_5khz = false;
+    bool bandwidth_b_12_5khz = false;
+    Stamped<int32_t> transitional_zone_size_nmi;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct AisGroupAssignmentCommandData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> message_type;
+    Stamped<int32_t> repeat_indicator;
+    Stamped<int32_t> mmsi;
+    Stamped<Real> northeast_lon_deg;
+    Stamped<Real> northeast_lat_deg;
+    Stamped<Real> southwest_lon_deg;
+    Stamped<Real> southwest_lat_deg;
+    Stamped<int32_t> station_type;
+    Stamped<int32_t> ship_type;
+    Stamped<int32_t> txrx_mode;
+    Stamped<int32_t> report_interval;
+    Stamped<int32_t> quiet_time_min;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
 struct AisDataLinkStatusData {
     Setting<SensorSource> source;
     char station_id[24] = {0};
@@ -283,6 +402,14 @@ struct AisData {
     AisLongRangeBroadcastData<Real> long_range_broadcast;
     AisSafetyTextData<Real> safety_text;
     AisBinaryEnvelopeData<Real> binary_envelope;
+    AisAcknowledgementData<Real> acknowledgement;
+    AisUtcInquiryData<Real> utc_inquiry;
+    AisInterrogationData<Real> interrogation;
+    AisAssignmentCommandData<Real> assignment_command;
+    AisDataLinkManagementData<Real> data_link_management;
+    AisDgnssBroadcastData<Real> dgnss_broadcast;
+    AisChannelManagementData<Real> channel_management;
+    AisGroupAssignmentCommandData<Real> group_assignment;
     AisDataLinkStatusData<Real> data_link_status;
     AisAddressedSafetyData<Real> addressed_safety;
 };
