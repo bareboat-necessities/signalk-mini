@@ -274,7 +274,12 @@ bool navtex_is_id_char(char c) const {
     return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
 }
 
-void parse_navtex_message_id(const char* text, char out[8], char& transmitter_id, char& subject_indicator, int32_t& serial_number, bool& has_serial) const {
+void parse_navtex_message_id(const char* text,
+                             char out[8],
+                             char& transmitter_id,
+                             char& subject_indicator,
+                             int32_t& serial_number,
+                             bool& has_serial) const {
     out[0] = '\0';
     transmitter_id = 0;
     subject_indicator = 0;
@@ -297,6 +302,91 @@ void parse_navtex_message_id(const char* text, char out[8], char& transmitter_id
     subject_indicator = p[1];
     serial_number = static_cast<int32_t>((p[2] - '0') * 10 + (p[3] - '0'));
     has_serial = true;
+}
+
+void navtex_copy_body_text(char* out, size_t out_size, const char* text) const {
+    if (!out || out_size == 0u) return;
+    out[0] = '\0';
+    if (!text) return;
+
+    const char* begin = strstr(text, "ZCZC");
+    if (begin) {
+        begin += 4;
+        while (*begin == ' ') ++begin;
+        if (navtex_is_id_char(begin[0]) && navtex_is_id_char(begin[1]) && begin[2] >= '0' && begin[2] <= '9' && begin[3] >= '0' && begin[3] <= '9') {
+            begin += 4;
+        }
+    } else {
+        begin = text;
+    }
+    while (*begin == ' ') ++begin;
+
+    const char* end = strstr(begin, "NNNN");
+    if (!end) end = begin + strlen(begin);
+    while (end > begin && (end[-1] == ' ' || end[-1] == '\r' || end[-1] == '\n')) --end;
+
+    nmea_copy_span(out, out_size, NmeaSpan(begin, static_cast<size_t>(end - begin)));
+}
+
+template<typename Message>
+bool navtex_same_message_id(const Message& a, const Message& b) const {
+    if (a.navtex_message_id[0] && b.navtex_message_id[0]) return strcmp(a.navtex_message_id, b.navtex_message_id) == 0;
+    if (a.transmitter_id && b.transmitter_id &&
+        a.subject_indicator && b.subject_indicator &&
+        a.serial_number.valid && b.serial_number.valid) {
+        return a.transmitter_id == b.transmitter_id &&
+               a.subject_indicator == b.subject_indicator &&
+               a.serial_number.value == b.serial_number.value;
+    }
+    return false;
+}
+
+template<typename NavtexData>
+void navtex_store_received(NavtexData& navtex,
+                           const typename NavtexData::ReceivedMessageType& received,
+                           uint64_t now_us) {
+    // Not used; kept unreachable to avoid requiring nested typedefs.
+}
+
+template<typename RealNavtex>
+void navtex_store_received_message(RealNavtex& navtex, decltype(navtex.received)& received, uint64_t now_us) {
+    auto& history = navtex.history;
+    const uint8_t capacity = ship_data_model::NAVTEX_MESSAGE_HISTORY_CAPACITY;
+
+    for (uint8_t i = 0; i < capacity; ++i) {
+        auto& slot = history.messages[i];
+        if (slot.first_seen_us != 0 && navtex_same_message_id(slot, received)) {
+            const int32_t repeat = slot.repeat_count.valid ? slot.repeat_count.value + 1 : 2;
+            const uint64_t first_seen = slot.first_seen_us;
+            slot = received;
+            slot.first_seen_us = first_seen;
+            slot.repeat_count.set(repeat, now_us);
+            slot.duplicate = true;
+            slot.last_update_us = now_us;
+            received = slot;
+            const int32_t duplicate_count = history.duplicate_count.valid ? history.duplicate_count.value : 0;
+            history.duplicate_count.set(duplicate_count + 1, now_us);
+            return;
+        }
+    }
+
+    int32_t next = history.next_index.valid ? history.next_index.value : 0;
+    if (next < 0 || next >= static_cast<int32_t>(capacity)) next = 0;
+    auto& slot = history.messages[static_cast<uint8_t>(next)];
+    const bool overwriting = slot.first_seen_us != 0;
+
+    received.first_seen_us = now_us;
+    received.repeat_count.set(1, now_us);
+    received.duplicate = false;
+    slot = received;
+
+    const int32_t count = history.count.valid ? history.count.value : 0;
+    if (count < static_cast<int32_t>(capacity)) history.count.set(count + 1, now_us);
+    if (overwriting) {
+        const int32_t overwrite_count = history.overwrite_count.valid ? history.overwrite_count.value : 0;
+        history.overwrite_count.set(overwrite_count + 1, now_us);
+    }
+    history.next_index.set((next + 1) % static_cast<int32_t>(capacity), now_us);
 }
 
 template<typename Model>
@@ -330,6 +420,9 @@ bool apply_nrx(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     nmea_copy_span(received.message_text, sizeof(received.message_text), NmeaSpan(text, text_len));
     received.text_length.set(static_cast<int32_t>(strlen(received.message_text)), now_us);
     received.end_of_message = navtex_text_has_eom(received.message_text);
+    received.framing_valid = strstr(received.message_text, "ZCZC") != nullptr && received.end_of_message;
+    navtex_copy_body_text(received.body_text, sizeof(received.body_text), received.message_text);
+    received.body_length.set(static_cast<int32_t>(strlen(received.body_text)), now_us);
 
     int32_t serial = 0;
     bool has_serial = false;
@@ -343,6 +436,7 @@ bool apply_nrx(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 
     set_source(received.source, source);
     received.last_update_us = now_us;
+    navtex_store_received_message(model.notifications.navtex, received, now_us);
     return true;
 }
 
