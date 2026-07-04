@@ -4,6 +4,8 @@
 
 namespace ship_data_model {
 
+static const uint8_t NAVTEX_MESSAGE_HISTORY_CAPACITY = 8;
+
 template<typename Real = float>
 struct AlertAcknowledgementData {
     Setting<SensorSource> source;
@@ -111,11 +113,27 @@ struct NavtexReceivedMessageData {
     char subject_indicator = 0;
     Stamped<int32_t> serial_number;
     char message_text[192] = {0};
+    char body_text[192] = {0};
     Stamped<int32_t> text_length;
+    Stamped<int32_t> body_length;
+    Stamped<int32_t> repeat_count;
     bool complete = false;
     bool overflow = false;
     bool end_of_message = false;
+    bool framing_valid = false;
+    bool duplicate = false;
+    bool acknowledged = false;
+    uint64_t first_seen_us = 0;
     uint64_t last_update_us = 0;
+};
+
+template<typename Real = float, uint8_t Capacity = NAVTEX_MESSAGE_HISTORY_CAPACITY>
+struct NavtexMessageHistoryData {
+    NavtexReceivedMessageData<Real> messages[Capacity];
+    Stamped<int32_t> count;
+    Stamped<int32_t> next_index;
+    Stamped<int32_t> overwrite_count;
+    Stamped<int32_t> duplicate_count;
 };
 
 template<typename Real = float>
@@ -136,6 +154,7 @@ struct NavtexReceiverMaskData {
 template<typename Real = float>
 struct NotificationNavtexData {
     NavtexReceivedMessageData<Real> received;
+    NavtexMessageHistoryData<Real> history;
     NavtexReceiverMaskData<Real> receiver_mask;
 };
 
