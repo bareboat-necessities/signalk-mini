@@ -7,6 +7,7 @@ namespace nmea0183_connector {
 
 static const uint8_t NMEA_MESSAGE_MULTIPART_TEXT_BYTES = 96;
 static const uint8_t NMEA_MESSAGE_MULTIPART_ID_BYTES = 16;
+static const uint8_t NMEA_AIS_MULTIPART_SLOT_COUNT = 4;
 
 struct NmeaMessageSource {
     ship_data_model::SensorSource value = ship_data_model::SensorSource::none;
@@ -25,7 +26,9 @@ struct NmeaMessageStampedInt {
 struct NmeaMultipartMessageRecord {
     NmeaMessageSource source;
     char sentence_id[4] = {0};
+    char talker_id[3] = {0};
     char message_id[NMEA_MESSAGE_MULTIPART_ID_BYTES] = {0};
+    char radio_channel = 0;
     NmeaMessageStampedInt total_fragments;
     NmeaMessageStampedInt last_fragment_number;
     uint16_t received_mask = 0;
@@ -40,6 +43,9 @@ struct NmeaMultipartMessageRecord {
 struct NmeaMessageState {
     NmeaMultipartMessageRecord text_message;
     NmeaMultipartMessageRecord ais_message;
+    NmeaMultipartMessageRecord ais_messages[NMEA_AIS_MULTIPART_SLOT_COUNT];
+    NmeaMessageStampedInt active_ais_slot;
+    NmeaMessageStampedInt ais_multipart_replacement_count;
     NmeaMultipartMessageRecord navtex_message;
     NmeaMultipartMessageRecord seatalk_message;
     NmeaMultipartMessageRecord inmarsat_message;
