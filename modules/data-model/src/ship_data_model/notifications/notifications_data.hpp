@@ -101,10 +101,50 @@ struct NotificationDscData {
 };
 
 template<typename Real = float>
+struct NavtexReceivedMessageData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> total_fragments;
+    Stamped<int32_t> fragment_number;
+    char sentence_message_id[16] = {0};
+    char navtex_message_id[8] = {0};
+    char transmitter_id = 0;
+    char subject_indicator = 0;
+    Stamped<int32_t> serial_number;
+    char message_text[192] = {0};
+    Stamped<int32_t> text_length;
+    bool complete = false;
+    bool overflow = false;
+    bool end_of_message = false;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct NavtexReceiverMaskData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> total_fragments;
+    Stamped<int32_t> fragment_number;
+    char sentence_message_id[16] = {0};
+    char receiver_id[24] = {0};
+    char station_mask[32] = {0};
+    char subject_mask[32] = {0};
+    char status_text[72] = {0};
+    bool complete = false;
+    bool overflow = false;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct NotificationNavtexData {
+    NavtexReceivedMessageData<Real> received;
+    NavtexReceiverMaskData<Real> receiver_mask;
+};
+
+template<typename Real = float>
 struct NotificationsData {
     NotificationAlertsData<Real> alerts;
     NotificationMessagesData<Real> messages;
     NotificationDscData<Real> dsc;
+    NotificationNavtexData<Real> navtex;
 };
 
 } // namespace ship_data_model
