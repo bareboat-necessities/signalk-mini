@@ -103,6 +103,8 @@ public:
         NMEA_APPLY("MTW", apply_mtw);
         NMEA_APPLY("MWD", apply_mwd);
         NMEA_APPLY("MWV", apply_mwv);
+        NMEA_APPLY("NRM", apply_nrm);
+        NMEA_APPLY("NRX", apply_nrx);
         NMEA_APPLY("OLN", apply_oln);
         NMEA_APPLY("OSD", apply_osd);
         NMEA_APPLY("R00", apply_r00);
