@@ -30,23 +30,6 @@ struct TrackedTargetData {
 };
 
 template<typename Real = float>
-struct AisRawMessageData {
-    Setting<SensorSource> source;
-    char sentence_id[4] = {0};
-    char radio_channel = 0;
-    bool own_vessel = false;
-    bool complete = false;
-    bool overflow = false;
-    char payload[96] = {0};
-    Stamped<int32_t> payload_bit_count;
-    Stamped<int32_t> fill_bits;
-    Stamped<int32_t> message_type;
-    Stamped<int32_t> repeat_indicator;
-    Stamped<int32_t> mmsi;
-    uint64_t last_update_us = 0;
-};
-
-template<typename Real = float>
 struct AisPositionReportData {
     Setting<SensorSource> source;
     Stamped<int32_t> message_type;
@@ -68,6 +51,7 @@ struct AisPositionReportData {
 template<typename Real = float>
 struct AisBaseStationData {
     Setting<SensorSource> source;
+    Stamped<int32_t> message_type;
     Stamped<int32_t> mmsi;
     Stamped<int32_t> year;
     Stamped<int32_t> month;
@@ -86,6 +70,7 @@ struct AisBaseStationData {
 template<typename Real = float>
 struct AisStaticVoyageData {
     Setting<SensorSource> source;
+    Stamped<int32_t> message_type;
     Stamped<int32_t> mmsi;
     Stamped<int32_t> ais_version;
     Stamped<int32_t> imo_number;
@@ -110,6 +95,7 @@ struct AisStaticVoyageData {
 template<typename Real = float>
 struct AisClassBStaticData {
     Setting<SensorSource> source;
+    Stamped<int32_t> message_type;
     Stamped<int32_t> mmsi;
     Stamped<int32_t> part_number;
     char vendor_id[8] = {0};
@@ -126,6 +112,7 @@ struct AisClassBStaticData {
 template<typename Real = float>
 struct AisAidToNavigationData {
     Setting<SensorSource> source;
+    Stamped<int32_t> message_type;
     Stamped<int32_t> mmsi;
     Stamped<int32_t> aid_type;
     char name[40] = {0};
@@ -158,20 +145,6 @@ struct AisSafetyTextData {
 };
 
 template<typename Real = float>
-struct AisBinaryData {
-    Setting<SensorSource> source;
-    Stamped<int32_t> message_type;
-    Stamped<int32_t> mmsi;
-    Stamped<int32_t> destination_mmsi;
-    Stamped<int32_t> sequence_number;
-    Stamped<int32_t> dac;
-    Stamped<int32_t> function_id;
-    Stamped<int32_t> payload_bit_count;
-    bool retransmit = false;
-    uint64_t last_update_us = 0;
-};
-
-template<typename Real = float>
 struct AisDataLinkStatusData {
     Setting<SensorSource> source;
     char station_id[24] = {0};
@@ -197,7 +170,6 @@ struct AisAddressedSafetyData {
 template<typename Real = float>
 struct AisData {
     TrackedTargetData<Real> tracked_target;
-    AisRawMessageData<Real> raw;
     AisPositionReportData<Real> position_report;
     AisPositionReportData<Real> class_b_position_report;
     AisBaseStationData<Real> base_station;
@@ -205,7 +177,6 @@ struct AisData {
     AisClassBStaticData<Real> class_b_static;
     AisAidToNavigationData<Real> aid_to_navigation;
     AisSafetyTextData<Real> safety_text;
-    AisBinaryData<Real> binary;
     AisDataLinkStatusData<Real> data_link_status;
     AisAddressedSafetyData<Real> addressed_safety;
 };
