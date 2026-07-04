@@ -3,10 +3,10 @@
 // Included inside Nmea0183RxConnector.
 
 template<typename Model>
-bool apply_dsi_typed(const NmeaSentence& sentence,
-                     Model& model,
-                     uint64_t now_us,
-                     ship_data_model::SensorSource source) {
+bool apply_dsi(const NmeaSentence& sentence,
+               Model& model,
+               uint64_t now_us,
+               ship_data_model::SensorSource source) {
     if (sentence.field_count < 1) {
         last_error_ = "short DSI";
         return false;
@@ -28,10 +28,10 @@ bool apply_dsi_typed(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_dsr_typed(const NmeaSentence& sentence,
-                     Model& model,
-                     uint64_t now_us,
-                     ship_data_model::SensorSource source) {
+bool apply_dsr(const NmeaSentence& sentence,
+               Model& model,
+               uint64_t now_us,
+               ship_data_model::SensorSource source) {
     if (sentence.field_count < 1) {
         last_error_ = "short DSR";
         return false;
