@@ -124,7 +124,7 @@ public:
         NMEA_APPLY("TPC", apply_tpc);
         NMEA_APPLY("TPR", apply_tpr);
         NMEA_APPLY("TPT", apply_tpt);
-        NMEA_APPLY("TRF", apply_trf_full);
+        NMEA_APPLY("TRF", apply_trf);
         NMEA_APPLY("TTM", apply_ttm);
         NMEA_APPLY("TXT", apply_txt);
         NMEA_APPLY("VBW", apply_vbw);
@@ -258,7 +258,6 @@ private:
 #include "nmea_A_E.hpp"
 #include "nmea_F_G.hpp"
 #include "nmea_H_N.hpp"
-#include "nmea_trf_override.hpp"
 #include "nmea_O_Z.hpp"
 };
 
