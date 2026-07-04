@@ -224,7 +224,7 @@ private:
             record.overflow = true;
         }
         if (append > 0u && sentence.fragment.payload.data) {
-            memcpy(record.text + current, append ? sentence.fragment.payload.data : "", append);
+            memcpy(record.text + current, sentence.fragment.payload.data, append);
             record.text[current + append] = '\0';
             current += append;
         }
