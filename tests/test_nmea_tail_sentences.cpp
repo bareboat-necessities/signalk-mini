@@ -72,8 +72,12 @@ int main() {
     REQUIRE(std::strcmp(app.nmea0183().dsc_state().expansion.payload, "45894494") == 0);
 
     feed(app, "CDDSI,REQ1,3380400790", now_us);
+    REQUIRE(std::strcmp(app.store().model().notifications.dsc.interrogation.request_id, "REQ1") == 0);
+    REQUIRE(std::strcmp(app.store().model().notifications.dsc.interrogation.remote_mmsi, "3380400790") == 0);
     REQUIRE(app.store().model().notifications.dsc.interrogation.field_count.value == 2);
     feed(app, "CDDSR,RSP1,3380400790", now_us);
+    REQUIRE(std::strcmp(app.store().model().notifications.dsc.response.response_id, "RSP1") == 0);
+    REQUIRE(std::strcmp(app.store().model().notifications.dsc.response.remote_mmsi, "3380400790") == 0);
     REQUIRE(app.store().model().notifications.dsc.response.field_count.value == 2);
 
     feed(app, "FDFIR,FIRE1,ALARM", now_us);
