@@ -4,6 +4,8 @@
 
 namespace ship_data_model {
 
+static const uint8_t AIS_TARGET_TABLE_CAPACITY = 16;
+
 template<typename Real = float>
 struct TrackedTargetData {
     Setting<SensorSource> source;
@@ -30,6 +32,46 @@ struct TrackedTargetData {
 };
 
 template<typename Real = float>
+struct AisTargetData {
+    Setting<SensorSource> source;
+    bool occupied = false;
+    Stamped<int32_t> mmsi;
+    Stamped<int32_t> last_message_type;
+    Stamped<int32_t> repeat_indicator;
+    Stamped<int32_t> navigation_status;
+    Stamped<Real> latitude_deg;
+    Stamped<Real> longitude_deg;
+    Stamped<Real> speed_over_ground_kn;
+    Stamped<Real> course_over_ground_deg;
+    Stamped<Real> true_heading_deg;
+    Stamped<int32_t> timestamp_s;
+    Stamped<int32_t> ship_type;
+    Stamped<int32_t> imo_number;
+    Stamped<int32_t> aid_type;
+    char vessel_name[24] = {0};
+    char call_sign[8] = {0};
+    char destination[24] = {0};
+    bool position_accuracy = false;
+    bool raim = false;
+    bool class_b = false;
+    bool base_station = false;
+    bool aid_to_navigation = false;
+    bool sar_aircraft = false;
+    uint64_t first_seen_us = 0;
+    uint64_t last_seen_us = 0;
+    uint64_t last_position_update_us = 0;
+    uint64_t last_static_update_us = 0;
+};
+
+template<typename Real = float, uint8_t MaxTargets = AIS_TARGET_TABLE_CAPACITY>
+struct AisTargetTableData {
+    AisTargetData<Real> targets[MaxTargets];
+    Stamped<int32_t> target_count;
+    Stamped<int32_t> replacement_count;
+    Stamped<int32_t> overflow_count;
+};
+
+template<typename Real = float>
 struct AisPositionReportData {
     Setting<SensorSource> source;
     Stamped<int32_t> message_type;
@@ -45,6 +87,26 @@ struct AisPositionReportData {
     Stamped<Real> true_heading_deg;
     Stamped<int32_t> timestamp_s;
     Stamped<int32_t> maneuver_indicator;
+    bool raim = false;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct AisSarAircraftPositionData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> message_type;
+    Stamped<int32_t> repeat_indicator;
+    Stamped<int32_t> mmsi;
+    Stamped<int32_t> altitude_m;
+    Stamped<Real> speed_over_ground_kn;
+    bool position_accuracy = false;
+    Stamped<Real> longitude_deg;
+    Stamped<Real> latitude_deg;
+    Stamped<Real> course_over_ground_deg;
+    Stamped<int32_t> timestamp_s;
+    bool altitude_sensor_barometric = false;
+    bool dte_ready = false;
+    bool assigned_mode = false;
     bool raim = false;
     uint64_t last_update_us = 0;
 };
@@ -138,6 +200,23 @@ struct AisAidToNavigationData {
 };
 
 template<typename Real = float>
+struct AisLongRangeBroadcastData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> message_type;
+    Stamped<int32_t> repeat_indicator;
+    Stamped<int32_t> mmsi;
+    Stamped<int32_t> navigation_status;
+    bool position_accuracy = false;
+    bool raim = false;
+    Stamped<Real> longitude_deg;
+    Stamped<Real> latitude_deg;
+    Stamped<Real> speed_over_ground_kn;
+    Stamped<Real> course_over_ground_deg;
+    bool gnss_position_status = false;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
 struct AisSafetyTextData {
     Setting<SensorSource> source;
     Stamped<int32_t> message_type;
@@ -147,6 +226,23 @@ struct AisSafetyTextData {
     Stamped<int32_t> sequence_number;
     bool retransmit = false;
     char text[96] = {0};
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct AisBinaryEnvelopeData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> message_type;
+    Stamped<int32_t> repeat_indicator;
+    Stamped<int32_t> mmsi;
+    Stamped<int32_t> destination_mmsi;
+    Stamped<int32_t> sequence_number;
+    Stamped<int32_t> dac;
+    Stamped<int32_t> function_id;
+    Stamped<int32_t> payload_bit_count;
+    bool addressed = false;
+    bool structured = false;
+    bool retransmit = false;
     uint64_t last_update_us = 0;
 };
 
@@ -176,13 +272,17 @@ struct AisAddressedSafetyData {
 template<typename Real = float>
 struct AisData {
     TrackedTargetData<Real> tracked_target;
+    AisTargetTableData<Real> targets;
     AisPositionReportData<Real> position_report;
     AisPositionReportData<Real> class_b_position_report;
+    AisSarAircraftPositionData<Real> sar_aircraft_position;
     AisBaseStationData<Real> base_station;
     AisStaticVoyageData<Real> static_voyage;
     AisClassBStaticData<Real> class_b_static;
     AisAidToNavigationData<Real> aid_to_navigation;
+    AisLongRangeBroadcastData<Real> long_range_broadcast;
     AisSafetyTextData<Real> safety_text;
+    AisBinaryEnvelopeData<Real> binary_envelope;
     AisDataLinkStatusData<Real> data_link_status;
     AisAddressedSafetyData<Real> addressed_safety;
 };
