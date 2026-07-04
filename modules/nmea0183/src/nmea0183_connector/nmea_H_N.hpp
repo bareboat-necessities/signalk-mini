@@ -274,6 +274,67 @@ bool navtex_is_id_char(char c) const {
     return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
 }
 
+int32_t navtex_subject_category(char subject) const {
+    switch (subject) {
+    case 'A': return 1;
+    case 'B': return 2;
+    case 'C': return 3;
+    case 'D': return 4;
+    case 'E': return 5;
+    case 'F': return 6;
+    case 'G': return 7;
+    case 'H': return 8;
+    case 'J': return 9;
+    case 'K': return 10;
+    case 'L': return 11;
+    case 'V':
+    case 'W':
+    case 'X':
+    case 'Y': return 20;
+    case 'Z': return 30;
+    default: return 0;
+    }
+}
+
+const char* navtex_subject_label(char subject) const {
+    switch (subject) {
+    case 'A': return "navigation";
+    case 'B': return "meteorology";
+    case 'C': return "ice";
+    case 'D': return "search_rescue";
+    case 'E': return "forecast";
+    case 'F': return "pilot_service";
+    case 'G': return "ais";
+    case 'H': return "loran";
+    case 'J': return "satnav";
+    case 'K': return "other_enav";
+    case 'L': return "navigation_extra";
+    case 'V':
+    case 'W':
+    case 'X':
+    case 'Y': return "special_service";
+    case 'Z': return "no_messages";
+    default: return "unknown";
+    }
+}
+
+uint32_t navtex_letter_mask_bits(const char* text, int32_t& count) const {
+    uint32_t bits = 0;
+    count = 0;
+    if (!text) return bits;
+    for (const char* p = text; *p; ++p) {
+        char c = *p;
+        if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+        if (c < 'A' || c > 'Z') continue;
+        const uint32_t bit = static_cast<uint32_t>(1u << (c - 'A'));
+        if ((bits & bit) == 0u) {
+            bits |= bit;
+            ++count;
+        }
+    }
+    return bits;
+}
+
 void parse_navtex_message_id(const char* text,
                              char out[8],
                              char& transmitter_id,
@@ -341,15 +402,8 @@ bool navtex_same_message_id(const Message& a, const Message& b) const {
     return false;
 }
 
-template<typename NavtexData>
-void navtex_store_received(NavtexData& navtex,
-                           const typename NavtexData::ReceivedMessageType& received,
-                           uint64_t now_us) {
-    // Not used; kept unreachable to avoid requiring nested typedefs.
-}
-
-template<typename RealNavtex>
-void navtex_store_received_message(RealNavtex& navtex, decltype(navtex.received)& received, uint64_t now_us) {
+template<typename NavtexData, typename ReceivedMessage>
+void navtex_store_received_message(NavtexData& navtex, ReceivedMessage& received, uint64_t now_us) {
     auto& history = navtex.history;
     const uint8_t capacity = ship_data_model::NAVTEX_MESSAGE_HISTORY_CAPACITY;
 
@@ -432,7 +486,12 @@ bool apply_nrx(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
                             received.subject_indicator,
                             serial,
                             has_serial);
-    if (has_serial) received.serial_number.set(serial, now_us);
+    if (has_serial) {
+        received.serial_number.set(serial, now_us);
+        received.subject_category.set(navtex_subject_category(received.subject_indicator), now_us);
+        nmea_copy_cstr(received.subject_label, sizeof(received.subject_label), navtex_subject_label(received.subject_indicator));
+        received.subject_is_service = received.subject_category.value == 20;
+    }
 
     set_source(received.source, source);
     received.last_update_us = now_us;
@@ -455,6 +514,11 @@ bool apply_nrm(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     nmea_copy_span(mask.receiver_id, sizeof(mask.receiver_id), sentence.field(3));
     if (sentence.field_count > 4) nmea_copy_span(mask.station_mask, sizeof(mask.station_mask), sentence.field(4));
     if (sentence.field_count > 5) nmea_copy_span(mask.subject_mask, sizeof(mask.subject_mask), sentence.field(5));
+    int32_t enabled = 0;
+    mask.station_mask_bits = navtex_letter_mask_bits(mask.station_mask, enabled);
+    mask.enabled_station_count.set(enabled, now_us);
+    mask.subject_mask_bits = navtex_letter_mask_bits(mask.subject_mask, enabled);
+    mask.enabled_subject_count.set(enabled, now_us);
     if (sentence.field_count > 6) nmea_copy_span(mask.status_text, sizeof(mask.status_text), sentence.field(6));
     mask.complete = !sentence.fragment.is_fragmented || state_.navtex_message.complete;
     mask.overflow = sentence.fragment.is_fragmented && state_.navtex_message.overflow;
