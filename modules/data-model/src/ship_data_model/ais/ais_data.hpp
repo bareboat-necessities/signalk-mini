@@ -7,6 +7,14 @@ namespace ship_data_model {
 static const uint8_t AIS_TARGET_TABLE_CAPACITY = 16;
 
 template<typename Real = float>
+struct AisMessageHeaderData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> message_type;
+    Stamped<int32_t> repeat_indicator;
+    Stamped<int32_t> mmsi;
+};
+
+template<typename Real = float>
 struct TrackedTargetData {
     Setting<SensorSource> source;
     Stamped<int32_t> target_number;
@@ -72,11 +80,7 @@ struct AisTargetTableData {
 };
 
 template<typename Real = float>
-struct AisPositionReportData {
-    Setting<SensorSource> source;
-    Stamped<int32_t> message_type;
-    Stamped<int32_t> repeat_indicator;
-    Stamped<int32_t> mmsi;
+struct AisPositionReportData : AisMessageHeaderData<Real> {
     Stamped<int32_t> navigation_status;
     Stamped<Real> rate_of_turn_deg_min;
     Stamped<Real> speed_over_ground_kn;
@@ -92,11 +96,7 @@ struct AisPositionReportData {
 };
 
 template<typename Real = float>
-struct AisSarAircraftPositionData {
-    Setting<SensorSource> source;
-    Stamped<int32_t> message_type;
-    Stamped<int32_t> repeat_indicator;
-    Stamped<int32_t> mmsi;
+struct AisSarAircraftPositionData : AisMessageHeaderData<Real> {
     Stamped<int32_t> altitude_m;
     Stamped<Real> speed_over_ground_kn;
     bool position_accuracy = false;
@@ -112,11 +112,7 @@ struct AisSarAircraftPositionData {
 };
 
 template<typename Real = float>
-struct AisBaseStationData {
-    Setting<SensorSource> source;
-    Stamped<int32_t> message_type;
-    Stamped<int32_t> repeat_indicator;
-    Stamped<int32_t> mmsi;
+struct AisBaseStationData : AisMessageHeaderData<Real> {
     Stamped<int32_t> year;
     Stamped<int32_t> month;
     Stamped<int32_t> day;
@@ -132,11 +128,7 @@ struct AisBaseStationData {
 };
 
 template<typename Real = float>
-struct AisStaticVoyageData {
-    Setting<SensorSource> source;
-    Stamped<int32_t> message_type;
-    Stamped<int32_t> repeat_indicator;
-    Stamped<int32_t> mmsi;
+struct AisStaticVoyageData : AisMessageHeaderData<Real> {
     Stamped<int32_t> ais_version;
     Stamped<int32_t> imo_number;
     char call_sign[8] = {0};
@@ -158,11 +150,7 @@ struct AisStaticVoyageData {
 };
 
 template<typename Real = float>
-struct AisClassBStaticData {
-    Setting<SensorSource> source;
-    Stamped<int32_t> message_type;
-    Stamped<int32_t> repeat_indicator;
-    Stamped<int32_t> mmsi;
+struct AisClassBStaticData : AisMessageHeaderData<Real> {
     Stamped<int32_t> part_number;
     char vendor_id[8] = {0};
     char call_sign[8] = {0};
@@ -176,11 +164,7 @@ struct AisClassBStaticData {
 };
 
 template<typename Real = float>
-struct AisAidToNavigationData {
-    Setting<SensorSource> source;
-    Stamped<int32_t> message_type;
-    Stamped<int32_t> repeat_indicator;
-    Stamped<int32_t> mmsi;
+struct AisAidToNavigationData : AisMessageHeaderData<Real> {
     Stamped<int32_t> aid_type;
     char name[40] = {0};
     bool position_accuracy = false;
@@ -200,11 +184,7 @@ struct AisAidToNavigationData {
 };
 
 template<typename Real = float>
-struct AisLongRangeBroadcastData {
-    Setting<SensorSource> source;
-    Stamped<int32_t> message_type;
-    Stamped<int32_t> repeat_indicator;
-    Stamped<int32_t> mmsi;
+struct AisLongRangeBroadcastData : AisMessageHeaderData<Real> {
     Stamped<int32_t> navigation_status;
     bool position_accuracy = false;
     bool raim = false;
@@ -217,11 +197,7 @@ struct AisLongRangeBroadcastData {
 };
 
 template<typename Real = float>
-struct AisSafetyTextData {
-    Setting<SensorSource> source;
-    Stamped<int32_t> message_type;
-    Stamped<int32_t> repeat_indicator;
-    Stamped<int32_t> mmsi;
+struct AisSafetyTextData : AisMessageHeaderData<Real> {
     Stamped<int32_t> destination_mmsi;
     Stamped<int32_t> sequence_number;
     bool retransmit = false;
@@ -230,11 +206,7 @@ struct AisSafetyTextData {
 };
 
 template<typename Real = float>
-struct AisBinaryEnvelopeData {
-    Setting<SensorSource> source;
-    Stamped<int32_t> message_type;
-    Stamped<int32_t> repeat_indicator;
-    Stamped<int32_t> mmsi;
+struct AisBinaryEnvelopeData : AisMessageHeaderData<Real> {
     Stamped<int32_t> destination_mmsi;
     Stamped<int32_t> sequence_number;
     Stamped<int32_t> dac;
@@ -247,11 +219,7 @@ struct AisBinaryEnvelopeData {
 };
 
 template<typename Real = float>
-struct AisAcknowledgementData {
-    Setting<SensorSource> source;
-    Stamped<int32_t> message_type;
-    Stamped<int32_t> repeat_indicator;
-    Stamped<int32_t> mmsi;
+struct AisAcknowledgementData : AisMessageHeaderData<Real> {
     Stamped<int32_t> acknowledgement_count;
     Stamped<int32_t> destination_mmsi[4];
     Stamped<int32_t> sequence_number[4];
@@ -259,21 +227,13 @@ struct AisAcknowledgementData {
 };
 
 template<typename Real = float>
-struct AisUtcInquiryData {
-    Setting<SensorSource> source;
-    Stamped<int32_t> message_type;
-    Stamped<int32_t> repeat_indicator;
-    Stamped<int32_t> mmsi;
+struct AisUtcInquiryData : AisMessageHeaderData<Real> {
     Stamped<int32_t> destination_mmsi;
     uint64_t last_update_us = 0;
 };
 
 template<typename Real = float>
-struct AisInterrogationData {
-    Setting<SensorSource> source;
-    Stamped<int32_t> message_type;
-    Stamped<int32_t> repeat_indicator;
-    Stamped<int32_t> mmsi;
+struct AisInterrogationData : AisMessageHeaderData<Real> {
     Stamped<int32_t> first_destination_mmsi;
     Stamped<int32_t> first_message_type;
     Stamped<int32_t> first_slot_offset;
@@ -286,11 +246,7 @@ struct AisInterrogationData {
 };
 
 template<typename Real = float>
-struct AisAssignmentCommandData {
-    Setting<SensorSource> source;
-    Stamped<int32_t> message_type;
-    Stamped<int32_t> repeat_indicator;
-    Stamped<int32_t> mmsi;
+struct AisAssignmentCommandData : AisMessageHeaderData<Real> {
     Stamped<int32_t> assignment_count;
     Stamped<int32_t> destination_mmsi[2];
     Stamped<int32_t> offset[2];
@@ -299,11 +255,7 @@ struct AisAssignmentCommandData {
 };
 
 template<typename Real = float>
-struct AisDataLinkManagementData {
-    Setting<SensorSource> source;
-    Stamped<int32_t> message_type;
-    Stamped<int32_t> repeat_indicator;
-    Stamped<int32_t> mmsi;
+struct AisDataLinkManagementData : AisMessageHeaderData<Real> {
     Stamped<int32_t> reservation_count;
     Stamped<int32_t> slot_offset[4];
     Stamped<int32_t> slot_count[4];
@@ -313,11 +265,7 @@ struct AisDataLinkManagementData {
 };
 
 template<typename Real = float>
-struct AisDgnssBroadcastData {
-    Setting<SensorSource> source;
-    Stamped<int32_t> message_type;
-    Stamped<int32_t> repeat_indicator;
-    Stamped<int32_t> mmsi;
+struct AisDgnssBroadcastData : AisMessageHeaderData<Real> {
     Stamped<Real> longitude_deg;
     Stamped<Real> latitude_deg;
     Stamped<int32_t> payload_bit_count;
@@ -325,11 +273,7 @@ struct AisDgnssBroadcastData {
 };
 
 template<typename Real = float>
-struct AisChannelManagementData {
-    Setting<SensorSource> source;
-    Stamped<int32_t> message_type;
-    Stamped<int32_t> repeat_indicator;
-    Stamped<int32_t> mmsi;
+struct AisChannelManagementData : AisMessageHeaderData<Real> {
     Stamped<int32_t> channel_a;
     Stamped<int32_t> channel_b;
     Stamped<int32_t> txrx_mode;
@@ -348,11 +292,7 @@ struct AisChannelManagementData {
 };
 
 template<typename Real = float>
-struct AisGroupAssignmentCommandData {
-    Setting<SensorSource> source;
-    Stamped<int32_t> message_type;
-    Stamped<int32_t> repeat_indicator;
-    Stamped<int32_t> mmsi;
+struct AisGroupAssignmentCommandData : AisMessageHeaderData<Real> {
     Stamped<Real> northeast_lon_deg;
     Stamped<Real> northeast_lat_deg;
     Stamped<Real> southwest_lon_deg;
