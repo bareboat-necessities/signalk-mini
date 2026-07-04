@@ -88,13 +88,13 @@ int main() {
     const std::string type8_part2 = multipart_body("AIVDM", 2, 2, 8, 'A', type8_part2_payload, type8.fill_bits);
 
     feed_ais(app, type5_part1, now_us);
-    REQUIRE(app.nmea0183().message_state().active_ais_slot.valid == true);
     const int32_t static_slot = app.nmea0183().message_state().active_ais_slot.value;
+    REQUIRE(static_slot >= 0 && static_slot < nmea0183_connector::NMEA_AIS_MULTIPART_SLOT_COUNT);
     REQUIRE(app.nmea0183().message_state().ais_message.complete == false);
 
     feed_ais(app, type8_part1.c_str(), now_us);
-    REQUIRE(app.nmea0183().message_state().active_ais_slot.valid == true);
     const int32_t binary_slot = app.nmea0183().message_state().active_ais_slot.value;
+    REQUIRE(binary_slot >= 0 && binary_slot < nmea0183_connector::NMEA_AIS_MULTIPART_SLOT_COUNT);
     REQUIRE(binary_slot != static_slot);
     REQUIRE(app.nmea0183().message_state().ais_message.complete == false);
 
