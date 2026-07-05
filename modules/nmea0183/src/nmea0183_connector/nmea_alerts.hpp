@@ -96,7 +96,7 @@ bool apply_hbt(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 template<typename Model>
 bool apply_smv(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 8) { last_error_ = "short SMV"; return false; }
-    auto& rec = model.notifications.safety.smv;
+    auto& rec = model.notifications.special.smv;
     float value = 0.0f;
     int32_t parsed = 0;
     nmea_copy_span(rec.message_id, sizeof(rec.message_id), sentence.field(0));
