@@ -142,6 +142,35 @@ void ais_update_class_b_enhancements(const char* payload,
     }
 }
 
+void ais_reset_type24_merge_if_new_mmsi(ship_data_model::AisData<Real>& ais, int32_t mmsi) {
+    auto& stat = ais.class_b_static;
+    if (stat.merge_mmsi.valid && stat.merge_mmsi.value != mmsi) {
+        stat = ship_data_model::AisClassBStaticData<Real>{};
+    }
+}
+
+void ais_update_type24_merge_state(const char* payload,
+                                   size_t payload_len,
+                                   int32_t fill_bits,
+                                   const AisDecodedHeader& header,
+                                   uint64_t now_us,
+                                   ship_data_model::AisData<Real>& ais) {
+    if (header.message_type != 24 || !ais_enough_bits(payload_len, fill_bits, 40)) return;
+    bool ok = true;
+    const int32_t part = static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 2, ok));
+    if (!ok) return;
+    auto& stat = ais.class_b_static;
+    if (!stat.merge_mmsi.valid) stat.merge_mmsi.set(header.mmsi, now_us);
+    if (part == 0) {
+        stat.part_a_received = true;
+        stat.part_a_update_us = now_us;
+    } else if (part == 1) {
+        stat.part_b_received = true;
+        stat.part_b_update_us = now_us;
+    }
+    stat.complete = stat.part_a_received && stat.part_b_received;
+}
+
 void ais_update_aton_extension(const char* payload,
                                size_t payload_len,
                                int32_t fill_bits,
@@ -173,6 +202,7 @@ void ais_update_enhanced_fields(const char* payload,
                                 ship_data_model::SensorSource source,
                                 ship_data_model::AisData<Real>& ais) {
     ais_update_class_b_enhancements(payload, payload_len, fill_bits, header, now_us, ais);
+    ais_update_type24_merge_state(payload, payload_len, fill_bits, header, now_us, ais);
     ais_update_aton_extension(payload, payload_len, fill_bits, header, now_us, ais);
     ais_update_binary_application(payload, payload_len, fill_bits, header, now_us, source, ais);
 }
@@ -335,31 +365,40 @@ bool apply_ais_vdm_vdo_with_own_vessel(const NmeaSentence& sentence,
                                        uint64_t now_us,
                                        ship_data_model::SensorSource source) {
     const bool own_sentence = sentence_is(sentence, "VDO");
-    const bool control = ais_sentence_is_control(sentence);
-    const auto previous_tracked_target = model.ais.tracked_target;
-
-    const bool parsed = control
-        ? apply_ais_control_vdm_vdo(sentence, model, now_us, source)
-        : apply_ais_vdm_vdo(sentence, model, now_us, source);
-    if (!parsed) return false;
 
     const char* payload = nullptr;
     size_t payload_len = 0;
     int32_t fill_bits = 0;
     if (!ais_control_payload_from_sentence(sentence, payload, payload_len, fill_bits)) return false;
-    if (!payload) return true;
 
     AisDecodedHeader header;
-    if (!ais_decode_header(payload, payload_len, header)) {
-        last_error_ = "bad AIS header";
-        return false;
+    const bool have_header = payload && ais_decode_header(payload, payload_len, header);
+    const bool control = have_header && ais_control_message_type(header.message_type);
+
+    if (!own_sentence && have_header && header.message_type == 24) {
+        ais_reset_type24_merge_if_new_mmsi(model.ais, header.mmsi);
     }
 
-    if (!control) ais_update_enhanced_fields(payload, payload_len, fill_bits, header, now_us, source, model.ais);
-    if (!own_sentence) return true;
+    if (own_sentence) {
+        ship_data_model::DataModel<Real> scratch;
+        if (have_header && header.message_type == 24) ais_reset_type24_merge_if_new_mmsi(scratch.ais, header.mmsi);
+        const bool parsed = control
+            ? apply_ais_control_vdm_vdo(sentence, scratch, now_us, source)
+            : apply_ais_vdm_vdo(sentence, scratch, now_us, source);
+        if (!parsed) return false;
+        if (!payload || !have_header) return true;
+        if (!control) ais_update_enhanced_fields(payload, payload_len, fill_bits, header, now_us, source, scratch.ais);
+        ais_update_own_vessel_from_latest(scratch.ais, header, now_us, source);
+        model.ais.own_vessel = scratch.ais.own_vessel;
+        return true;
+    }
 
-    ais_update_own_vessel_from_latest(model.ais, header, now_us, source);
-    ais_remove_target_by_mmsi(model.ais.targets, header.mmsi, now_us);
-    model.ais.tracked_target = previous_tracked_target;
+    const bool parsed = control
+        ? apply_ais_control_vdm_vdo(sentence, model, now_us, source)
+        : apply_ais_vdm_vdo(sentence, model, now_us, source);
+    if (!parsed) return false;
+    if (!payload || !have_header) return true;
+
+    if (!control) ais_update_enhanced_fields(payload, payload_len, fill_bits, header, now_us, source, model.ais);
     return true;
 }
