@@ -122,7 +122,7 @@ static AisPayload make_type8_persons_payload() {
 static AisPayload make_type8_vts_text_payload() {
     std::string bits;
     append_type8_header(bits, 333444557u, 1, 17);
-    append_text(bits, "HELLO AIS", 12);
+    append_text(bits, "HELLOAIS", 8);
     return make_payload(bits);
 }
 
@@ -328,7 +328,7 @@ int main() {
     feed_ais(app, single_vdm_body(make_type8_vts_text_payload()), now_us);
     const auto& vts = app.store().model().ais.binary_application;
     REQUIRE(vts.function_id.value == 17);
-    REQUIRE(std::strcmp(vts.text, "HELLO AIS") == 0);
+    REQUIRE(std::strcmp(vts.text, "HELLOAIS") == 0);
     REQUIRE(vts.decoded_field_count.value == 1);
 
     feed_ais(app, single_vdm_body(make_type8_area_notice_payload()), now_us);
