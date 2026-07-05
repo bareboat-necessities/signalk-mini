@@ -86,15 +86,58 @@ static const ship_data_model::AisTargetData<float>* find_target(const ship_data_
     return nullptr;
 }
 
-static AisPayload make_type8_binary_payload() {
-    std::string bits;
+static void append_type8_header(std::string& bits, uint32_t mmsi, uint32_t dac, uint32_t fi) {
     append_bits(bits, 8, 6);
     append_bits(bits, 0, 2);
-    append_bits(bits, 333444555u, 30);
+    append_bits(bits, mmsi, 30);
     append_bits(bits, 0, 2);
-    append_bits(bits, 1, 10);
-    append_bits(bits, 31, 6);
+    append_bits(bits, dac, 10);
+    append_bits(bits, fi, 6);
+}
+
+static AisPayload make_type8_binary_payload() {
+    std::string bits;
+    append_type8_header(bits, 333444555u, 1, 31);
     append_bits(bits, 0xabcd, 16);
+    return make_payload(bits);
+}
+
+static AisPayload make_type8_persons_payload() {
+    std::string bits;
+    append_type8_header(bits, 333444556u, 1, 16);
+    append_bits(bits, 42, 13);
+    return make_payload(bits);
+}
+
+static AisPayload make_type8_vts_text_payload() {
+    std::string bits;
+    append_type8_header(bits, 333444557u, 1, 17);
+    append_text(bits, "HELLO AIS", 12);
+    return make_payload(bits);
+}
+
+static AisPayload make_type8_met_hydro_payload() {
+    std::string bits;
+    append_type8_header(bits, 333444558u, 1, 31);
+    append_signed_bits(bits, static_cast<int32_t>(std::lround(-73.25 * 60000.0)), 25);
+    append_signed_bits(bits, static_cast<int32_t>(std::lround(40.50 * 60000.0)), 24);
+    append_bits(bits, 7, 5);
+    append_bits(bits, 12, 5);
+    append_bits(bits, 34, 6);
+    append_bits(bits, 0x55, 8);
+    return make_payload(bits);
+}
+
+static AisPayload make_type17_dgnss_payload() {
+    std::string bits;
+    append_bits(bits, 17, 6);
+    append_bits(bits, 0, 2);
+    append_bits(bits, 111222333u, 30);
+    append_bits(bits, 0, 2);
+    append_signed_bits(bits, static_cast<int32_t>(std::lround(-74.0 * 600.0)), 18);
+    append_signed_bits(bits, static_cast<int32_t>(std::lround(41.0 * 600.0)), 17);
+    append_bits(bits, 0, 5);
+    append_bits(bits, 0xABCDE, 20);
     return make_payload(bits);
 }
 
@@ -197,6 +240,40 @@ int main() {
     REQUIRE(appbin.known_application == true);
     REQUIRE(std::strcmp(appbin.application_label, "imo_met_hydro") == 0);
 
+    feed_ais(app, single_vdm_body(make_type8_persons_payload()), now_us);
+    const auto& persons = app.store().model().ais.binary_application;
+    REQUIRE(persons.dac.value == 1);
+    REQUIRE(persons.function_id.value == 16);
+    REQUIRE(persons.quantity.value == 42);
+    REQUIRE(persons.decoded_field_count.value == 1);
+    REQUIRE(std::strcmp(persons.application_label, "imo_persons_on_board") == 0);
+
+    feed_ais(app, single_vdm_body(make_type8_vts_text_payload()), now_us);
+    const auto& vts = app.store().model().ais.binary_application;
+    REQUIRE(vts.function_id.value == 17);
+    REQUIRE(std::strcmp(vts.text, "HELLO AIS") == 0);
+    REQUIRE(vts.decoded_field_count.value == 1);
+
+    feed_ais(app, single_vdm_body(make_type8_met_hydro_payload()), now_us);
+    const auto& met = app.store().model().ais.binary_application;
+    REQUIRE(met.function_id.value == 31);
+    REQUIRE(met.decoded_field_count.value == 5);
+    NEAR(met.longitude_deg.value, -73.25f, 0.001f);
+    NEAR(met.latitude_deg.value, 40.50f, 0.001f);
+    REQUIRE(met.day.value == 7);
+    REQUIRE(met.hour.value == 12);
+    REQUIRE(met.minute.value == 34);
+
+    feed_ais(app, single_vdm_body(make_type17_dgnss_payload()), now_us);
+    const auto& dgnss = app.store().model().ais.dgnss_broadcast;
+    REQUIRE(dgnss.message_type.value == 17);
+    NEAR(dgnss.longitude_deg.value, -74.0f, 0.001f);
+    NEAR(dgnss.latitude_deg.value, 41.0f, 0.001f);
+    REQUIRE(dgnss.payload_start_bit.value == 80);
+    REQUIRE(dgnss.payload_bit_count.value == 20);
+    REQUIRE(dgnss.payload_byte_count.value == 3);
+    REQUIRE(dgnss.first_payload_bits.value == 0xABCDE);
+
     feed_ais(app, single_vdm_body(make_type18_class_b_payload()), now_us);
     const auto& class_b = app.store().model().ais.class_b_position_report;
     REQUIRE(class_b.message_type.value == 18);
@@ -218,6 +295,9 @@ int main() {
     REQUIRE(aton.virtual_aid == true);
     REQUIRE(aton.assigned_mode == true);
     REQUIRE(aton.name_extension_available == true);
+    REQUIRE(aton.name_extension_valid == true);
+    REQUIRE(aton.name_extension_truncated == false);
+    REQUIRE(aton.name_extension_char_count.value == 14);
     REQUIRE(std::strcmp(aton.name_extension, "EXTNAME") == 0);
 
     signalk_mini::SignalKMiniApp<float> own_app;
