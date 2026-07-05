@@ -63,6 +63,10 @@ if(BUILD_TESTING)
   target_link_libraries(test_nmea_ais_own_vessel PRIVATE signalk_mini_core)
   add_test(NAME test_nmea_ais_own_vessel COMMAND test_nmea_ais_own_vessel)
 
+  add_executable(test_nmea_ais_enhancements tests/test_nmea_ais_enhancements.cpp)
+  target_link_libraries(test_nmea_ais_enhancements PRIVATE signalk_mini_core)
+  add_test(NAME test_nmea_ais_enhancements COMMAND test_nmea_ais_enhancements)
+
   add_executable(test_nmea_navtex tests/test_nmea_navtex.cpp)
   target_link_libraries(test_nmea_navtex PRIVATE signalk_mini_core)
   add_test(NAME test_nmea_navtex COMMAND test_nmea_navtex)
