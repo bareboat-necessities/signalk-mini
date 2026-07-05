@@ -2,18 +2,161 @@
 
 // Included inside Nmea0183RxConnector.
 
+static bool dsc_code_is_distress(int32_t code) {
+    return code == 112;
+}
+
+static bool dsc_code_is_urgency(int32_t code) {
+    return code == 110;
+}
+
+static bool dsc_code_is_safety(int32_t code) {
+    return code == 108;
+}
+
+bool dsc_expansion_expected() const {
+    const char flag = dsc_state_.message.expansion_flag;
+    return flag == 'E' || flag == 'e';
+}
+
+bool dse_matches_pending_dsc(ship_data_model::SensorSource source) const {
+    if (!dsc_pending_commit_) return false;
+    if (dsc_pending_source_ != ship_data_model::SensorSource::none &&
+        source != ship_data_model::SensorSource::none &&
+        source != dsc_pending_source_) {
+        return false;
+    }
+    if (dsc_state_.message.sender_mmsi[0] != '\0' &&
+        dsc_state_.expansion.sender_mmsi[0] != '\0' &&
+        strcmp(dsc_state_.message.sender_mmsi, dsc_state_.expansion.sender_mmsi) != 0) {
+        return false;
+    }
+    return true;
+}
+
+template<typename Model, typename Alert>
+void commit_dsc_alert(Model& model,
+                      Alert& alert,
+                      const char* alert_text,
+                      uint64_t now_us,
+                      ship_data_model::SensorSource source) {
+    const auto& dsc = dsc_state_.message;
+    alert = Alert{};
+    set_source(alert.source, source);
+    nmea_copy_cstr(alert.sender_mmsi, sizeof(alert.sender_mmsi), dsc.sender_mmsi);
+    nmea_copy_cstr(alert.address_or_distress_mmsi,
+                   sizeof(alert.address_or_distress_mmsi),
+                   dsc.address_or_distress_mmsi);
+    if (dsc.category.last_update_us) alert.category.set(dsc.category.value, now_us);
+    if (dsc.nature_or_first_telecommand.last_update_us) {
+        alert.nature_or_first_telecommand.set(dsc.nature_or_first_telecommand.value, now_us);
+    }
+    if (dsc.has_position) {
+        alert.latitude_deg.set(static_cast<Real>(dsc.latitude_deg), now_us);
+        alert.longitude_deg.set(static_cast<Real>(dsc.longitude_deg), now_us);
+    }
+    if (dsc.has_utc_time) alert.utc_time_s.set(static_cast<Real>(dsc.utc_time_s), now_us);
+    nmea_copy_cstr(alert.alert_text, sizeof(alert.alert_text), alert_text);
+    alert.active = true;
+    alert.last_update_us = now_us;
+    (void)model;
+}
+
+template<typename Model>
+void promote_dsc_notifications(Model& model,
+                               uint64_t now_us,
+                               ship_data_model::SensorSource source) {
+    const auto& dsc = dsc_state_.message;
+    const int32_t format = dsc.format_specifier.last_update_us ? dsc.format_specifier.value : 0;
+    const int32_t category = dsc.category.last_update_us ? dsc.category.value : 0;
+
+    if (dsc_code_is_distress(format) || dsc_code_is_distress(category)) {
+        commit_dsc_alert(model, model.notifications.dsc.distress, "DSC distress", now_us, source);
+        model.comm.dsc.distress_count.set(model.comm.dsc.distress_count.value + 1, now_us);
+    } else if (dsc_code_is_urgency(category)) {
+        commit_dsc_alert(model, model.notifications.dsc.urgency, "DSC urgency", now_us, source);
+        model.comm.dsc.urgency_count.set(model.comm.dsc.urgency_count.value + 1, now_us);
+    } else if (dsc_code_is_safety(category)) {
+        commit_dsc_alert(model, model.notifications.dsc.safety, "DSC safety", now_us, source);
+        model.comm.dsc.safety_count.set(model.comm.dsc.safety_count.value + 1, now_us);
+    }
+}
+
+template<typename Model>
+bool commit_dsc_message_to_model(Model& model,
+                                 uint64_t now_us,
+                                 ship_data_model::SensorSource source,
+                                 bool expansion_received,
+                                 bool expansion_timeout) {
+    const auto& dsc = dsc_state_.message;
+    const auto& dse = dsc_state_.expansion;
+
+    auto& comm = model.comm.dsc;
+    auto& dst = comm.latest_call;
+    dst = ship_data_model::DscCallData<Real>{};
+
+    set_source(dst.source, source);
+    if (dsc.format_specifier.last_update_us) dst.format_specifier.set(dsc.format_specifier.value, now_us);
+    nmea_copy_cstr(dst.sender_mmsi, sizeof(dst.sender_mmsi), dsc.sender_mmsi);
+    if (dsc.category.last_update_us) dst.category.set(dsc.category.value, now_us);
+    if (dsc.nature_or_first_telecommand.last_update_us) {
+        dst.nature_or_first_telecommand.set(dsc.nature_or_first_telecommand.value, now_us);
+    }
+    if (dsc.communication_or_second_telecommand.last_update_us) {
+        dst.communication_or_second_telecommand.set(dsc.communication_or_second_telecommand.value, now_us);
+    }
+
+    nmea_copy_cstr(dst.position_code, sizeof(dst.position_code), dsc.position_code);
+    if (dsc.has_position) {
+        dst.latitude_deg.set(static_cast<Real>(dsc.latitude_deg), now_us);
+        dst.longitude_deg.set(static_cast<Real>(dsc.longitude_deg), now_us);
+    }
+    if (dsc.has_utc_time) dst.utc_time_s.set(static_cast<Real>(dsc.utc_time_s), now_us);
+
+    nmea_copy_cstr(dst.address_or_distress_mmsi,
+                   sizeof(dst.address_or_distress_mmsi),
+                   dsc.address_or_distress_mmsi);
+    nmea_copy_cstr(dst.field10, sizeof(dst.field10), dsc.field10);
+    dst.end_of_sequence = dsc.end_of_sequence;
+    dst.expansion_expected = dsc_expansion_expected();
+    dst.expansion_received = expansion_received;
+    dst.expansion_timeout = expansion_timeout;
+
+    if (expansion_received) {
+        if (dse.total_messages.last_update_us) dst.dse_total_messages.set(dse.total_messages.value, now_us);
+        if (dse.message_number.last_update_us) dst.dse_message_number.set(dse.message_number.value, now_us);
+        dst.dse_query_flag = dse.query_flag;
+        if (dse.expansion_specifier.last_update_us) {
+            dst.dse_expansion_specifier.set(dse.expansion_specifier.value, now_us);
+        }
+        nmea_copy_cstr(dst.dse_payload, sizeof(dst.dse_payload), dse.payload);
+    }
+
+    dst.field_count.set(dst.expansion_expected ? 11 : 10, now_us);
+    dst.first_seen_us = dsc.last_update_us != 0 ? dsc.last_update_us : now_us;
+    dst.last_update_us = now_us;
+
+    comm.call_count.set(comm.call_count.value + 1, now_us);
+    if (expansion_timeout) {
+        comm.expansion_timeout_count.set(comm.expansion_timeout_count.value + 1, now_us);
+    }
+
+    promote_dsc_notifications(model, now_us, source);
+    return true;
+}
+
 template<typename Model>
 bool apply_dsc(const NmeaSentence& sentence,
                Model& model,
                uint64_t now_us,
                ship_data_model::SensorSource source) {
-    (void)model;
     if (sentence.field_count < 10) {
         last_error_ = "short DSC";
         return false;
     }
 
     auto& dsc = dsc_state_.message;
+    dsc = NmeaDscMessageRecord{};
     int32_t integer_value = 0;
     float value = 0.0f;
     if (parse_int32(sentence.field(0), integer_value)) {
@@ -51,7 +194,18 @@ bool apply_dsc(const NmeaSentence& sentence,
     }
     set_source(dsc.source, source);
     dsc.last_update_us = now_us;
-    return true;
+
+    if (dsc_expansion_expected()) {
+        dsc_pending_commit_ = true;
+        dsc_pending_started_us_ = now_us;
+        dsc_pending_source_ = source;
+        return true;
+    }
+
+    dsc_pending_commit_ = false;
+    dsc_pending_started_us_ = 0;
+    dsc_pending_source_ = ship_data_model::SensorSource::none;
+    return commit_dsc_message_to_model(model, now_us, source, false, false);
 }
 
 template<typename Model>
@@ -59,13 +213,13 @@ bool apply_dse(const NmeaSentence& sentence,
                Model& model,
                uint64_t now_us,
                ship_data_model::SensorSource source) {
-    (void)model;
     if (sentence.field_count < 6) {
         last_error_ = "short DSE";
         return false;
     }
 
     auto& dse = dsc_state_.expansion;
+    dse = NmeaDscExpansionRecord{};
     int32_t integer_value = 0;
     if (parse_int32(sentence.field(0), integer_value)) {
         dse.total_messages.set(integer_value, now_us);
@@ -81,6 +235,14 @@ bool apply_dse(const NmeaSentence& sentence,
     nmea_copy_span(dse.payload, sizeof(dse.payload), sentence.field(5));
     set_source(dse.source, source);
     dse.last_update_us = now_us;
+
+    if (dse_matches_pending_dsc(source)) {
+        dsc_pending_commit_ = false;
+        dsc_pending_started_us_ = 0;
+        dsc_pending_source_ = ship_data_model::SensorSource::none;
+        return commit_dsc_message_to_model(model, now_us, source, true, false);
+    }
+
     return true;
 }
 
