@@ -31,6 +31,14 @@ static NmeaSpan inmarsat_best_payload_field(const NmeaSentence& sentence) {
     return NmeaSpan();
 }
 
+bool inmarsat_is_standard_message(const NmeaSentence& sentence) const {
+    return sentence_is(sentence, "IMK") || sentence_is(sentence, "IMN") || sentence_is(sentence, "IMR");
+}
+
+bool inmarsat_is_proprietary_message(const NmeaSentence& sentence) const {
+    return inmarsat_body_starts_with(sentence, "PINM") || inmarsat_body_starts_with(sentence, "INM");
+}
+
 bool inmarsat_fragment_matches_active_record(const NmeaSentence& sentence) const {
     const auto& record = state_.inmarsat_message;
     return (record.in_progress || record.complete) &&
@@ -94,6 +102,20 @@ bool commit_inmarsat_multipart_message(const NmeaSentence& sentence,
     return true;
 }
 
+template<typename Message>
+void set_inmarsat_single_identity(const NmeaSentence& sentence, Message& dst) const {
+    set_inmarsat_message_type(sentence, dst);
+    if (sentence.field_count > 0) {
+        nmea_copy_span(dst.message_id, sizeof(dst.message_id), sentence.field(0));
+    } else {
+        nmea_copy_span(dst.message_id, sizeof(dst.message_id), sentence.sentence);
+    }
+    nmea_copy_span(dst.terminal_id, sizeof(dst.terminal_id), sentence.talker);
+    if ((inmarsat_is_standard_message(sentence) || inmarsat_is_proprietary_message(sentence)) && sentence.field_count > 1) {
+        nmea_copy_span(dst.message_status, sizeof(dst.message_status), sentence.field(1));
+    }
+}
+
 template<typename Model>
 bool commit_inmarsat_single_message(const NmeaSentence& sentence,
                                     Model& model,
@@ -114,11 +136,7 @@ bool commit_inmarsat_single_message(const NmeaSentence& sentence,
     }
 
     set_source(dst.source, source);
-    set_inmarsat_message_type(sentence, dst);
-    if (sentence.field_count > 0) nmea_copy_span(dst.message_id, sizeof(dst.message_id), sentence.field(0));
-    else nmea_copy_span(dst.message_id, sizeof(dst.message_id), sentence.sentence);
-    nmea_copy_span(dst.terminal_id, sizeof(dst.terminal_id), sentence.talker);
-    if (sentence.field_count > 1) nmea_copy_span(dst.message_status, sizeof(dst.message_status), sentence.field(1));
+    set_inmarsat_single_identity(sentence, dst);
     nmea_copy_span(dst.decoded_text, sizeof(dst.decoded_text), payload);
 
     dst.total_fragments.set(1, now_us);
