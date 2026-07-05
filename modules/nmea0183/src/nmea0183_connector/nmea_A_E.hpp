@@ -3,10 +3,7 @@
 // Included inside Nmea0183RxConnector.
 
 template<typename Model>
-bool apply_aam(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
+bool apply_aam(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 5) { last_error_ = "short AAM"; return false; }
     float radius_nmi = 0.0f;
     model.route.waypoint_arrival.arrival_circle_entered.value = sentence.field(0)[0] == 'A';
@@ -19,10 +16,7 @@ bool apply_aam(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_ack(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
+bool apply_ack(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 1) { last_error_ = "short ACK"; return false; }
     auto& ack = model.notifications.alerts.acknowledgement;
     int32_t alarm_number = 0;
@@ -35,10 +29,7 @@ bool apply_ack(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_ads(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
+bool apply_ads(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     auto& ads = model.ais.data_link_status;
     if (sentence.field_count > 0) nmea_copy_span(ads.station_id, sizeof(ads.station_id), sentence.field(0));
     if (sentence.field_count > 1) nmea_copy_span(ads.slot_status, sizeof(ads.slot_status), sentence.field(1));
@@ -50,10 +41,7 @@ bool apply_ads(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_akd(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
+bool apply_akd(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 1) { last_error_ = "short AKD"; return false; }
     auto& akd = model.notifications.alerts.acknowledgement_detail;
     int32_t parsed = 0;
@@ -70,10 +58,7 @@ bool apply_akd(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_ala(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
+bool apply_ala(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 1) { last_error_ = "short ALA"; return false; }
     auto& alarm = model.notifications.alerts.condition;
     int32_t parsed = 0;
@@ -91,10 +76,68 @@ bool apply_ala(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_apa(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
+bool apply_alc(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 3) { last_error_ = "short ALC"; return false; }
+    auto& rec = model.notifications.alerts.cyclic_list;
+    int32_t parsed = 0;
+    if (parse_int32(sentence.field(0), parsed)) rec.total_messages.set(parsed, now_us);
+    if (parse_int32(sentence.field(1), parsed)) rec.message_number.set(parsed, now_us);
+    nmea_copy_span(rec.sequential_message_id, sizeof(rec.sequential_message_id), sentence.field(2));
+    uint8_t count = 0;
+    for (uint8_t i = 3; i < sentence.field_count && count < ship_data_model::ALERT_LIST_ENTRY_CAPACITY; ++i) {
+        if (sentence.field(i).length == 0) continue;
+        nmea_copy_span(rec.alert_identifier[count], sizeof(rec.alert_identifier[count]), sentence.field(i));
+        ++count;
+    }
+    rec.alert_count.set(static_cast<int32_t>(count), now_us);
+    rec.field_count.set(static_cast<int32_t>(sentence.field_count), now_us);
+    set_source(rec.source, source);
+    rec.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
+bool apply_alf(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 4) { last_error_ = "short ALF"; return false; }
+    auto& rec = model.notifications.alerts.alert_report;
+    int32_t parsed = 0;
+    if (parse_int32(sentence.field(0), parsed)) rec.total_fragments.set(parsed, now_us);
+    if (sentence.field_count > 1 && parse_int32(sentence.field(1), parsed)) rec.fragment_number.set(parsed, now_us);
+    if (sentence.field_count > 2) nmea_copy_span(rec.sequential_message_id, sizeof(rec.sequential_message_id), sentence.field(2));
+    if (sentence.field_count > 3) nmea_copy_span(rec.alert_identifier, sizeof(rec.alert_identifier), sentence.field(3));
+    if (sentence.field_count > 4 && parse_int32(sentence.field(4), parsed)) rec.alert_instance.set(parsed, now_us);
+    if (sentence.field_count > 5 && parse_int32(sentence.field(5), parsed)) rec.revision_counter.set(parsed, now_us);
+    if (sentence.field_count > 6 && parse_int32(sentence.field(6), parsed)) rec.escalation_counter.set(parsed, now_us);
+    if (sentence.field_count > 7) rec.category = sentence.field(7)[0];
+    if (sentence.field_count > 8) rec.priority = sentence.field(8)[0];
+    if (sentence.field_count > 9) rec.alert_state = sentence.field(9)[0];
+    if (sentence.field_count > 10) nmea_copy_span(rec.alert_text, sizeof(rec.alert_text), sentence.field(10));
+    rec.field_count.set(static_cast<int32_t>(sentence.field_count), now_us);
+    set_source(rec.source, source);
+    rec.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
+bool apply_alr(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 4) { last_error_ = "short ALR"; return false; }
+    auto& rec = model.notifications.alerts.alarm_state;
+    float seconds = 0.0f;
+    int32_t parsed = 0;
+    if (parse_utc_time_of_day_s(sentence.field(0), seconds)) rec.utc_time_s.set(static_cast<Real>(seconds), now_us);
+    nmea_copy_span(rec.alarm_identifier, sizeof(rec.alarm_identifier), sentence.field(1));
+    if (parse_int32(sentence.field(1), parsed)) rec.local_alarm_number.set(parsed, now_us);
+    rec.condition_state = sentence.field(2)[0];
+    rec.acknowledgement_state = sentence.field(3)[0];
+    if (sentence.field_count > 4) nmea_copy_span(rec.description, sizeof(rec.description), sentence.field(4));
+    rec.field_count.set(static_cast<int32_t>(sentence.field_count), now_us);
+    set_source(rec.source, source);
+    rec.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
+bool apply_apa(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 10) { last_error_ = "short APA"; return false; }
     float xte_nmi = 0.0f;
     float bearing_deg = 0.0f;
@@ -113,10 +156,7 @@ bool apply_apa(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_apb(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
+bool apply_apb(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 14) { last_error_ = "short APB"; return false; }
     bool any = false;
     float value = 0.0f;
@@ -152,10 +192,23 @@ bool apply_apb(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_asd(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
+bool apply_arc(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 1) { last_error_ = "short ARC"; return false; }
+    auto& rec = model.notifications.alerts.command_refused;
+    int32_t parsed = 0;
+    nmea_copy_span(rec.alert_identifier, sizeof(rec.alert_identifier), sentence.field(0));
+    if (sentence.field_count > 1 && parse_int32(sentence.field(1), parsed)) rec.alert_instance.set(parsed, now_us);
+    if (sentence.field_count > 2) nmea_copy_span(rec.refused_command, sizeof(rec.refused_command), sentence.field(2));
+    if (sentence.field_count > 3) nmea_copy_span(rec.reason_code, sizeof(rec.reason_code), sentence.field(3));
+    if (sentence.field_count > 4) nmea_copy_span(rec.reason_text, sizeof(rec.reason_text), sentence.field(4));
+    rec.field_count.set(static_cast<int32_t>(sentence.field_count), now_us);
+    set_source(rec.source, source);
+    rec.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
+bool apply_asd(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 1) { last_error_ = "short ASD"; return false; }
     auto& asd = model.ais.addressed_safety;
     int32_t parsed = 0;
@@ -173,18 +226,10 @@ bool apply_asd(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_bec(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
-    return apply_bwc_bwr(sentence, model, now_us, source);
-}
+bool apply_bec(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) { return apply_bwc_bwr(sentence, model, now_us, source); }
 
 template<typename Model>
-bool apply_bod_bww(const NmeaSentence& sentence,
-                   Model& model,
-                   uint64_t now_us,
-                   ship_data_model::SensorSource source) {
+bool apply_bod_bww(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 6) { last_error_ = sentence_is(sentence, "BOD") ? "short BOD" : "short BWW"; return false; }
     float bearing_deg = 0.0f;
     if (parse_real(sentence.field(0), bearing_deg)) model.route.waypoint.bearing_true_deg.set(static_cast<Real>(wrap_360_deg(bearing_deg)), now_us);
@@ -197,10 +242,7 @@ bool apply_bod_bww(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_bwc_bwr(const NmeaSentence& sentence,
-                   Model& model,
-                   uint64_t now_us,
-                   ship_data_model::SensorSource source) {
+bool apply_bwc_bwr(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 12) { last_error_ = sentence_is(sentence, "BWC") ? "short BWC" : "short BWR"; return false; }
     float value = 0.0f;
     if (parse_utc_time_of_day_s(sentence.field(0), value)) model.route.waypoint.utc_time_s.set(static_cast<Real>(value), now_us);
@@ -216,10 +258,7 @@ bool apply_bwc_bwr(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_cek(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
+bool apply_cek(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 1) { last_error_ = "short CEK"; return false; }
     auto& rec = model.comm.equipment.control_command;
     nmea_copy_span(rec.equipment_id, sizeof(rec.equipment_id), sentence.field(0));
@@ -233,10 +272,7 @@ bool apply_cek(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_cop(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
+bool apply_cop(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 1) { last_error_ = "short COP"; return false; }
     auto& rec = model.comm.equipment.control_operation;
     nmea_copy_span(rec.equipment_id, sizeof(rec.equipment_id), sentence.field(0));
@@ -250,10 +286,7 @@ bool apply_cop(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_cur(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
+bool apply_cur(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 4) { last_error_ = "short CUR"; return false; }
     float value = 0.0f;
     if (parse_real(sentence.field(1), value)) {
@@ -267,10 +300,7 @@ bool apply_cur(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_dbt(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
+bool apply_dbt(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     float depth_m = 0.0f;
     if (!parse_depth_m_from_triplet(sentence, depth_m)) { last_error_ = "bad DBT"; return false; }
     model.sea.depth_m.set(static_cast<Real>(depth_m), now_us);
@@ -280,10 +310,7 @@ bool apply_dbt(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_depth_below_keel(const NmeaSentence& sentence,
-                            Model& model,
-                            uint64_t now_us,
-                            ship_data_model::SensorSource source) {
+bool apply_depth_below_keel(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     float depth_m = 0.0f;
     if (!parse_depth_m_from_triplet(sentence, depth_m)) { last_error_ = "bad DBK"; return false; }
     model.sea.depth_below_keel_m.set(static_cast<Real>(depth_m), now_us);
@@ -293,10 +320,7 @@ bool apply_depth_below_keel(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_depth_below_surface(const NmeaSentence& sentence,
-                               Model& model,
-                               uint64_t now_us,
-                               ship_data_model::SensorSource source) {
+bool apply_depth_below_surface(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     float depth_m = 0.0f;
     if (!parse_depth_m_from_triplet(sentence, depth_m)) { last_error_ = "bad DBS"; return false; }
     model.sea.depth_below_surface_m.set(static_cast<Real>(depth_m), now_us);
@@ -306,13 +330,9 @@ bool apply_depth_below_surface(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_dcn(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
+bool apply_dcn(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 16) { last_error_ = "short DCN"; return false; }
-    float value = 0.0f;
-    int32_t integer_value = 0;
+    float value = 0.0f; int32_t integer_value = 0;
     nmea_copy_span(model.nav.decca.chain_id, sizeof(model.nav.decca.chain_id), sentence.field(0));
     nmea_copy_span(model.nav.decca.red_zone, sizeof(model.nav.decca.red_zone), sentence.field(1));
     if (parse_real(sentence.field(2), value)) model.nav.decca.red_line_of_position.set(static_cast<Real>(value), now_us);
@@ -334,10 +354,7 @@ bool apply_dcn(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_dcr(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
+bool apply_dcr(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 1) { last_error_ = "short DCR"; return false; }
     auto& rec = model.comm.equipment.control_response;
     nmea_copy_span(rec.equipment_id, sizeof(rec.equipment_id), sentence.field(0));
@@ -351,10 +368,7 @@ bool apply_dcr(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_ddc(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
+bool apply_ddc(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 1) { last_error_ = "short DDC"; return false; }
     auto& rec = model.comm.equipment.display_control;
     nmea_copy_span(rec.display_id, sizeof(rec.display_id), sentence.field(0));
@@ -368,10 +382,7 @@ bool apply_ddc(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_dor(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
+bool apply_dor(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 1) { last_error_ = "short DOR"; return false; }
     auto& rec = model.comm.equipment.door_status;
     nmea_copy_span(rec.door_id, sizeof(rec.door_id), sentence.field(0));
@@ -385,12 +396,8 @@ bool apply_dor(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_dpt(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
-    float depth_m = 0.0f;
-    float offset_m = 0.0f;
+bool apply_dpt(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    float depth_m = 0.0f; float offset_m = 0.0f;
     if (!parse_real(sentence.field(0), depth_m)) { last_error_ = "bad DPT"; return false; }
     model.sea.depth_m.set(static_cast<Real>(depth_m), now_us);
     if (parse_real(sentence.field(1), offset_m)) model.sea.depth_offset_m.set(static_cast<Real>(offset_m), now_us);
@@ -400,10 +407,7 @@ bool apply_dpt(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_dtm(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
+bool apply_dtm(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 8) { last_error_ = "short DTM"; return false; }
     float value = 0.0f;
     nmea_copy_span(model.nav.datum.local_datum_code, sizeof(model.nav.datum.local_datum_code), sentence.field(0));
@@ -418,10 +422,7 @@ bool apply_dtm(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_etl(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
+bool apply_etl(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 1) { last_error_ = "short ETL"; return false; }
     auto& event_log = model.notifications.messages.event_log;
     nmea_copy_span(event_log.event_id, sizeof(event_log.event_id), sentence.field(0));
@@ -436,10 +437,7 @@ bool apply_etl(const NmeaSentence& sentence,
 }
 
 template<typename Model>
-bool apply_eve(const NmeaSentence& sentence,
-               Model& model,
-               uint64_t now_us,
-               ship_data_model::SensorSource source) {
+bool apply_eve(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 1) { last_error_ = "short EVE"; return false; }
     auto& event = model.notifications.messages.event;
     nmea_copy_span(event.event_id, sizeof(event.event_id), sentence.field(0));
