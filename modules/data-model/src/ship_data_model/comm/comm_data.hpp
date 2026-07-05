@@ -134,6 +134,25 @@ struct DscCommData {
     Stamped<int32_t> expansion_timeout_count;
 };
 
+enum class InmarsatSentenceType : uint8_t {
+    unknown,
+    imk,
+    imn,
+    imr,
+    pinm,
+    inm
+};
+
+enum class InmarsatPayloadType : uint8_t {
+    none,
+    text,
+    digits,
+    key_value,
+    delimited,
+    mixed_ascii,
+    invalid
+};
+
 template<typename Real = float>
 struct InmarsatMessageData {
     Setting<SensorSource> source;
@@ -142,6 +161,21 @@ struct InmarsatMessageData {
     char message_type[16] = {0};
     char message_status[16] = {0};
     char decoded_text[160] = {0};
+    InmarsatSentenceType sentence_type = InmarsatSentenceType::unknown;
+    InmarsatPayloadType payload_type = InmarsatPayloadType::none;
+    bool standard_sentence = false;
+    bool proprietary_sentence = false;
+    bool ascii_valid = false;
+    Stamped<int32_t> payload_length_chars;
+    Stamped<int32_t> digit_count;
+    Stamped<int32_t> alpha_count;
+    Stamped<int32_t> separator_count;
+    Stamped<int32_t> token_count;
+    Stamped<int32_t> key_value_count;
+    char first_token[32] = {0};
+    char second_token[32] = {0};
+    char first_key[32] = {0};
+    char first_value[64] = {0};
     Stamped<int32_t> total_fragments;
     Stamped<int32_t> last_fragment_number;
     Stamped<int32_t> text_length;

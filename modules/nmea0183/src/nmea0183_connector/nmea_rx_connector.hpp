@@ -43,6 +43,7 @@ public:
                         ship_data_model::SensorSource source) {
         last_error_ = "";
         expire_pending_dsc_if_needed(model, now_us);
+        const bool bad_inmarsat_fragment_before_update = inmarsat_bad_non_first_fragment_before_update(sentence);
         update_multipart_message_state(sentence, now_us, source);
 
 #define NMEA_APPLY(ID, FN) if (sentence_is(sentence, ID)) return FN(sentence, model, now_us, source)
@@ -161,6 +162,9 @@ public:
         NMEA_APPLY("ZTG", apply_ztg);
 #undef NMEA_APPLY
 #undef NMEA_APPLY_NO_SOURCE
+        if (sentence.family == NmeaSentenceFamily::Inmarsat) {
+            return apply_inmarsat(sentence, model, now_us, source, bad_inmarsat_fragment_before_update);
+        }
         if (sentence.fragment.is_fragmented && accepts_fragment_only_family(sentence.family)) return true;
         last_error_ = "unsupported sentence";
         return false;
@@ -178,6 +182,7 @@ private:
 
 #include "nmea_rx_multipart.hpp"
 #include "nmea_dsc.hpp"
+#include "nmea_inmarsat.hpp"
 #include "nmea_ais.hpp"
 #include "nmea_ais_control.hpp"
 #include "nmea_ais_own_vessel.hpp"

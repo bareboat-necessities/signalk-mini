@@ -207,6 +207,11 @@ void update_navtex_multipart_message_state(const NmeaSentence& sentence, uint64_
     state_.navtex_message = selected;
 }
 
+void update_inmarsat_multipart_message_state(const NmeaSentence& sentence, uint64_t now_us, ship_data_model::SensorSource source) {
+    const bool matched_existing = multipart_record_matches(sentence, state_.inmarsat_message);
+    update_multipart_record(sentence, state_.inmarsat_message, now_us, source, matched_existing);
+}
+
 void update_multipart_message_state(const NmeaSentence& sentence, uint64_t now_us, ship_data_model::SensorSource source) {
     if (!sentence.fragment.is_fragmented) return;
     if (sentence_is(sentence, "TXT")) update_multipart_record(sentence, state_.text_message, now_us, source);
@@ -214,6 +219,6 @@ void update_multipart_message_state(const NmeaSentence& sentence, uint64_t now_u
     else if (sentence.family == NmeaSentenceFamily::NavTex) update_navtex_multipart_message_state(sentence, now_us, source);
     else if (sentence.family == NmeaSentenceFamily::Dsc) update_multipart_record(sentence, dsc_state_.multipart, now_us, source);
     else if (sentence.family == NmeaSentenceFamily::SeaTalk) update_multipart_record(sentence, state_.seatalk_message, now_us, source);
-    else if (sentence.family == NmeaSentenceFamily::Inmarsat) update_multipart_record(sentence, state_.inmarsat_message, now_us, source);
+    else if (sentence.family == NmeaSentenceFamily::Inmarsat) update_inmarsat_multipart_message_state(sentence, now_us, source);
     else update_multipart_record(sentence, state_.generic_multipart_message, now_us, source);
 }
