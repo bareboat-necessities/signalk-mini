@@ -31,6 +31,14 @@ static NmeaSpan inmarsat_best_payload_field(const NmeaSentence& sentence) {
     return NmeaSpan();
 }
 
+bool inmarsat_fragment_matches_active_record(const NmeaSentence& sentence) const {
+    const auto& record = state_.inmarsat_message;
+    return (record.in_progress || record.complete) &&
+           nmea_span_equals(sentence.sentence, record.sentence_id) &&
+           nmea_span_equals(sentence.talker, record.talker_id) &&
+           nmea_span_equals(sentence.fragment.message_id, record.message_id);
+}
+
 template<typename Message>
 void set_inmarsat_message_type(const NmeaSentence& sentence, Message& message) const {
     if (inmarsat_body_starts_with(sentence, "PINM")) {
@@ -124,8 +132,10 @@ bool apply_inmarsat(const NmeaSentence& sentence,
                     uint64_t now_us,
                     ship_data_model::SensorSource source) {
     if (sentence.fragment.is_fragmented) {
+        const bool bad_non_first_fragment = !sentence.fragment.is_first() &&
+                                           !inmarsat_fragment_matches_active_record(sentence);
         const auto& assembled = state_.inmarsat_message;
-        if (assembled.bad_fragment_count.last_update_us == now_us) {
+        if (bad_non_first_fragment || assembled.bad_fragment_count.last_update_us == now_us) {
             model.comm.inmarsat.bad_fragment_count.set(model.comm.inmarsat.bad_fragment_count.value + 1, now_us);
             return true;
         }
