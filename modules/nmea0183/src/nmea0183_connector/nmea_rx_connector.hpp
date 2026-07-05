@@ -209,6 +209,17 @@ private:
         record.message_id[0] = '\0';
         record.radio_channel = 0;
         record.text[0] = '\0';
+        record.text_length = NmeaMessageStampedInt{};
+        record.duplicate_fragment_count = NmeaMessageStampedInt{};
+        record.bad_fragment_count = NmeaMessageStampedInt{};
+    }
+
+    template<typename Multipart>
+    void copy_multipart_identity(const NmeaSentence& sentence, Multipart& record) {
+        nmea_copy_span(record.sentence_id, sizeof(record.sentence_id), sentence.sentence);
+        nmea_copy_span(record.talker_id, sizeof(record.talker_id), sentence.talker);
+        nmea_copy_span(record.message_id, sizeof(record.message_id), sentence.fragment.message_id);
+        record.radio_channel = sentence.family == NmeaSentenceFamily::Ais ? ais_radio_channel(sentence) : 0;
     }
 
     template<typename Multipart>
@@ -253,9 +264,26 @@ private:
         return state_.ais_messages[slot];
     }
 
-    NmeaNavtexMultipartMessageRecord& select_navtex_multipart_record(const NmeaSentence& sentence, uint64_t now_us) {
+    void cleanup_navtex_multipart_slots(uint64_t now_us,
+                                        uint64_t timeout_us = NMEA_NAVTEX_MULTIPART_STALE_TIMEOUT_US) {
+        if (timeout_us == 0u) return;
+        for (uint8_t i = 0; i < NMEA_NAVTEX_MULTIPART_SLOT_COUNT; ++i) {
+            auto& slot = state_.navtex_messages[i];
+            if (!slot.in_progress || slot.last_update_us == 0u) continue;
+            if (now_us < slot.last_update_us || now_us - slot.last_update_us <= timeout_us) continue;
+            reset_multipart_record(slot);
+            state_.navtex_multipart_stale_count.set(state_.navtex_multipart_stale_count.value + 1, now_us);
+        }
+    }
+
+    NmeaNavtexMultipartMessageRecord& select_navtex_multipart_record(const NmeaSentence& sentence,
+                                                                     uint64_t now_us,
+                                                                     bool& matched_existing) {
+        cleanup_navtex_multipart_slots(now_us);
+        matched_existing = false;
         for (uint8_t i = 0; i < NMEA_NAVTEX_MULTIPART_SLOT_COUNT; ++i) {
             if (multipart_record_matches(sentence, state_.navtex_messages[i])) {
+                matched_existing = true;
                 state_.active_navtex_slot.set(static_cast<int32_t>(i), now_us);
                 return state_.navtex_messages[i];
             }
@@ -286,24 +314,53 @@ private:
     }
 
     template<typename Multipart>
+    void mark_bad_multipart_fragment(const NmeaSentence& sentence,
+                                     Multipart& record,
+                                     uint64_t now_us,
+                                     ship_data_model::SensorSource source) {
+        reset_multipart_record(record);
+        copy_multipart_identity(sentence, record);
+        record.total_fragments.set(static_cast<int32_t>(sentence.fragment.total), now_us);
+        record.last_fragment_number.set(static_cast<int32_t>(sentence.fragment.number), now_us);
+        record.bad_fragment_count.set(record.bad_fragment_count.value + 1, now_us);
+        set_source(record.source, source);
+        record.last_update_us = now_us;
+    }
+
+    template<typename Multipart>
     void update_multipart_record(const NmeaSentence& sentence,
                                  Multipart& record,
                                  uint64_t now_us,
-                                 ship_data_model::SensorSource source) {
+                                 ship_data_model::SensorSource source,
+                                 bool matched_existing = true) {
         if (!sentence.fragment.is_fragmented) return;
+        if (sentence.fragment.total == 0 ||
+            sentence.fragment.number == 0 ||
+            sentence.fragment.number > sentence.fragment.total ||
+            sentence.fragment.number > 16) {
+            mark_bad_multipart_fragment(sentence, record, now_us, source);
+            return;
+        }
+        if (!sentence.fragment.is_first() && !matched_existing) {
+            mark_bad_multipart_fragment(sentence, record, now_us, source);
+            return;
+        }
         if (sentence.fragment.is_first() || !record.in_progress || record.complete) {
             reset_multipart_record(record);
-            nmea_copy_span(record.sentence_id, sizeof(record.sentence_id), sentence.sentence);
-            nmea_copy_span(record.talker_id, sizeof(record.talker_id), sentence.talker);
-            nmea_copy_span(record.message_id, sizeof(record.message_id), sentence.fragment.message_id);
-            record.radio_channel = sentence.family == NmeaSentenceFamily::Ais ? ais_radio_channel(sentence) : 0;
+            copy_multipart_identity(sentence, record);
             record.in_progress = true;
         }
         record.total_fragments.set(static_cast<int32_t>(sentence.fragment.total), now_us);
         record.last_fragment_number.set(static_cast<int32_t>(sentence.fragment.number), now_us);
-        if (sentence.fragment.number <= 16) {
-            record.received_mask = static_cast<uint16_t>(record.received_mask | (1u << (sentence.fragment.number - 1u)));
+
+        const uint16_t bit = static_cast<uint16_t>(1u << (sentence.fragment.number - 1u));
+        if ((record.received_mask & bit) != 0u) {
+            record.duplicate_fragment_count.set(record.duplicate_fragment_count.value + 1, now_us);
+            set_source(record.source, source);
+            record.last_update_us = now_us;
+            return;
         }
+        record.received_mask = static_cast<uint16_t>(record.received_mask | bit);
 
         size_t current = strlen(record.text);
         const size_t capacity = sizeof(record.text);
@@ -339,8 +396,9 @@ private:
     void update_navtex_multipart_message_state(const NmeaSentence& sentence,
                                                uint64_t now_us,
                                                ship_data_model::SensorSource source) {
-        auto& selected = select_navtex_multipart_record(sentence, now_us);
-        update_multipart_record(sentence, selected, now_us, source);
+        bool matched_existing = false;
+        auto& selected = select_navtex_multipart_record(sentence, now_us, matched_existing);
+        update_multipart_record(sentence, selected, now_us, source, matched_existing);
         state_.navtex_message = selected;
     }
 
