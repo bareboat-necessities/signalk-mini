@@ -161,6 +161,7 @@ public:
         NMEA_APPLY("ZTG", apply_ztg);
 #undef NMEA_APPLY
 #undef NMEA_APPLY_NO_SOURCE
+        if (sentence.family == NmeaSentenceFamily::Inmarsat) return apply_inmarsat(sentence, model, now_us, source);
         if (sentence.fragment.is_fragmented && accepts_fragment_only_family(sentence.family)) return true;
         last_error_ = "unsupported sentence";
         return false;
@@ -178,6 +179,7 @@ private:
 
 #include "nmea_rx_multipart.hpp"
 #include "nmea_dsc.hpp"
+#include "nmea_inmarsat.hpp"
 #include "nmea_ais.hpp"
 #include "nmea_ais_control.hpp"
 #include "nmea_ais_own_vessel.hpp"
