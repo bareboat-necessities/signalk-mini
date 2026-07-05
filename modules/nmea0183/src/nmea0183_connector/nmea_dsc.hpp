@@ -35,6 +35,14 @@ static bool dsc_priority_is_alert(ship_data_model::DscPriority priority) {
            priority == ship_data_model::DscPriority::safety;
 }
 
+static bool dsc_char_is_digit(char c) {
+    return c >= '0' && c <= '9';
+}
+
+static bool dsc_char_is_alpha(char c) {
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+}
+
 static ship_data_model::DscPriority dsc_priority_from_codes(
     bool has_format,
     int32_t format,
@@ -140,6 +148,60 @@ void push_recent_dsc_call(ship_data_model::DscCommData<Real>& comm,
     const int32_t next_after = (next + 1) % ship_data_model::DSC_CALL_HISTORY_CAPACITY;
     comm.recent_call_count.set(count, now_us);
     comm.recent_call_next_index.set(next_after, now_us);
+}
+
+template<typename Call>
+void decode_dse_payload(Call& dst, const char* payload, uint64_t now_us) const {
+    dst.dse_payload_type = ship_data_model::DscDsePayloadType::none;
+    dst.dse_ascii_valid = true;
+    dst.dse_payload_length.set(0, now_us);
+    dst.dse_digit_count.set(0, now_us);
+    dst.dse_decoded_text[0] = '\0';
+
+    if (!payload || payload[0] == '\0') return;
+
+    bool ascii_valid = true;
+    bool all_digits = true;
+    bool has_alpha = false;
+    bool has_digit = false;
+    bool has_other = false;
+    int32_t length = 0;
+    int32_t digit_count = 0;
+
+    for (const char* p = payload; *p != '\0'; ++p) {
+        const unsigned char c = static_cast<unsigned char>(*p);
+        if (c < 0x20 || c > 0x7e) ascii_valid = false;
+        if (dsc_char_is_digit(*p)) {
+            has_digit = true;
+            ++digit_count;
+        } else {
+            all_digits = false;
+            if (dsc_char_is_alpha(*p)) {
+                has_alpha = true;
+            } else if (*p != ' ') {
+                has_other = true;
+            }
+        }
+        ++length;
+    }
+
+    dst.dse_ascii_valid = ascii_valid;
+    dst.dse_payload_length.set(length, now_us);
+    dst.dse_digit_count.set(digit_count, now_us);
+
+    if (!ascii_valid) {
+        dst.dse_payload_type = ship_data_model::DscDsePayloadType::invalid;
+        return;
+    }
+
+    nmea_copy_cstr(dst.dse_decoded_text, sizeof(dst.dse_decoded_text), payload);
+    if (all_digits && has_digit) {
+        dst.dse_payload_type = ship_data_model::DscDsePayloadType::digits;
+    } else if (has_other || (has_alpha && has_digit)) {
+        dst.dse_payload_type = ship_data_model::DscDsePayloadType::mixed_ascii;
+    } else {
+        dst.dse_payload_type = ship_data_model::DscDsePayloadType::text;
+    }
 }
 
 template<typename Alert>
@@ -292,6 +354,7 @@ bool commit_dsc_message_to_model(Model& model,
             dst.dse_expansion_specifier.set(dse.expansion_specifier.value, now_us);
         }
         nmea_copy_cstr(dst.dse_payload, sizeof(dst.dse_payload), dse.payload);
+        decode_dse_payload(dst, dst.dse_payload, now_us);
     }
 
     dst.field_count.set(dst.expansion_expected ? 11 : 10, now_us);
