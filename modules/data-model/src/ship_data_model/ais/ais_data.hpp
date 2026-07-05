@@ -120,6 +120,14 @@ struct AisPositionReportData : AisMessageHeaderData<Real> {
     Stamped<int32_t> timestamp_s;
     Stamped<int32_t> maneuver_indicator;
     bool raim = false;
+    bool cs_unit = false;
+    bool display = false;
+    bool dsc = false;
+    bool band = false;
+    bool accepts_message_22 = false;
+    bool assigned_mode = false;
+    bool dte_ready = false;
+    Stamped<int32_t> radio_status;
     uint64_t last_update_us = 0;
 };
 
@@ -188,6 +196,9 @@ struct AisClassBStaticData : AisMessageHeaderData<Real> {
     Stamped<int32_t> dimension_to_stern_m;
     Stamped<int32_t> dimension_to_port_m;
     Stamped<int32_t> dimension_to_starboard_m;
+    Stamped<int32_t> epfd_type;
+    bool dte_ready = false;
+    bool assigned_mode = false;
     uint64_t last_update_us = 0;
 };
 
@@ -195,6 +206,7 @@ template<typename Real = float>
 struct AisAidToNavigationData : AisMessageHeaderData<Real> {
     Stamped<int32_t> aid_type;
     char name[40] = {0};
+    char name_extension[16] = {0};
     bool position_accuracy = false;
     Stamped<Real> longitude_deg;
     Stamped<Real> latitude_deg;
@@ -208,6 +220,7 @@ struct AisAidToNavigationData : AisMessageHeaderData<Real> {
     bool raim = false;
     bool virtual_aid = false;
     bool assigned_mode = false;
+    bool name_extension_available = false;
     uint64_t last_update_us = 0;
 };
 
@@ -243,6 +256,20 @@ struct AisBinaryEnvelopeData : AisMessageHeaderData<Real> {
     bool addressed = false;
     bool structured = false;
     bool retransmit = false;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct AisBinaryApplicationData : AisMessageHeaderData<Real> {
+    Stamped<int32_t> dac;
+    Stamped<int32_t> function_id;
+    Stamped<int32_t> payload_bit_count;
+    Stamped<int32_t> payload_start_bit;
+    Stamped<int32_t> first_payload_bits;
+    char application_label[32] = {0};
+    bool known_application = false;
+    bool addressed = false;
+    bool structured = false;
     uint64_t last_update_us = 0;
 };
 
@@ -371,6 +398,7 @@ struct AisData {
     AisLongRangeBroadcastData<Real> long_range_broadcast;
     AisSafetyTextData<Real> safety_text;
     AisBinaryEnvelopeData<Real> binary_envelope;
+    AisBinaryApplicationData<Real> binary_application;
     AisAcknowledgementData<Real> acknowledgement;
     AisUtcInquiryData<Real> utc_inquiry;
     AisInterrogationData<Real> interrogation;
