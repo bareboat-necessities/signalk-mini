@@ -23,6 +23,13 @@ bool ais_enough_bits(size_t payload_len, int32_t fill_bits, size_t bit_count) co
     return total - static_cast<size_t>(fill_bits) >= bit_count;
 }
 
+bool ais_app_position_deg(int32_t raw, bool longitude, Real& out_deg) const {
+    const int32_t max_abs = longitude ? 10800000 : 5400000;
+    if (raw > max_abs || raw < -max_abs) return false;
+    out_deg = static_cast<Real>(static_cast<float>(raw) / 60000.0f);
+    return true;
+}
+
 const char* ais_binary_application_label(int32_t dac, int32_t fi) const {
     if (dac == 1 && fi == 31) return "imo_met_hydro";
     if (dac == 1 && fi == 12) return "imo_dangerous_cargo";
@@ -31,6 +38,61 @@ const char* ais_binary_application_label(int32_t dac, int32_t fi) const {
     if (dac == 1 && fi == 22) return "imo_area_notice";
     if (dac == 200 && fi == 10) return "regional_weather";
     return "unknown";
+}
+
+void ais_decode_binary_application_fields(const char* payload,
+                                          size_t payload_len,
+                                          size_t payload_start,
+                                          int32_t remaining_bits,
+                                          int32_t dac,
+                                          int32_t fi,
+                                          uint64_t now_us,
+                                          ship_data_model::AisBinaryApplicationData<Real>& app) {
+    if (remaining_bits <= 0) {
+        app.decoded_field_count.set(0, now_us);
+        return;
+    }
+
+    bool ok = true;
+    int32_t decoded = 0;
+
+    if (dac == 1 && fi == 16 && remaining_bits >= 13) {
+        app.quantity.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start, 13, ok)), now_us);
+        decoded = ok ? 1 : 0;
+    } else if (dac == 1 && fi == 17 && remaining_bits >= 6) {
+        uint8_t chars = static_cast<uint8_t>(remaining_bits / 6);
+        if (chars > 90u) chars = 90u;
+        ais_copy_text(app.text, sizeof(app.text), payload, payload_len, payload_start, chars);
+        decoded = app.text[0] ? 1 : 0;
+    } else if (dac == 1 && fi == 22 && remaining_bits >= 55) {
+        app.link_id.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start, 10, ok)), now_us);
+        app.notice_type.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 10u, 7, ok)), now_us);
+        app.month.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 17u, 4, ok)), now_us);
+        app.day.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 21u, 5, ok)), now_us);
+        app.hour.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 26u, 5, ok)), now_us);
+        app.minute.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 31u, 6, ok)), now_us);
+        app.duration_min.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 37u, 18, ok)), now_us);
+        decoded = ok ? 7 : 0;
+    } else if (dac == 1 && fi == 31 && remaining_bits >= 65) {
+        const int32_t lon_raw = ais_get_s(payload, payload_len, payload_start, 25, ok);
+        const int32_t lat_raw = ais_get_s(payload, payload_len, payload_start + 25u, 24, ok);
+        Real lon = Real{};
+        Real lat = Real{};
+        if (ok && ais_app_position_deg(lon_raw, true, lon)) {
+            app.longitude_deg.set(lon, now_us);
+            ++decoded;
+        }
+        if (ok && ais_app_position_deg(lat_raw, false, lat)) {
+            app.latitude_deg.set(lat, now_us);
+            ++decoded;
+        }
+        app.day.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 49u, 5, ok)), now_us);
+        app.hour.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 54u, 5, ok)), now_us);
+        app.minute.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 59u, 6, ok)), now_us);
+        if (ok) decoded += 3;
+    }
+
+    app.decoded_field_count.set(decoded, now_us);
 }
 
 void ais_update_binary_application(const char* payload,
@@ -77,6 +139,7 @@ void ais_update_binary_application(const char* payload,
     if (!ok) return;
 
     auto& app = ais.binary_application;
+    app = ship_data_model::AisBinaryApplicationData<Real>{};
     ais_set_header_record(app, header, now_us, source);
     app.dac.set(dac, now_us);
     app.function_id.set(fi, now_us);
@@ -96,7 +159,30 @@ void ais_update_binary_application(const char* payload,
     const char* label = ais_binary_application_label(dac, fi);
     nmea_copy_cstr(app.application_label, sizeof(app.application_label), label);
     app.known_application = strcmp(label, "unknown") != 0;
+    ais_decode_binary_application_fields(payload, payload_len, payload_start, remaining, dac, fi, now_us, app);
     app.last_update_us = now_us;
+}
+
+void ais_update_dgnss_payload_summary(const char* payload,
+                                      size_t payload_len,
+                                      int32_t fill_bits,
+                                      const AisDecodedHeader& header,
+                                      uint64_t now_us,
+                                      ship_data_model::AisData<Real>& ais) {
+    if (header.message_type != 17 || !ais_enough_bits(payload_len, fill_bits, 80)) return;
+    auto& dgnss = ais.dgnss_broadcast;
+    const size_t usable_bits = payload_len * 6u - static_cast<size_t>(fill_bits);
+    const size_t payload_start = 80;
+    const int32_t remaining = usable_bits > payload_start ? static_cast<int32_t>(usable_bits - payload_start) : 0;
+    dgnss.payload_start_bit.set(static_cast<int32_t>(payload_start), now_us);
+    dgnss.payload_bit_count.set(remaining, now_us);
+    dgnss.payload_byte_count.set((remaining + 7) / 8, now_us);
+    const uint8_t first_bits = remaining >= 32 ? 32 : static_cast<uint8_t>(remaining);
+    if (first_bits > 0) {
+        bool ok = true;
+        dgnss.first_payload_bits.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start, first_bits, ok)), now_us);
+    }
+    dgnss.last_update_us = now_us;
 }
 
 void ais_update_class_b_enhancements(const char* payload,
@@ -178,20 +264,30 @@ void ais_update_aton_extension(const char* payload,
                                uint64_t now_us,
                                ship_data_model::AisData<Real>& ais) {
     if (header.message_type != 21) return;
-    if (!ais_enough_bits(payload_len, fill_bits, 278)) return;
+    if (!ais_enough_bits(payload_len, fill_bits, 272)) return;
     const size_t usable_bits = payload_len * 6u - static_cast<size_t>(fill_bits);
     const size_t extension_bits = usable_bits > 272u ? usable_bits - 272u : 0u;
-    if (extension_bits < 6u) return;
-    uint8_t chars = static_cast<uint8_t>(extension_bits / 6u);
-    if (chars > 14u) chars = 14u;
-    ais_copy_text(ais.aid_to_navigation.name_extension,
-                  sizeof(ais.aid_to_navigation.name_extension),
-                  payload,
-                  payload_len,
-                  272,
-                  chars);
-    ais.aid_to_navigation.name_extension_available = ais.aid_to_navigation.name_extension[0] != '\0';
-    ais.aid_to_navigation.last_update_us = now_us;
+    auto& aton = ais.aid_to_navigation;
+    aton.name_extension_available = false;
+    aton.name_extension_valid = false;
+    aton.name_extension_truncated = false;
+    aton.name_extension_char_count.set(0, now_us);
+    aton.name_extension[0] = '\0';
+    if (extension_bits < 6u) {
+        aton.last_update_us = now_us;
+        return;
+    }
+    const uint8_t raw_chars = static_cast<uint8_t>(extension_bits / 6u);
+    uint8_t chars = raw_chars;
+    if (chars > 14u) {
+        chars = 14u;
+        aton.name_extension_truncated = true;
+    }
+    ais_copy_text(aton.name_extension, sizeof(aton.name_extension), payload, payload_len, 272, chars);
+    aton.name_extension_char_count.set(chars, now_us);
+    aton.name_extension_available = aton.name_extension[0] != '\0';
+    aton.name_extension_valid = (extension_bits % 6u) == 0u && raw_chars > 0u;
+    aton.last_update_us = now_us;
 }
 
 void ais_update_enhanced_fields(const char* payload,
@@ -205,6 +301,15 @@ void ais_update_enhanced_fields(const char* payload,
     ais_update_type24_merge_state(payload, payload_len, fill_bits, header, now_us, ais);
     ais_update_aton_extension(payload, payload_len, fill_bits, header, now_us, ais);
     ais_update_binary_application(payload, payload_len, fill_bits, header, now_us, source, ais);
+}
+
+void ais_update_control_enhanced_fields(const char* payload,
+                                        size_t payload_len,
+                                        int32_t fill_bits,
+                                        const AisDecodedHeader& header,
+                                        uint64_t now_us,
+                                        ship_data_model::AisData<Real>& ais) {
+    ais_update_dgnss_payload_summary(payload, payload_len, fill_bits, header, now_us, ais);
 }
 
 void ais_set_own_vessel_header(ship_data_model::AisOwnVesselData<Real>& own,
@@ -387,7 +492,8 @@ bool apply_ais_vdm_vdo_with_own_vessel(const NmeaSentence& sentence,
             : apply_ais_vdm_vdo(sentence, scratch, now_us, source);
         if (!parsed) return false;
         if (!payload || !have_header) return true;
-        if (!control) ais_update_enhanced_fields(payload, payload_len, fill_bits, header, now_us, source, scratch.ais);
+        if (control) ais_update_control_enhanced_fields(payload, payload_len, fill_bits, header, now_us, scratch.ais);
+        else ais_update_enhanced_fields(payload, payload_len, fill_bits, header, now_us, source, scratch.ais);
         ais_update_own_vessel_from_latest(scratch.ais, header, now_us, source);
         model.ais.own_vessel = scratch.ais.own_vessel;
         return true;
@@ -399,6 +505,7 @@ bool apply_ais_vdm_vdo_with_own_vessel(const NmeaSentence& sentence,
     if (!parsed) return false;
     if (!payload || !have_header) return true;
 
-    if (!control) ais_update_enhanced_fields(payload, payload_len, fill_bits, header, now_us, source, model.ais);
+    if (control) ais_update_control_enhanced_fields(payload, payload_len, fill_bits, header, now_us, model.ais);
+    else ais_update_enhanced_fields(payload, payload_len, fill_bits, header, now_us, source, model.ais);
     return true;
 }
