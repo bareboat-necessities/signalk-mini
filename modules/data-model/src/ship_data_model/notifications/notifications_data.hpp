@@ -228,6 +228,32 @@ bool navtex_clear_message(NotificationNavtexData<Real>& navtex,
     return true;
 }
 
+template<typename Real, uint8_t Capacity>
+int32_t navtex_expire_history_older_than(NotificationNavtexData<Real>& navtex,
+                                        uint64_t cutoff_us,
+                                        uint64_t now_us) {
+    int32_t expired = 0;
+    int32_t remaining = 0;
+    bool latest_expired = false;
+
+    for (uint8_t i = 0; i < Capacity; ++i) {
+        auto& slot = navtex.history.messages[i];
+        if (slot.first_seen_us == 0) continue;
+        const uint64_t age_reference_us = slot.last_update_us != 0 ? slot.last_update_us : slot.first_seen_us;
+        if (age_reference_us < cutoff_us) {
+            if (navtex_message_id_matches_latest<Real, Capacity>(navtex, slot.navtex_message_id)) latest_expired = true;
+            slot = NavtexReceivedMessageData<Real>{};
+            ++expired;
+        } else {
+            ++remaining;
+        }
+    }
+
+    navtex.history.count.set(remaining, now_us);
+    if (latest_expired) navtex.received = NavtexReceivedMessageData<Real>{};
+    return expired;
+}
+
 template<typename Real>
 bool navtex_acknowledge_message(NotificationNavtexData<Real>& navtex,
                                 const char* navtex_message_id,
@@ -240,6 +266,13 @@ bool navtex_clear_message(NotificationNavtexData<Real>& navtex,
                           const char* navtex_message_id,
                           uint64_t now_us) {
     return navtex_clear_message<Real, NAVTEX_MESSAGE_HISTORY_CAPACITY>(navtex, navtex_message_id, now_us);
+}
+
+template<typename Real>
+int32_t navtex_expire_history_older_than(NotificationNavtexData<Real>& navtex,
+                                        uint64_t cutoff_us,
+                                        uint64_t now_us) {
+    return navtex_expire_history_older_than<Real, NAVTEX_MESSAGE_HISTORY_CAPACITY>(navtex, cutoff_us, now_us);
 }
 
 template<typename Real>
