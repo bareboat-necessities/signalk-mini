@@ -2,6 +2,7 @@
 
 // Included inside Nmea0183RxConnector.
 
+#include "nmea_dsc.hpp"
 #include "nmea_gnss.hpp"
 
 template<typename Model>
