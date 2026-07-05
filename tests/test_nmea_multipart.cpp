@@ -73,13 +73,13 @@ int main() {
     REQUIRE(app.nmea0183().message_state().navtex_message.complete);
     REQUIRE(std::strcmp(app.nmea0183().message_state().navtex_message.text, "NAV TEX") == 0);
 
-    feed_raw(app, encapsulated_sentence("AIVDM,2,1,3,A,ABC,0"), now_us);
+    feed_raw(app, encapsulated_sentence("AIVDM,2,1,3,A,51mg=5@2Fe3t<4hk7;=@E=B1HE=<Dh000000,0"), now_us);
     REQUIRE(app.nmea0183().message_state().ais_message.in_progress);
     REQUIRE(app.nmea0183().message_state().ais_message.received_mask == 0x0001);
     REQUIRE(std::strcmp(app.nmea0183().message_state().ais_message.message_id, "3") == 0);
-    feed_raw(app, encapsulated_sentence("AIVDM,2,2,3,A,DEF,0"), now_us);
+    feed_raw(app, encapsulated_sentence("AIVDM,2,2,3,A,000U1PR347?os;B0DPSlP00000000000000,2"), now_us);
     REQUIRE(app.nmea0183().message_state().ais_message.complete);
-    REQUIRE(std::strcmp(app.nmea0183().message_state().ais_message.text, "ABCDEF") == 0);
+    REQUIRE(std::strcmp(app.nmea0183().message_state().ais_message.text, "51mg=5@2Fe3t<4hk7;=@E=B1HE=<Dh000000000U1PR347?os;B0DPSlP00000000000000") == 0);
 
     nmea0183_connector::Nmea0183StreamParser parser;
     nmea0183_connector::NmeaSentence parsed;
