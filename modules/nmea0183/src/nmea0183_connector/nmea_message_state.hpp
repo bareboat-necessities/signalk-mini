@@ -7,6 +7,7 @@ namespace nmea0183_connector {
 
 static const uint8_t NMEA_MESSAGE_MULTIPART_TEXT_BYTES = 96;
 static const uint16_t NMEA_NAVTEX_MULTIPART_TEXT_BYTES = 256;
+static const uint64_t NMEA_NAVTEX_MULTIPART_STALE_TIMEOUT_US = 30000000ULL;
 static const uint8_t NMEA_MESSAGE_MULTIPART_ID_BYTES = 16;
 static const uint8_t NMEA_AIS_MULTIPART_SLOT_COUNT = 4;
 static const uint8_t NMEA_NAVTEX_MULTIPART_SLOT_COUNT = 4;
@@ -40,6 +41,8 @@ struct NmeaMultipartMessageRecordT {
     bool overflow = false;
     char text[TextBytes] = {0};
     NmeaMessageStampedInt text_length;
+    NmeaMessageStampedInt duplicate_fragment_count;
+    NmeaMessageStampedInt bad_fragment_count;
     uint64_t last_update_us = 0;
 };
 
@@ -56,6 +59,7 @@ struct NmeaMessageState {
     NmeaNavtexMultipartMessageRecord navtex_messages[NMEA_NAVTEX_MULTIPART_SLOT_COUNT];
     NmeaMessageStampedInt active_navtex_slot;
     NmeaMessageStampedInt navtex_multipart_replacement_count;
+    NmeaMessageStampedInt navtex_multipart_stale_count;
     NmeaMultipartMessageRecord seatalk_message;
     NmeaMultipartMessageRecord inmarsat_message;
     NmeaMultipartMessageRecord generic_multipart_message;
