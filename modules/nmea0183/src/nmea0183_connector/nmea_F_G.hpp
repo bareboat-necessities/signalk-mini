@@ -2,7 +2,6 @@
 
 // Included inside Nmea0183RxConnector.
 
-#include "nmea_alerts.hpp"
 #include "nmea_dsc.hpp"
 #include "nmea_gnss.hpp"
 
