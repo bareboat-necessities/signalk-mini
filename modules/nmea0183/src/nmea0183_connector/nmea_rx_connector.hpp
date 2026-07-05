@@ -16,7 +16,10 @@ class Nmea0183RxConnector {
 public:
     Nmea0183RxConnector()
         : last_error_(""),
-          last_apb_mode_(ship_data_model::AutopilotMode::gps) {
+          last_apb_mode_(ship_data_model::AutopilotMode::gps),
+          dsc_pending_commit_(false),
+          dsc_pending_started_us_(0),
+          dsc_pending_source_(ship_data_model::SensorSource::none) {
         last_apb_sender_id_[0] = '\0';
         last_apb_sender_id_[1] = '\0';
         last_apb_sender_id_[2] = '\0';
@@ -39,6 +42,7 @@ public:
                         uint64_t now_us,
                         ship_data_model::SensorSource source) {
         last_error_ = "";
+        expire_pending_dsc_if_needed(model, now_us);
         update_multipart_message_state(sentence, now_us, source);
 
 #define NMEA_APPLY(ID, FN) if (sentence_is(sentence, ID)) return FN(sentence, model, now_us, source)
@@ -168,8 +172,12 @@ private:
     char last_apb_sender_id_[3];
     NmeaMessageState state_;
     NmeaDscMessageState dsc_state_;
+    bool dsc_pending_commit_;
+    uint64_t dsc_pending_started_us_;
+    ship_data_model::SensorSource dsc_pending_source_;
 
 #include "nmea_rx_multipart.hpp"
+#include "nmea_dsc.hpp"
 #include "nmea_ais.hpp"
 #include "nmea_ais_control.hpp"
 #include "nmea_ais_own_vessel.hpp"

@@ -4,6 +4,8 @@
 
 namespace ship_data_model {
 
+static const uint8_t DSC_CALL_HISTORY_CAPACITY = 4;
+
 template<typename Real = float>
 struct RadioFrequencySetData {
     Setting<SensorSource> source;
@@ -44,6 +46,118 @@ struct ReturnLinkMessageData {
     char message_code = 0;
     char message_body[64] = {0};
     uint64_t last_update_us = 0;
+};
+
+enum class DscPriority : uint8_t {
+    unknown,
+    routine,
+    safety,
+    urgency,
+    distress
+};
+
+enum class DscAddressType : uint8_t {
+    unknown,
+    distress,
+    individual,
+    all_ships,
+    group,
+    geographic_area
+};
+
+enum class DscEndSignalType : uint8_t {
+    unknown,
+    ack,
+    end_of_sequence
+};
+
+enum class DscDsePayloadType : uint8_t {
+    none,
+    text,
+    digits,
+    mixed_ascii,
+    invalid
+};
+
+template<typename Real = float>
+struct DscCallData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> format_specifier;
+    char sender_mmsi[16] = {0};
+    Stamped<int32_t> category;
+    Stamped<int32_t> nature_or_first_telecommand;
+    Stamped<int32_t> communication_or_second_telecommand;
+    char position_code[16] = {0};
+    Stamped<Real> latitude_deg;
+    Stamped<Real> longitude_deg;
+    Stamped<Real> utc_time_s;
+    char address_or_distress_mmsi[16] = {0};
+    char field10[16] = {0};
+    char end_of_sequence = 0;
+    DscPriority priority = DscPriority::unknown;
+    DscAddressType address_type = DscAddressType::unknown;
+    DscEndSignalType end_signal_type = DscEndSignalType::unknown;
+    bool expansion_expected = false;
+    bool expansion_received = false;
+    bool expansion_timeout = false;
+    Stamped<int32_t> dse_total_messages;
+    Stamped<int32_t> dse_message_number;
+    char dse_query_flag = 0;
+    Stamped<int32_t> dse_expansion_specifier;
+    char dse_payload[64] = {0};
+    char dse_decoded_text[64] = {0};
+    DscDsePayloadType dse_payload_type = DscDsePayloadType::none;
+    Stamped<int32_t> dse_payload_length;
+    Stamped<int32_t> dse_digit_count;
+    bool dse_ascii_valid = false;
+    bool duplicate = false;
+    bool orphan_ack = false;
+    Stamped<int32_t> repeat_count;
+    Stamped<int32_t> field_count;
+    uint64_t first_seen_us = 0;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct DscCommData {
+    DscCallData<Real> latest_call;
+    DscCallData<Real> recent_calls[DSC_CALL_HISTORY_CAPACITY];
+    Stamped<int32_t> recent_call_count;
+    Stamped<int32_t> recent_call_next_index;
+    Stamped<int32_t> call_count;
+    Stamped<int32_t> duplicate_count;
+    Stamped<int32_t> acknowledged_count;
+    Stamped<int32_t> orphan_ack_count;
+    Stamped<int32_t> distress_count;
+    Stamped<int32_t> urgency_count;
+    Stamped<int32_t> safety_count;
+    Stamped<int32_t> expansion_timeout_count;
+};
+
+template<typename Real = float>
+struct InmarsatMessageData {
+    Setting<SensorSource> source;
+    char message_id[16] = {0};
+    char terminal_id[24] = {0};
+    char message_type[16] = {0};
+    char message_status[16] = {0};
+    char decoded_text[160] = {0};
+    Stamped<int32_t> total_fragments;
+    Stamped<int32_t> last_fragment_number;
+    Stamped<int32_t> text_length;
+    Stamped<int32_t> field_count;
+    bool complete = false;
+    bool overflow = false;
+    uint64_t first_seen_us = 0;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct InmarsatData {
+    InmarsatMessageData<Real> latest_message;
+    Stamped<int32_t> message_count;
+    Stamped<int32_t> unsupported_count;
+    Stamped<int32_t> bad_fragment_count;
 };
 
 template<typename Real = float>
@@ -116,6 +230,8 @@ struct CommData {
     BeaconReceiverControlData<Real> beacon_control;
     BeaconReceiverStatusData<Real> beacon_status;
     ReturnLinkMessageData<Real> return_link_message;
+    DscCommData<Real> dsc;
+    InmarsatData<Real> inmarsat;
     CommEquipmentData<Real> equipment;
 };
 
