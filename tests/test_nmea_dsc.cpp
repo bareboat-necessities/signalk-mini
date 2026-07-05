@@ -92,7 +92,7 @@ static void require_dsc_dse_merge() {
     signalk_mini::SignalKMiniApp<float> app;
     uint64_t now_us = 0;
 
-    feed(app, "CDDSC,120,338040079,100,10,20,0123407356,1234,366123456,00,E", now_us);
+    feed(app, "CDDSC,120,338040079,100,10,20,0123407356,1234,366123456,00,B,E", now_us);
     REQUIRE(no_dsc_call(app.store().model().comm.dsc));
 
     feed(app, "CDDSE,1,1,A,338040079,00,EXPANDED", now_us);
@@ -121,7 +121,7 @@ static void require_dsc_dse_timeout() {
     signalk_mini::SignalKMiniApp<float> app;
     uint64_t now_us = 0;
 
-    feed(app, "CDDSC,120,338040079,100,10,20,0123407356,1234,366123456,00,E", now_us);
+    feed(app, "CDDSC,120,338040079,100,10,20,0123407356,1234,366123456,00,B,E", now_us);
     REQUIRE(no_dsc_call(app.store().model().comm.dsc));
 
     feed(app, "GPTXT,1,1,01,TICK", now_us, 600000);
@@ -137,7 +137,7 @@ static void require_multipart_dse_waits_until_complete() {
     signalk_mini::SignalKMiniApp<float> app;
     uint64_t now_us = 0;
 
-    feed(app, "CDDSC,120,338040079,100,10,20,0123407356,1234,366123456,00,E", now_us);
+    feed(app, "CDDSC,120,338040079,100,10,20,0123407356,1234,366123456,00,B,E", now_us);
     feed(app, "CDDSE,2,1,A,338040079,00,HELLO ", now_us);
     REQUIRE(no_dsc_call(app.store().model().comm.dsc));
     REQUIRE(app.nmea0183().dsc_state().multipart.in_progress == true);
