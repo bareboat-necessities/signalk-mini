@@ -39,6 +39,9 @@ static void require_direct_dsc_commit() {
     REQUIRE(call.format_specifier.value == 120);
     REQUIRE(std::strcmp(call.sender_mmsi, "338040079") == 0);
     REQUIRE(call.category.value == 100);
+    REQUIRE(call.priority == ship_data_model::DscPriority::routine);
+    REQUIRE(call.address_type == ship_data_model::DscAddressType::individual);
+    REQUIRE(call.end_signal_type == ship_data_model::DscEndSignalType::end_of_sequence);
     REQUIRE(call.nature_or_first_telecommand.value == 10);
     REQUIRE(call.communication_or_second_telecommand.value == 20);
     REQUIRE(std::strcmp(call.position_code, "0123407356") == 0);
@@ -98,6 +101,8 @@ static void require_dsc_dse_merge() {
     feed(app, "CDDSE,1,1,A,338040079,00,EXPANDED", now_us);
     const auto& call = app.store().model().comm.dsc.latest_call;
     REQUIRE(app.store().model().comm.dsc.call_count.value == 1);
+    REQUIRE(call.priority == ship_data_model::DscPriority::routine);
+    REQUIRE(call.address_type == ship_data_model::DscAddressType::individual);
     REQUIRE(call.expansion_expected == true);
     REQUIRE(call.expansion_received == true);
     REQUIRE(call.expansion_timeout == false);
@@ -128,6 +133,8 @@ static void require_dsc_dse_timeout() {
     const auto& call = app.store().model().comm.dsc.latest_call;
     REQUIRE(app.store().model().comm.dsc.call_count.value == 1);
     REQUIRE(app.store().model().comm.dsc.expansion_timeout_count.value == 1);
+    REQUIRE(call.priority == ship_data_model::DscPriority::routine);
+    REQUIRE(call.address_type == ship_data_model::DscAddressType::individual);
     REQUIRE(call.expansion_expected == true);
     REQUIRE(call.expansion_received == false);
     REQUIRE(call.expansion_timeout == true);
@@ -145,6 +152,7 @@ static void require_multipart_dse_waits_until_complete() {
     feed(app, "CDDSE,2,2,A,338040079,00,DSC", now_us);
     const auto& call = app.store().model().comm.dsc.latest_call;
     REQUIRE(app.store().model().comm.dsc.call_count.value == 1);
+    REQUIRE(call.priority == ship_data_model::DscPriority::routine);
     REQUIRE(call.expansion_received == true);
     REQUIRE(call.dse_total_messages.value == 2);
     REQUIRE(call.dse_message_number.value == 2);
