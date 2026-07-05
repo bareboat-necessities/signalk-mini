@@ -52,7 +52,10 @@ template<typename Real = float>
 struct DscResponseData { Setting<SensorSource> source; char response_id[24] = {0}; char remote_mmsi[16] = {0}; Stamped<int32_t> field_count; uint64_t last_update_us = 0; };
 
 template<typename Real = float>
-struct NotificationDscData { DscInterrogationData<Real> interrogation; DscResponseData<Real> response; };
+struct DscAlertData { Setting<SensorSource> source; char sender_mmsi[16] = {0}; char address_or_distress_mmsi[16] = {0}; Stamped<int32_t> category; Stamped<int32_t> nature_or_first_telecommand; Stamped<Real> latitude_deg; Stamped<Real> longitude_deg; Stamped<Real> utc_time_s; char alert_text[96] = {0}; bool active = false; Stamped<int32_t> field_count; uint64_t last_update_us = 0; };
+
+template<typename Real = float>
+struct NotificationDscData { DscInterrogationData<Real> interrogation; DscResponseData<Real> response; DscAlertData<Real> distress; DscAlertData<Real> urgency; DscAlertData<Real> safety; };
 
 template<typename Real = float>
 struct SmvData { Setting<SensorSource> source; char message_id[24] = {0}; Stamped<int32_t> mmsi; char mmsi_text[16] = {0}; Stamped<Real> utc_time_s; Stamped<Real> latitude_deg; Stamped<Real> longitude_deg; char event_type[24] = {0}; char sar_capability[32] = {0}; char route_id[24] = {0}; char status = 0; char description[72] = {0}; Stamped<int32_t> field_count; uint64_t last_update_us = 0; };
@@ -82,10 +85,10 @@ template<typename Real, uint8_t Capacity>
 bool navtex_message_id_matches_latest(const NotificationNavtexData<Real>& navtex, const char* navtex_message_id) { return navtex_message_id && navtex_message_id[0] != '\0' && navtex.received.first_seen_us != 0 && strcmp(navtex.received.navtex_message_id, navtex_message_id) == 0; }
 
 template<typename Real, uint8_t Capacity>
-bool navtex_acknowledge_message(NotificationNavtexData<Real>& navtex, const char* navtex_message_id, uint64_t now_us) { const int32_t index = navtex_find_message_index(navtex.history, navtex_message_id); if (index < 0) return false; auto& slot = navtex.history.messages[static_cast<uint8_t>(index)]; slot.acknowledged = true; slot.last_update_us = now_us; if (navtex_message_id_matches_latest<Real, Capacity>(navtex, navtex_message_id)) { navtex.received.acknowledged = true; navtex.received.last_update_us = now_us; } return true; }
+bool navtex_acknowledge_message(NotificationNavtexData<Real>& navtex, const char* navtex_message_id, uint64_t now_us) { const int32_t index = navtex_find_message_index<Real, Capacity>(navtex.history, navtex_message_id); if (index < 0) return false; auto& slot = navtex.history.messages[static_cast<uint8_t>(index)]; slot.acknowledged = true; slot.last_update_us = now_us; if (navtex_message_id_matches_latest<Real, Capacity>(navtex, navtex_message_id)) { navtex.received.acknowledged = true; navtex.received.last_update_us = now_us; } return true; }
 
 template<typename Real, uint8_t Capacity>
-bool navtex_clear_message(NotificationNavtexData<Real>& navtex, const char* navtex_message_id, uint64_t now_us) { const int32_t index = navtex_find_message_index(navtex.history, navtex_message_id); if (index < 0) return false; navtex.history.messages[static_cast<uint8_t>(index)] = NavtexReceivedMessageData<Real>{}; const int32_t count = navtex.history.count.valid ? navtex.history.count.value : 0; if (count > 0) navtex.history.count.set(count - 1, now_us); if (navtex_message_id_matches_latest<Real, Capacity>(navtex, navtex_message_id)) navtex.received = NavtexReceivedMessageData<Real>{}; return true; }
+bool navtex_clear_message(NotificationNavtexData<Real>& navtex, const char* navtex_message_id, uint64_t now_us) { const int32_t index = navtex_find_message_index<Real, Capacity>(navtex.history, navtex_message_id); if (index < 0) return false; navtex.history.messages[static_cast<uint8_t>(index)] = NavtexReceivedMessageData<Real>{}; const int32_t count = navtex.history.count.valid ? navtex.history.count.value : 0; if (count > 0) navtex.history.count.set(count - 1, now_us); if (navtex_message_id_matches_latest<Real, Capacity>(navtex, navtex_message_id)) navtex.received = NavtexReceivedMessageData<Real>{}; return true; }
 
 template<typename Real, uint8_t Capacity>
 int32_t navtex_expire_history_older_than(NotificationNavtexData<Real>& navtex, uint64_t cutoff_us, uint64_t now_us) { int32_t expired = 0; int32_t remaining = 0; bool latest_expired = false; for (uint8_t i = 0; i < Capacity; ++i) { auto& slot = navtex.history.messages[i]; if (slot.first_seen_us == 0) continue; const uint64_t age_reference_us = slot.last_update_us != 0 ? slot.last_update_us : slot.first_seen_us; if (age_reference_us < cutoff_us) { if (navtex_message_id_matches_latest<Real, Capacity>(navtex, slot.navtex_message_id)) latest_expired = true; slot = NavtexReceivedMessageData<Real>{}; ++expired; } else { ++remaining; } } navtex.history.count.set(remaining, now_us); if (latest_expired) navtex.received = NavtexReceivedMessageData<Real>{}; return expired; }
