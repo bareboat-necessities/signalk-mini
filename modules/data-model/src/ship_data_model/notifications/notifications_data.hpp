@@ -181,7 +181,12 @@ struct DscAlertData {
     Stamped<Real> utc_time_s;
     char alert_text[96] = {0};
     bool active = false;
+    bool acknowledged = false;
+    bool resolved = false;
+    bool duplicate = false;
+    Stamped<int32_t> repeat_count;
     Stamped<int32_t> field_count;
+    uint64_t first_seen_us = 0;
     uint64_t last_update_us = 0;
 };
 
