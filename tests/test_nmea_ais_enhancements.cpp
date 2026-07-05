@@ -102,6 +102,16 @@ static AisPayload make_type8_binary_payload() {
     return make_payload(bits);
 }
 
+static AisPayload make_type8_dangerous_cargo_payload() {
+    std::string bits;
+    append_type8_header(bits, 333444559u, 1, 12);
+    append_bits(bits, 5, 8);
+    append_bits(bits, 7, 8);
+    append_bits(bits, 512, 10);
+    append_bits(bits, 3, 4);
+    return make_payload(bits);
+}
+
 static AisPayload make_type8_persons_payload() {
     std::string bits;
     append_type8_header(bits, 333444556u, 1, 16);
@@ -116,6 +126,28 @@ static AisPayload make_type8_vts_text_payload() {
     return make_payload(bits);
 }
 
+static AisPayload make_type8_area_notice_payload() {
+    std::string bits;
+    append_type8_header(bits, 333444560u, 1, 22);
+    append_bits(bits, 17, 10);
+    append_bits(bits, 55, 7);
+    append_bits(bits, 9, 4);
+    append_bits(bits, 21, 5);
+    append_bits(bits, 16, 5);
+    append_bits(bits, 45, 6);
+    append_bits(bits, 120, 18);
+    append_bits(bits, 0, 3);
+    append_bits(bits, 1, 2);
+    append_signed_bits(bits, static_cast<int32_t>(std::lround(-73.25 * 60000.0)), 25);
+    append_signed_bits(bits, static_cast<int32_t>(std::lround(40.50 * 60000.0)), 24);
+    append_bits(bits, 3, 3);
+    append_bits(bits, 250, 12);
+    append_bits(bits, 20, 8);
+    append_bits(bits, 30, 8);
+    append_bits(bits, 2, 2);
+    return make_payload(bits);
+}
+
 static AisPayload make_type8_met_hydro_payload() {
     std::string bits;
     append_type8_header(bits, 333444558u, 1, 31);
@@ -125,6 +157,42 @@ static AisPayload make_type8_met_hydro_payload() {
     append_bits(bits, 12, 5);
     append_bits(bits, 34, 6);
     append_bits(bits, 0x55, 8);
+    return make_payload(bits);
+}
+
+static AisPayload make_type8_full_met_hydro_payload() {
+    std::string bits;
+    append_type8_header(bits, 333444561u, 1, 31);
+    append_signed_bits(bits, static_cast<int32_t>(std::lround(-73.25 * 60000.0)), 25);
+    append_signed_bits(bits, static_cast<int32_t>(std::lround(40.50 * 60000.0)), 24);
+    append_bits(bits, 7, 5);
+    append_bits(bits, 12, 5);
+    append_bits(bits, 34, 6);
+    append_bits(bits, 12, 7);
+    append_bits(bits, 20, 7);
+    append_bits(bits, 270, 9);
+    append_bits(bits, 280, 9);
+    append_signed_bits(bits, 235, 11);
+    append_bits(bits, 80, 7);
+    append_signed_bits(bits, 120, 10);
+    append_bits(bits, 213, 9);
+    append_bits(bits, 1, 2);
+    append_bits(bits, 55, 8);
+    append_signed_bits(bits, 123, 12);
+    append_bits(bits, 2, 2);
+    append_bits(bits, 24, 8);
+    append_bits(bits, 180, 9);
+    append_bits(bits, 13, 8);
+    append_bits(bits, 8, 6);
+    append_bits(bits, 190, 9);
+    append_bits(bits, 7, 8);
+    append_bits(bits, 10, 6);
+    append_bits(bits, 200, 9);
+    append_bits(bits, 4, 4);
+    append_signed_bits(bits, 183, 10);
+    append_bits(bits, 2, 3);
+    append_bits(bits, 352, 9);
+    append_bits(bits, 5, 10);
     return make_payload(bits);
 }
 
@@ -240,6 +308,15 @@ int main() {
     REQUIRE(appbin.known_application == true);
     REQUIRE(std::strcmp(appbin.application_label, "imo_met_hydro") == 0);
 
+    feed_ais(app, single_vdm_body(make_type8_dangerous_cargo_payload()), now_us);
+    const auto& cargo = app.store().model().ais.binary_application;
+    REQUIRE(cargo.function_id.value == 12);
+    REQUIRE(cargo.cargo_code.value == 5);
+    REQUIRE(cargo.cargo_subcode.value == 7);
+    REQUIRE(cargo.cargo_amount.value == 512);
+    REQUIRE(cargo.cargo_unit.value == 3);
+    REQUIRE(cargo.decoded_field_count.value == 4);
+
     feed_ais(app, single_vdm_body(make_type8_persons_payload()), now_us);
     const auto& persons = app.store().model().ais.binary_application;
     REQUIRE(persons.dac.value == 1);
@@ -254,6 +331,25 @@ int main() {
     REQUIRE(std::strcmp(vts.text, "HELLO AIS") == 0);
     REQUIRE(vts.decoded_field_count.value == 1);
 
+    feed_ais(app, single_vdm_body(make_type8_area_notice_payload()), now_us);
+    const auto& area = app.store().model().ais.binary_application;
+    REQUIRE(area.function_id.value == 22);
+    REQUIRE(area.link_id.value == 17);
+    REQUIRE(area.notice_type.value == 55);
+    REQUIRE(area.month.value == 9);
+    REQUIRE(area.day.value == 21);
+    REQUIRE(area.hour.value == 16);
+    REQUIRE(area.minute.value == 45);
+    REQUIRE(area.duration_min.value == 120);
+    REQUIRE(area.subarea_count.value == 1);
+    REQUIRE(area.subarea_shape[0].value == 0);
+    REQUIRE(area.subarea_scale_factor[0].value == 1);
+    NEAR(area.subarea_longitude_deg[0].value, -73.25f, 0.001f);
+    NEAR(area.subarea_latitude_deg[0].value, 40.50f, 0.001f);
+    REQUIRE(area.subarea_precision[0].value == 3);
+    REQUIRE(area.subarea_radius_m[0].value == 250);
+    REQUIRE(area.decoded_field_count.value == 8);
+
     feed_ais(app, single_vdm_body(make_type8_met_hydro_payload()), now_us);
     const auto& met = app.store().model().ais.binary_application;
     REQUIRE(met.function_id.value == 31);
@@ -264,6 +360,29 @@ int main() {
     REQUIRE(met.hour.value == 12);
     REQUIRE(met.minute.value == 34);
 
+    feed_ais(app, single_vdm_body(make_type8_full_met_hydro_payload()), now_us);
+    const auto& full_met = app.store().model().ais.binary_application;
+    REQUIRE(full_met.function_id.value == 31);
+    REQUIRE(full_met.decoded_field_count.value == 30);
+    REQUIRE(full_met.wind_speed_kn.value == 12);
+    REQUIRE(full_met.wind_gust_kn.value == 20);
+    REQUIRE(full_met.wind_direction_deg.value == 270);
+    REQUIRE(full_met.wind_gust_direction_deg.value == 280);
+    NEAR(full_met.air_temperature_c.value, 23.5f, 0.001f);
+    REQUIRE(full_met.relative_humidity_pct.value == 80);
+    NEAR(full_met.dew_point_c.value, 12.0f, 0.001f);
+    REQUIRE(full_met.air_pressure_hpa.value == 1013);
+    REQUIRE(full_met.air_pressure_tendency.value == 1);
+    NEAR(full_met.horizontal_visibility_nmi.value, 5.5f, 0.001f);
+    NEAR(full_met.water_level_m.value, 1.23f, 0.001f);
+    REQUIRE(full_met.surface_current_direction_deg.value == 180);
+    NEAR(full_met.wave_height_m.value, 1.3f, 0.001f);
+    REQUIRE(full_met.wave_period_s.value == 8);
+    REQUIRE(full_met.sea_state.value == 4);
+    NEAR(full_met.water_temperature_c.value, 18.3f, 0.001f);
+    NEAR(full_met.salinity_ppt.value, 35.2f, 0.001f);
+    REQUIRE(full_met.ice_mm.value == 5);
+
     feed_ais(app, single_vdm_body(make_type17_dgnss_payload()), now_us);
     const auto& dgnss = app.store().model().ais.dgnss_broadcast;
     REQUIRE(dgnss.message_type.value == 17);
@@ -272,6 +391,11 @@ int main() {
     REQUIRE(dgnss.payload_start_bit.value == 80);
     REQUIRE(dgnss.payload_bit_count.value == 20);
     REQUIRE(dgnss.payload_byte_count.value == 3);
+    REQUIRE(dgnss.payload_prefix_byte_count.value == 3);
+    REQUIRE(dgnss.payload_prefix[0] == 0xAB);
+    REQUIRE(dgnss.payload_prefix[1] == 0xCD);
+    REQUIRE(dgnss.payload_prefix[2] == 0xE0);
+    REQUIRE(dgnss.payload_truncated == false);
     REQUIRE(dgnss.first_payload_bits.value == 0xABCDE);
 
     feed_ais(app, single_vdm_body(make_type18_class_b_payload()), now_us);
