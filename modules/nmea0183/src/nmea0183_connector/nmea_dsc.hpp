@@ -3,6 +3,7 @@
 // Included inside Nmea0183RxConnector.
 
 static constexpr uint64_t DSC_DSE_TIMEOUT_US = 500000ULL;
+static constexpr uint64_t DSC_DUPLICATE_WINDOW_US = 10000000ULL;
 
 static bool dsc_format_is_distress(int32_t code) {
     return code == 112;
@@ -79,6 +80,60 @@ bool dse_matches_pending_dsc(ship_data_model::SensorSource source) const {
         return false;
     }
     return true;
+}
+
+static bool dsc_stamped_i32_equal(const ship_data_model::Stamped<int32_t>& a,
+                                  const ship_data_model::Stamped<int32_t>& b) {
+    if (a.valid != b.valid) return false;
+    return !a.valid || a.value == b.value;
+}
+
+bool dsc_call_matches_duplicate_key(const ship_data_model::DscCallData<Real>& a,
+                                    const ship_data_model::DscCallData<Real>& b) const {
+    if (b.last_update_us == 0) return false;
+    if (strcmp(a.sender_mmsi, b.sender_mmsi) != 0) return false;
+    if (!dsc_stamped_i32_equal(a.format_specifier, b.format_specifier)) return false;
+    if (!dsc_stamped_i32_equal(a.category, b.category)) return false;
+    if (!dsc_stamped_i32_equal(a.nature_or_first_telecommand, b.nature_or_first_telecommand)) return false;
+    if (!dsc_stamped_i32_equal(a.communication_or_second_telecommand, b.communication_or_second_telecommand)) return false;
+    if (strcmp(a.position_code, b.position_code) != 0) return false;
+    if (strcmp(a.address_or_distress_mmsi, b.address_or_distress_mmsi) != 0) return false;
+    if (strcmp(a.field10, b.field10) != 0) return false;
+    if (a.end_of_sequence != b.end_of_sequence) return false;
+    if (a.priority != b.priority) return false;
+    if (a.address_type != b.address_type) return false;
+    return true;
+}
+
+int32_t find_recent_dsc_duplicate(const ship_data_model::DscCommData<Real>& comm,
+                                  const ship_data_model::DscCallData<Real>& call,
+                                  uint64_t now_us) const {
+    for (uint8_t i = 0; i < ship_data_model::DSC_CALL_HISTORY_CAPACITY; ++i) {
+        const auto& candidate = comm.recent_calls[i];
+        if (candidate.last_update_us == 0) continue;
+        if (now_us >= candidate.last_update_us &&
+            now_us - candidate.last_update_us > DSC_DUPLICATE_WINDOW_US) {
+            continue;
+        }
+        if (dsc_call_matches_duplicate_key(call, candidate)) return static_cast<int32_t>(i);
+    }
+    return -1;
+}
+
+void push_recent_dsc_call(ship_data_model::DscCommData<Real>& comm,
+                          const ship_data_model::DscCallData<Real>& call,
+                          uint64_t now_us) {
+    int32_t next = comm.recent_call_next_index.valid ? comm.recent_call_next_index.value : 0;
+    if (next < 0 || next >= ship_data_model::DSC_CALL_HISTORY_CAPACITY) next = 0;
+
+    comm.recent_calls[static_cast<uint8_t>(next)] = call;
+
+    int32_t count = comm.recent_call_count.valid ? comm.recent_call_count.value : 0;
+    if (count < ship_data_model::DSC_CALL_HISTORY_CAPACITY) ++count;
+
+    const int32_t next_after = (next + 1) % ship_data_model::DSC_CALL_HISTORY_CAPACITY;
+    comm.recent_call_count.set(count, now_us);
+    comm.recent_call_next_index.set(next_after, now_us);
 }
 
 template<typename Model, typename Alert>
@@ -190,7 +245,21 @@ bool commit_dsc_message_to_model(Model& model,
     dst.field_count.set(dst.expansion_expected ? 11 : 10, now_us);
     dst.first_seen_us = dsc.last_update_us != 0 ? dsc.last_update_us : now_us;
     dst.last_update_us = now_us;
+    dst.repeat_count.set(1, now_us);
 
+    const int32_t duplicate_index = find_recent_dsc_duplicate(comm, dst, now_us);
+    if (duplicate_index >= 0) {
+        const auto& previous = comm.recent_calls[static_cast<uint8_t>(duplicate_index)];
+        const int32_t previous_repeats = previous.repeat_count.valid ? previous.repeat_count.value : 1;
+        dst.duplicate = true;
+        dst.repeat_count.set(previous_repeats + 1, now_us);
+        if (previous.first_seen_us != 0) dst.first_seen_us = previous.first_seen_us;
+        comm.recent_calls[static_cast<uint8_t>(duplicate_index)] = dst;
+        comm.duplicate_count.set(comm.duplicate_count.value + 1, now_us);
+        return true;
+    }
+
+    push_recent_dsc_call(comm, dst, now_us);
     comm.call_count.set(comm.call_count.value + 1, now_us);
     if (expansion_timeout) {
         comm.expansion_timeout_count.set(comm.expansion_timeout_count.value + 1, now_us);
