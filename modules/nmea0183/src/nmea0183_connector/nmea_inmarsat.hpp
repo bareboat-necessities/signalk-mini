@@ -39,6 +39,13 @@ bool inmarsat_fragment_matches_active_record(const NmeaSentence& sentence) const
            nmea_span_equals(sentence.fragment.message_id, record.message_id);
 }
 
+bool inmarsat_bad_non_first_fragment_before_update(const NmeaSentence& sentence) const {
+    return sentence.family == NmeaSentenceFamily::Inmarsat &&
+           sentence.fragment.is_fragmented &&
+           !sentence.fragment.is_first() &&
+           !inmarsat_fragment_matches_active_record(sentence);
+}
+
 template<typename Message>
 void set_inmarsat_message_type(const NmeaSentence& sentence, Message& message) const {
     if (inmarsat_body_starts_with(sentence, "PINM")) {
@@ -130,12 +137,11 @@ template<typename Model>
 bool apply_inmarsat(const NmeaSentence& sentence,
                     Model& model,
                     uint64_t now_us,
-                    ship_data_model::SensorSource source) {
+                    ship_data_model::SensorSource source,
+                    bool bad_fragment_before_update = false) {
     if (sentence.fragment.is_fragmented) {
-        const bool bad_non_first_fragment = !sentence.fragment.is_first() &&
-                                           !inmarsat_fragment_matches_active_record(sentence);
         const auto& assembled = state_.inmarsat_message;
-        if (bad_non_first_fragment || assembled.bad_fragment_count.last_update_us == now_us) {
+        if (bad_fragment_before_update || assembled.bad_fragment_count.last_update_us == now_us) {
             model.comm.inmarsat.bad_fragment_count.set(model.comm.inmarsat.bad_fragment_count.value + 1, now_us);
             return true;
         }
