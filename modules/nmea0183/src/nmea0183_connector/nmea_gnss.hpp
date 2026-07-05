@@ -50,6 +50,20 @@ bool apply_gbs(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 }
 
 template<typename Model>
+bool apply_dtm(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (sentence.field_count < 8) { last_error_ = "short DTM"; return false; }
+    float value = 0.0f;
+    nmea_copy_span(model.nav.datum.local_datum_code, sizeof(model.nav.datum.local_datum_code), sentence.field(0));
+    nmea_copy_span(model.nav.datum.local_datum_subcode, sizeof(model.nav.datum.local_datum_subcode), sentence.field(1));
+    if (parse_north_south_signed(sentence.field(2), sentence.field(3), value)) model.nav.datum.latitude_offset_min.set(static_cast<Real>(value), now_us);
+    if (parse_east_west_signed(sentence.field(4), sentence.field(5), value)) model.nav.datum.longitude_offset_min.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(6), value)) model.nav.datum.altitude_offset_m.set(static_cast<Real>(value), now_us);
+    nmea_copy_span(model.nav.datum.reference_datum_code, sizeof(model.nav.datum.reference_datum_code), sentence.field(7));
+    set_source(model.nav.datum.source, source); model.nav.datum.last_update_us = now_us;
+    return true;
+}
+
+template<typename Model>
 bool apply_gfa(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 1) { last_error_ = "short GFA"; return false; }
     auto& rec = model.gnss.fix_accuracy;
@@ -237,21 +251,13 @@ template<typename Model>
 bool apply_osd(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 9) { last_error_ = "short OSD"; return false; }
     float v = 0.0f;
-    if (sentence.field(1)[0] == 'A' && parse_real(sentence.field(0), v)) {
-        const Real h = static_cast<Real>(wrap_360_deg(v));
-        model.nav.own_ship.heading_true_deg.set(h, now_us);
-        model.ins.imu.heading_deg.set(h, now_us);
-        model.ins.imu.heading_true_deg.set(h, now_us);
-    }
-    model.nav.own_ship.heading_status = sentence.field(1)[0];
-    model.nav.own_ship.course_reference = sentence.field(3)[0];
-    model.nav.own_ship.speed_reference = sentence.field(5)[0];
+    if (sentence.field(1)[0] == 'A' && parse_real(sentence.field(0), v)) { const Real h = static_cast<Real>(wrap_360_deg(v)); model.nav.own_ship.heading_true_deg.set(h, now_us); model.ins.imu.heading_deg.set(h, now_us); model.ins.imu.heading_true_deg.set(h, now_us); }
+    model.nav.own_ship.heading_status = sentence.field(1)[0]; model.nav.own_ship.course_reference = sentence.field(3)[0]; model.nav.own_ship.speed_reference = sentence.field(5)[0];
     if (parse_real(sentence.field(2), v)) { model.nav.own_ship.course_deg.set(static_cast<Real>(wrap_360_deg(v)), now_us); if (sentence.field(3)[0] == 'T') model.gnss.fix.track_deg.set(static_cast<Real>(wrap_360_deg(v)), now_us); }
     if (parse_knots(sentence.field(4), sentence.field(8), v)) { model.nav.own_ship.speed_kn.set(static_cast<Real>(v), now_us); model.gnss.fix.speed_kn.set(static_cast<Real>(v), now_us); }
     if (parse_real(sentence.field(6), v)) { model.nav.own_ship.set_true_deg.set(static_cast<Real>(wrap_360_deg(v)), now_us); model.sea.current_direction_deg.set(static_cast<Real>(wrap_360_deg(v)), now_us); }
     if (parse_knots(sentence.field(7), sentence.field(8), v)) { model.nav.own_ship.drift_speed_kn.set(static_cast<Real>(v), now_us); model.sea.current_speed_kn.set(static_cast<Real>(v), now_us); }
-    set_source(model.nav.own_ship.source, source); set_source(model.gnss.fix.source, source); set_source(model.sea.source, source);
-    model.nav.own_ship.last_update_us = now_us; model.gnss.fix.last_update_us = now_us; model.sea.last_update_us = now_us;
+    set_source(model.nav.own_ship.source, source); set_source(model.gnss.fix.source, source); set_source(model.sea.source, source); model.nav.own_ship.last_update_us = now_us; model.gnss.fix.last_update_us = now_us; model.sea.last_update_us = now_us;
     return true;
 }
 
@@ -259,8 +265,7 @@ template<typename Model>
 bool apply_rma(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 11 || sentence.field(0)[0] != 'A') { last_error_ = "bad RMA"; return false; }
     float v = 0.0f;
-    copy_gnss_talker_id(model.gnss.fix.talker_id, sizeof(model.gnss.fix.talker_id), sentence);
-    model.nav.rma.status = sentence.field(0)[0];
+    copy_gnss_talker_id(model.gnss.fix.talker_id, sizeof(model.gnss.fix.talker_id), sentence); model.nav.rma.status = sentence.field(0)[0];
     if (parse_lat_lon(sentence.field(1), sentence.field(2), v)) { model.nav.rma.latitude_deg.set(static_cast<Real>(v), now_us); model.gnss.fix.fix_lat_deg.set(static_cast<Real>(v), now_us); }
     if (parse_lat_lon(sentence.field(3), sentence.field(4), v)) { model.nav.rma.longitude_deg.set(static_cast<Real>(v), now_us); model.gnss.fix.fix_lon_deg.set(static_cast<Real>(v), now_us); }
     if (parse_real(sentence.field(5), v)) model.nav.rma.time_difference_a_us.set(static_cast<Real>(v), now_us);
