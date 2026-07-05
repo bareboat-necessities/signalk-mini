@@ -280,6 +280,7 @@ struct AisBinaryApplicationData : AisMessageHeaderData<Real> {
     Stamped<int32_t> quantity;
     Stamped<int32_t> link_id;
     Stamped<int32_t> notice_type;
+    Stamped<int32_t> month;
     Stamped<int32_t> day;
     Stamped<int32_t> hour;
     Stamped<int32_t> minute;
