@@ -29,6 +29,12 @@ static bool dsc_end_signal_is_ack(char eos) {
     return eos == 'A' || eos == 'R';
 }
 
+static bool dsc_priority_is_alert(ship_data_model::DscPriority priority) {
+    return priority == ship_data_model::DscPriority::distress ||
+           priority == ship_data_model::DscPriority::urgency ||
+           priority == ship_data_model::DscPriority::safety;
+}
+
 static ship_data_model::DscPriority dsc_priority_from_codes(
     bool has_format,
     int32_t format,
@@ -141,7 +147,6 @@ bool dsc_alert_matches_current(const Alert& alert) const {
     const auto& dsc = dsc_state_.message;
     if (alert.first_seen_us == 0) return false;
     if (strcmp(alert.sender_mmsi, dsc.sender_mmsi) != 0) return false;
-    if (strcmp(alert.address_or_distress_mmsi, dsc.address_or_distress_mmsi) != 0) return false;
     if (dsc.category.last_update_us) {
         if (!alert.category.valid || alert.category.value != dsc.category.value) return false;
     }
@@ -151,11 +156,16 @@ bool dsc_alert_matches_current(const Alert& alert) const {
             return false;
         }
     }
+    if (dsc.has_position) {
+        if (!alert.latitude_deg.valid || !alert.longitude_deg.valid) return false;
+        if (alert.latitude_deg.value != static_cast<Real>(dsc.latitude_deg)) return false;
+        if (alert.longitude_deg.value != static_cast<Real>(dsc.longitude_deg)) return false;
+    }
     return true;
 }
 
 template<typename Model, typename Alert>
-void commit_dsc_alert(Model& model,
+bool commit_dsc_alert(Model& model,
                       Alert& alert,
                       const char* alert_text,
                       uint64_t now_us,
@@ -166,6 +176,8 @@ void commit_dsc_alert(Model& model,
     const bool acknowledged = dsc_end_signal_is_ack(dsc.end_of_sequence);
     const int32_t previous_repeats = alert.repeat_count.valid ? alert.repeat_count.value : 0;
     const bool previously_acknowledged = same_alert && alert.acknowledged;
+
+    if (acknowledged && !same_alert) return false;
 
     if (!same_alert) {
         alert = Alert{};
@@ -194,10 +206,11 @@ void commit_dsc_alert(Model& model,
     alert.repeat_count.set(same_alert ? previous_repeats + 1 : 1, now_us);
     alert.last_update_us = now_us;
     (void)model;
+    return true;
 }
 
 template<typename Model>
-void promote_dsc_notifications(Model& model,
+bool promote_dsc_notifications(Model& model,
                                uint64_t now_us,
                                ship_data_model::SensorSource source,
                                bool duplicate) {
@@ -207,15 +220,20 @@ void promote_dsc_notifications(Model& model,
     const bool acknowledged = dsc_end_signal_is_ack(dsc.end_of_sequence);
 
     if (dsc_format_is_distress(format) || dsc_category_is_distress(category)) {
-        commit_dsc_alert(model, model.notifications.dsc.distress, "DSC distress", now_us, source, duplicate);
+        if (!commit_dsc_alert(model, model.notifications.dsc.distress, "DSC distress", now_us, source, duplicate)) return false;
         if (!duplicate && !acknowledged) model.comm.dsc.distress_count.set(model.comm.dsc.distress_count.value + 1, now_us);
+        return true;
     } else if (dsc_category_is_urgency(category)) {
-        commit_dsc_alert(model, model.notifications.dsc.urgency, "DSC urgency", now_us, source, duplicate);
+        if (!commit_dsc_alert(model, model.notifications.dsc.urgency, "DSC urgency", now_us, source, duplicate)) return false;
         if (!duplicate && !acknowledged) model.comm.dsc.urgency_count.set(model.comm.dsc.urgency_count.value + 1, now_us);
+        return true;
     } else if (dsc_category_is_safety(category)) {
-        commit_dsc_alert(model, model.notifications.dsc.safety, "DSC safety", now_us, source, duplicate);
+        if (!commit_dsc_alert(model, model.notifications.dsc.safety, "DSC safety", now_us, source, duplicate)) return false;
         if (!duplicate && !acknowledged) model.comm.dsc.safety_count.set(model.comm.dsc.safety_count.value + 1, now_us);
+        return true;
     }
+
+    return false;
 }
 
 template<typename Model>
@@ -281,6 +299,8 @@ bool commit_dsc_message_to_model(Model& model,
     dst.last_update_us = now_us;
     dst.repeat_count.set(1, now_us);
 
+    const bool acknowledged = dsc_end_signal_is_ack(dst.end_of_sequence);
+    const bool alert_ack = acknowledged && dsc_priority_is_alert(dst.priority);
     const int32_t duplicate_index = find_recent_dsc_duplicate(comm, dst, now_us);
     if (duplicate_index >= 0) {
         const auto& previous = comm.recent_calls[static_cast<uint8_t>(duplicate_index)];
@@ -288,10 +308,19 @@ bool commit_dsc_message_to_model(Model& model,
         dst.duplicate = true;
         dst.repeat_count.set(previous_repeats + 1, now_us);
         if (previous.first_seen_us != 0) dst.first_seen_us = previous.first_seen_us;
+        const bool promoted = promote_dsc_notifications(model, now_us, source, true);
+        if (alert_ack && !promoted) dst.orphan_ack = true;
         comm.recent_calls[static_cast<uint8_t>(duplicate_index)] = dst;
         comm.duplicate_count.set(comm.duplicate_count.value + 1, now_us);
-        promote_dsc_notifications(model, now_us, source, true);
         return true;
+    }
+
+    const bool promoted = promote_dsc_notifications(model, now_us, source, false);
+    if (alert_ack && promoted) {
+        comm.acknowledged_count.set(comm.acknowledged_count.value + 1, now_us);
+    } else if (alert_ack && !promoted) {
+        dst.orphan_ack = true;
+        comm.orphan_ack_count.set(comm.orphan_ack_count.value + 1, now_us);
     }
 
     push_recent_dsc_call(comm, dst, now_us);
@@ -300,7 +329,6 @@ bool commit_dsc_message_to_model(Model& model,
         comm.expansion_timeout_count.set(comm.expansion_timeout_count.value + 1, now_us);
     }
 
-    promote_dsc_notifications(model, now_us, source, false);
     return true;
 }
 
