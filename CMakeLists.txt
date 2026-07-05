@@ -47,6 +47,10 @@ if(BUILD_TESTING)
   target_link_libraries(test_nmea_tail_sentences PRIVATE signalk_mini_core)
   add_test(NAME test_nmea_tail_sentences COMMAND test_nmea_tail_sentences)
 
+  add_executable(test_nmea_gnss_v4 tests/test_nmea_gnss_v4.cpp)
+  target_link_libraries(test_nmea_gnss_v4 PRIVATE signalk_mini_core)
+  add_test(NAME test_nmea_gnss_v4 COMMAND test_nmea_gnss_v4)
+
   add_executable(test_nmea_multipart tests/test_nmea_multipart.cpp)
   target_link_libraries(test_nmea_multipart PRIVATE signalk_mini_core)
   add_test(NAME test_nmea_multipart COMMAND test_nmea_multipart)
