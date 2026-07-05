@@ -30,6 +30,10 @@ bool ais_app_position_deg(int32_t raw, bool longitude, Real& out_deg) const {
     return true;
 }
 
+Real ais_scaled_real(int32_t raw, float scale) const {
+    return static_cast<Real>(static_cast<float>(raw) * scale);
+}
+
 const char* ais_binary_application_label(int32_t dac, int32_t fi) const {
     if (dac == 1 && fi == 31) return "imo_met_hydro";
     if (dac == 1 && fi == 12) return "imo_dangerous_cargo";
@@ -38,6 +42,103 @@ const char* ais_binary_application_label(int32_t dac, int32_t fi) const {
     if (dac == 1 && fi == 22) return "imo_area_notice";
     if (dac == 200 && fi == 10) return "regional_weather";
     return "unknown";
+}
+
+void ais_decode_area_notice_subareas(const char* payload,
+                                     size_t payload_len,
+                                     size_t bit_offset,
+                                     int32_t remaining_bits,
+                                     uint64_t now_us,
+                                     ship_data_model::AisBinaryApplicationData<Real>& app,
+                                     bool& ok,
+                                     int32_t& decoded) {
+    uint8_t count = 0;
+    size_t offset = bit_offset;
+    int32_t left = remaining_bits;
+    while (count < ship_data_model::AIS_AREA_NOTICE_SUBAREA_CAPACITY && left >= 87 && ok) {
+        const int32_t shape = static_cast<int32_t>(ais_get_u(payload, payload_len, offset, 3, ok));
+        const int32_t scale = static_cast<int32_t>(ais_get_u(payload, payload_len, offset + 3u, 2, ok));
+        const int32_t lon_raw = ais_get_s(payload, payload_len, offset + 5u, 25, ok);
+        const int32_t lat_raw = ais_get_s(payload, payload_len, offset + 30u, 24, ok);
+        const int32_t precision = static_cast<int32_t>(ais_get_u(payload, payload_len, offset + 54u, 3, ok));
+        const int32_t radius = static_cast<int32_t>(ais_get_u(payload, payload_len, offset + 57u, 12, ok));
+        const int32_t dim_e = static_cast<int32_t>(ais_get_u(payload, payload_len, offset + 69u, 8, ok));
+        const int32_t dim_n = static_cast<int32_t>(ais_get_u(payload, payload_len, offset + 77u, 8, ok));
+        const int32_t orientation = static_cast<int32_t>(ais_get_u(payload, payload_len, offset + 85u, 2, ok));
+        if (!ok) break;
+        app.subarea_shape[count].set(shape, now_us);
+        app.subarea_scale_factor[count].set(scale, now_us);
+        Real lon = Real{};
+        Real lat = Real{};
+        if (ais_app_position_deg(lon_raw, true, lon)) app.subarea_longitude_deg[count].set(lon, now_us);
+        if (ais_app_position_deg(lat_raw, false, lat)) app.subarea_latitude_deg[count].set(lat, now_us);
+        app.subarea_precision[count].set(precision, now_us);
+        app.subarea_radius_m[count].set(radius, now_us);
+        app.subarea_dimension_e_m[count].set(dim_e, now_us);
+        app.subarea_dimension_n_m[count].set(dim_n, now_us);
+        app.subarea_orientation_deg[count].set(orientation, now_us);
+        ++count;
+        ++decoded;
+        offset += 87u;
+        left -= 87;
+    }
+    app.subarea_count.set(static_cast<int32_t>(count), now_us);
+}
+
+void ais_decode_met_hydro_fields(const char* payload,
+                                 size_t payload_len,
+                                 size_t payload_start,
+                                 int32_t remaining_bits,
+                                 uint64_t now_us,
+                                 ship_data_model::AisBinaryApplicationData<Real>& app,
+                                 bool& ok,
+                                 int32_t& decoded) {
+    if (remaining_bits < 65) return;
+    const int32_t lon_raw = ais_get_s(payload, payload_len, payload_start, 25, ok);
+    const int32_t lat_raw = ais_get_s(payload, payload_len, payload_start + 25u, 24, ok);
+    Real lon = Real{};
+    Real lat = Real{};
+    if (ok && ais_app_position_deg(lon_raw, true, lon)) {
+        app.longitude_deg.set(lon, now_us);
+        ++decoded;
+    }
+    if (ok && ais_app_position_deg(lat_raw, false, lat)) {
+        app.latitude_deg.set(lat, now_us);
+        ++decoded;
+    }
+    app.day.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 49u, 5, ok)), now_us);
+    app.hour.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 54u, 5, ok)), now_us);
+    app.minute.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 59u, 6, ok)), now_us);
+    if (ok) decoded += 3;
+    if (remaining_bits < 255) return;
+
+    size_t o = payload_start + 65u;
+    app.wind_speed_kn.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 7, ok)), now_us); o += 7u;
+    app.wind_gust_kn.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 7, ok)), now_us); o += 7u;
+    app.wind_direction_deg.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 9, ok)), now_us); o += 9u;
+    app.wind_gust_direction_deg.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 9, ok)), now_us); o += 9u;
+    app.air_temperature_c.set(ais_scaled_real(ais_get_s(payload, payload_len, o, 11, ok), 0.1f), now_us); o += 11u;
+    app.relative_humidity_pct.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 7, ok)), now_us); o += 7u;
+    app.dew_point_c.set(ais_scaled_real(ais_get_s(payload, payload_len, o, 10, ok), 0.1f), now_us); o += 10u;
+    app.air_pressure_hpa.set(800 + static_cast<int32_t>(ais_get_u(payload, payload_len, o, 9, ok)), now_us); o += 9u;
+    app.air_pressure_tendency.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 2, ok)), now_us); o += 2u;
+    app.horizontal_visibility_nmi.set(ais_scaled_real(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 8, ok)), 0.1f), now_us); o += 8u;
+    app.water_level_m.set(ais_scaled_real(ais_get_s(payload, payload_len, o, 12, ok), 0.01f), now_us); o += 12u;
+    app.water_level_trend.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 2, ok)), now_us); o += 2u;
+    app.surface_current_speed_kn.set(ais_scaled_real(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 8, ok)), 0.1f), now_us); o += 8u;
+    app.surface_current_direction_deg.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 9, ok)), now_us); o += 9u;
+    app.wave_height_m.set(ais_scaled_real(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 8, ok)), 0.1f), now_us); o += 8u;
+    app.wave_period_s.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 6, ok)), now_us); o += 6u;
+    app.wave_direction_deg.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 9, ok)), now_us); o += 9u;
+    app.swell_height_m.set(ais_scaled_real(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 8, ok)), 0.1f), now_us); o += 8u;
+    app.swell_period_s.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 6, ok)), now_us); o += 6u;
+    app.swell_direction_deg.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 9, ok)), now_us); o += 9u;
+    app.sea_state.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 4, ok)), now_us); o += 4u;
+    app.water_temperature_c.set(ais_scaled_real(ais_get_s(payload, payload_len, o, 10, ok), 0.1f), now_us); o += 10u;
+    app.precipitation_type.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 3, ok)), now_us); o += 3u;
+    app.salinity_ppt.set(ais_scaled_real(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 9, ok)), 0.1f), now_us); o += 9u;
+    app.ice_mm.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 10, ok)), now_us);
+    if (ok) decoded += 25;
 }
 
 void ais_decode_binary_application_fields(const char* payload,
@@ -56,7 +157,13 @@ void ais_decode_binary_application_fields(const char* payload,
     bool ok = true;
     int32_t decoded = 0;
 
-    if (dac == 1 && fi == 16 && remaining_bits >= 13) {
+    if (dac == 1 && fi == 12 && remaining_bits >= 30) {
+        app.cargo_code.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start, 8, ok)), now_us);
+        app.cargo_subcode.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 8u, 8, ok)), now_us);
+        app.cargo_amount.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 16u, 10, ok)), now_us);
+        app.cargo_unit.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 26u, 4, ok)), now_us);
+        decoded = ok ? 4 : 0;
+    } else if (dac == 1 && fi == 16 && remaining_bits >= 13) {
         app.quantity.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start, 13, ok)), now_us);
         decoded = ok ? 1 : 0;
     } else if (dac == 1 && fi == 17 && remaining_bits >= 6) {
@@ -73,23 +180,9 @@ void ais_decode_binary_application_fields(const char* payload,
         app.minute.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 31u, 6, ok)), now_us);
         app.duration_min.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 37u, 18, ok)), now_us);
         decoded = ok ? 7 : 0;
-    } else if (dac == 1 && fi == 31 && remaining_bits >= 65) {
-        const int32_t lon_raw = ais_get_s(payload, payload_len, payload_start, 25, ok);
-        const int32_t lat_raw = ais_get_s(payload, payload_len, payload_start + 25u, 24, ok);
-        Real lon = Real{};
-        Real lat = Real{};
-        if (ok && ais_app_position_deg(lon_raw, true, lon)) {
-            app.longitude_deg.set(lon, now_us);
-            ++decoded;
-        }
-        if (ok && ais_app_position_deg(lat_raw, false, lat)) {
-            app.latitude_deg.set(lat, now_us);
-            ++decoded;
-        }
-        app.day.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 49u, 5, ok)), now_us);
-        app.hour.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 54u, 5, ok)), now_us);
-        app.minute.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 59u, 6, ok)), now_us);
-        if (ok) decoded += 3;
+        if (ok) ais_decode_area_notice_subareas(payload, payload_len, payload_start + 55u, remaining_bits - 55, now_us, app, ok, decoded);
+    } else if (dac == 1 && fi == 31) {
+        ais_decode_met_hydro_fields(payload, payload_len, payload_start, remaining_bits, now_us, app, ok, decoded);
     }
 
     app.decoded_field_count.set(decoded, now_us);
@@ -163,6 +256,34 @@ void ais_update_binary_application(const char* payload,
     app.last_update_us = now_us;
 }
 
+void ais_copy_payload_prefix_bytes(const char* payload,
+                                   size_t payload_len,
+                                   size_t bit_offset,
+                                   int32_t bit_count,
+                                   uint64_t now_us,
+                                   ship_data_model::AisDgnssBroadcastData<Real>& dgnss) {
+    for (uint8_t i = 0; i < ship_data_model::AIS_DGNSS_PAYLOAD_PREFIX_BYTES; ++i) dgnss.payload_prefix[i] = 0;
+    if (bit_count <= 0) {
+        dgnss.payload_prefix_byte_count.set(0, now_us);
+        dgnss.payload_truncated = false;
+        return;
+    }
+    const int32_t byte_count = (bit_count + 7) / 8;
+    const uint8_t n = byte_count > ship_data_model::AIS_DGNSS_PAYLOAD_PREFIX_BYTES
+        ? ship_data_model::AIS_DGNSS_PAYLOAD_PREFIX_BYTES
+        : static_cast<uint8_t>(byte_count);
+    bool ok = true;
+    for (uint8_t i = 0; i < n; ++i) {
+        const int32_t bits_left = bit_count - static_cast<int32_t>(i) * 8;
+        const uint8_t bits = bits_left >= 8 ? 8 : static_cast<uint8_t>(bits_left);
+        uint8_t value = static_cast<uint8_t>(ais_get_u(payload, payload_len, bit_offset + static_cast<size_t>(i) * 8u, bits, ok));
+        if (bits < 8) value = static_cast<uint8_t>(value << (8u - bits));
+        dgnss.payload_prefix[i] = ok ? value : 0;
+    }
+    dgnss.payload_prefix_byte_count.set(static_cast<int32_t>(n), now_us);
+    dgnss.payload_truncated = byte_count > ship_data_model::AIS_DGNSS_PAYLOAD_PREFIX_BYTES;
+}
+
 void ais_update_dgnss_payload_summary(const char* payload,
                                       size_t payload_len,
                                       int32_t fill_bits,
@@ -182,6 +303,7 @@ void ais_update_dgnss_payload_summary(const char* payload,
         bool ok = true;
         dgnss.first_payload_bits.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start, first_bits, ok)), now_us);
     }
+    ais_copy_payload_prefix_bytes(payload, payload_len, payload_start, remaining, now_us, dgnss);
     dgnss.last_update_us = now_us;
 }
 
