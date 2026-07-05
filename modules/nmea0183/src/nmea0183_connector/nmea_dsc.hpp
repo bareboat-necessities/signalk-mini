@@ -20,8 +20,45 @@ static bool dsc_category_is_safety(int32_t code) {
     return code == 108;
 }
 
+static bool dsc_category_is_routine(int32_t code) {
+    return code == 100;
+}
+
 static bool dsc_end_signal_is_ack(char eos) {
     return eos == 'A' || eos == 'R';
+}
+
+static ship_data_model::DscPriority dsc_priority_from_codes(
+    bool has_format,
+    int32_t format,
+    bool has_category,
+    int32_t category) {
+    if ((has_format && dsc_format_is_distress(format)) ||
+        (has_category && dsc_category_is_distress(category))) {
+        return ship_data_model::DscPriority::distress;
+    }
+    if (has_category && dsc_category_is_urgency(category)) return ship_data_model::DscPriority::urgency;
+    if (has_category && dsc_category_is_safety(category)) return ship_data_model::DscPriority::safety;
+    if (has_category && dsc_category_is_routine(category)) return ship_data_model::DscPriority::routine;
+    return ship_data_model::DscPriority::unknown;
+}
+
+static ship_data_model::DscAddressType dsc_address_type_from_format(bool has_format, int32_t format) {
+    if (!has_format) return ship_data_model::DscAddressType::unknown;
+    switch (format) {
+    case 112: return ship_data_model::DscAddressType::distress;
+    case 120: return ship_data_model::DscAddressType::individual;
+    case 116: return ship_data_model::DscAddressType::all_ships;
+    case 114: return ship_data_model::DscAddressType::group;
+    case 102: return ship_data_model::DscAddressType::geographic_area;
+    default: return ship_data_model::DscAddressType::unknown;
+    }
+}
+
+static ship_data_model::DscEndSignalType dsc_end_signal_type_from_char(char eos) {
+    if (eos == 0) return ship_data_model::DscEndSignalType::unknown;
+    if (dsc_end_signal_is_ack(eos)) return ship_data_model::DscEndSignalType::ack;
+    return ship_data_model::DscEndSignalType::end_of_sequence;
 }
 
 bool dsc_expansion_expected() const {
@@ -105,10 +142,15 @@ bool commit_dsc_message_to_model(Model& model,
     auto& dst = comm.latest_call;
     dst = ship_data_model::DscCallData<Real>{};
 
+    const bool has_format = dsc.format_specifier.last_update_us != 0;
+    const bool has_category = dsc.category.last_update_us != 0;
+    const int32_t format = has_format ? dsc.format_specifier.value : 0;
+    const int32_t category = has_category ? dsc.category.value : 0;
+
     set_source(dst.source, source);
-    if (dsc.format_specifier.last_update_us) dst.format_specifier.set(dsc.format_specifier.value, now_us);
+    if (has_format) dst.format_specifier.set(format, now_us);
     nmea_copy_cstr(dst.sender_mmsi, sizeof(dst.sender_mmsi), dsc.sender_mmsi);
-    if (dsc.category.last_update_us) dst.category.set(dsc.category.value, now_us);
+    if (has_category) dst.category.set(category, now_us);
     if (dsc.nature_or_first_telecommand.last_update_us) {
         dst.nature_or_first_telecommand.set(dsc.nature_or_first_telecommand.value, now_us);
     }
@@ -128,6 +170,9 @@ bool commit_dsc_message_to_model(Model& model,
                    dsc.address_or_distress_mmsi);
     nmea_copy_cstr(dst.field10, sizeof(dst.field10), dsc.field10);
     dst.end_of_sequence = dsc.end_of_sequence;
+    dst.priority = dsc_priority_from_codes(has_format, format, has_category, category);
+    dst.address_type = dsc_address_type_from_format(has_format, format);
+    dst.end_signal_type = dsc_end_signal_type_from_char(dsc.end_of_sequence);
     dst.expansion_expected = dsc_expansion_expected();
     dst.expansion_received = expansion_received;
     dst.expansion_timeout = expansion_timeout;
