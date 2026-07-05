@@ -83,6 +83,19 @@ int main() {
     feed(app, "FDFIR,FIRE1,ALARM", now_us);
     REQUIRE(app.store().model().notifications.alerts.fire.field_count.value == 2);
 
+    feed(app, "IIALC,1,1,SEQ01,AL001,AL002", now_us);
+    REQUIRE(app.store().model().notifications.alerts.cyclic_list.alert_count.value == 2);
+    feed(app, "IIALF,1,1,SEQ02,AL003,7,8,9,C,H,A,TEXT1", now_us);
+    REQUIRE(app.store().model().notifications.alerts.alert_report.alert_instance.value == 7);
+    feed(app, "IIALR,123519,42,A,V,TEXT2", now_us);
+    REQUIRE(app.store().model().notifications.alerts.alarm_state.local_alarm_number.value == 42);
+    feed(app, "IIARC,AL003,7,ACK,CODE1,TEXT3", now_us);
+    REQUIRE(std::strcmp(app.store().model().notifications.alerts.command_refused.reason_code, "CODE1") == 0);
+    feed(app, "IIHBT,A,30,HB01", now_us);
+    REQUIRE(app.store().model().notifications.alerts.heartbeat.status == 'A');
+    feed(app, "IISMV,SM01,123456789,123519,4807.038,N,01131.000,E,TYPE1,CAP1,RT01,A,TEXT4", now_us);
+    REQUIRE(app.store().model().notifications.special.smv.mmsi.value == 123456789);
+
     feed(app, "GPTXT,01,01,02,hello", now_us);
     REQUIRE(app.store().model().notifications.messages.text.field_count.value == 4);
 
