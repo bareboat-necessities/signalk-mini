@@ -83,6 +83,7 @@ public:
         NMEA_APPLY("FIR", apply_fir);
         NMEA_APPLY("FSI", apply_fsi);
         NMEA_APPLY("GBS", apply_gbs);
+        NMEA_APPLY("GFA", apply_gfa);
         NMEA_APPLY("GGA", apply_gga);
         NMEA_APPLY("GLC", apply_glc);
         NMEA_APPLY("GLL", apply_gll);
