@@ -119,11 +119,45 @@ static void require_multipart_overflow_propagates() {
     REQUIRE(std::strlen(msg.decoded_text) == 95);
 }
 
+static void require_message_fields(const std::string& body,
+                                   const char* expected_id,
+                                   const char* expected_terminal,
+                                   const char* expected_type,
+                                   const char* expected_status,
+                                   const char* expected_text) {
+    signalk_mini::SignalKMiniApp<float> app;
+    uint64_t now_us = 0;
+
+    feed(app, body, now_us);
+
+    const auto& msg = app.store().model().comm.inmarsat.latest_message;
+    REQUIRE(app.store().model().comm.inmarsat.message_count.value == 1);
+    REQUIRE(std::strcmp(msg.message_id, expected_id) == 0);
+    REQUIRE(std::strcmp(msg.terminal_id, expected_terminal) == 0);
+    REQUIRE(std::strcmp(msg.message_type, expected_type) == 0);
+    REQUIRE(std::strcmp(msg.message_status, expected_status) == 0);
+    REQUIRE(std::strcmp(msg.decoded_text, expected_text) == 0);
+    REQUIRE(msg.total_fragments.value == 1);
+    REQUIRE(msg.last_fragment_number.value == 1);
+    REQUIRE(msg.text_length.value == static_cast<int32_t>(std::strlen(expected_text)));
+    REQUIRE(msg.complete == true);
+}
+
+static void require_safe_sentence_interpretation() {
+    require_message_fields("ICIMK,MSG-K,OK,KEY READY", "MSG-K", "IC", "IMK", "OK", "KEY READY");
+    require_message_fields("ICIMN,MSG-N,READY,NETWORK READY", "MSG-N", "IC", "IMN", "READY", "NETWORK READY");
+    require_message_fields("ICIMR,MSG-R,RCVD,RETURN READY", "MSG-R", "IC", "IMR", "RCVD", "RETURN READY");
+    require_message_fields("CSIMK,MSG-CS,OK,SATCOM READY", "MSG-CS", "CS", "IMK", "OK", "SATCOM READY");
+    require_message_fields("PINM,MSG-P,OK,PROPRIETARY READY", "MSG-P", "PI", "PINM", "OK", "PROPRIETARY READY");
+    require_message_fields("INM,MSG-I,OK,SHORT PREFIX READY", "MSG-I", "IN", "INM", "OK", "SHORT PREFIX READY");
+}
+
 int main() {
     require_single_message_commit();
     require_multipart_waits_until_complete();
     require_bad_fragment_count();
     require_unsupported_payload_count();
     require_multipart_overflow_propagates();
+    require_safe_sentence_interpretation();
     return 0;
 }
