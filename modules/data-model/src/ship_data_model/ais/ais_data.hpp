@@ -65,6 +65,7 @@ struct AisTargetData {
     bool base_station = false;
     bool aid_to_navigation = false;
     bool sar_aircraft = false;
+    bool stale = false;
     uint64_t first_seen_us = 0;
     uint64_t last_seen_us = 0;
     uint64_t last_position_update_us = 0;
@@ -199,6 +200,12 @@ struct AisClassBStaticData : AisMessageHeaderData<Real> {
     Stamped<int32_t> epfd_type;
     bool dte_ready = false;
     bool assigned_mode = false;
+    Stamped<int32_t> merge_mmsi;
+    bool part_a_received = false;
+    bool part_b_received = false;
+    bool complete = false;
+    uint64_t part_a_update_us = 0;
+    uint64_t part_b_update_us = 0;
     uint64_t last_update_us = 0;
 };
 
@@ -410,5 +417,91 @@ struct AisData {
     AisDataLinkStatusData<Real> data_link_status;
     AisAddressedSafetyData<Real> addressed_safety;
 };
+
+template<typename Real, uint8_t MaxTargets>
+int32_t ais_find_target_index(const AisTargetTableData<Real, MaxTargets>& table, int32_t mmsi) {
+    for (uint8_t i = 0; i < MaxTargets; ++i) {
+        const auto& target = table.targets[i];
+        if (target.occupied && target.mmsi.valid && target.mmsi.value == mmsi) return static_cast<int32_t>(i);
+    }
+    return -1;
+}
+
+template<typename Real, uint8_t MaxTargets>
+bool ais_clear_target(AisTargetTableData<Real, MaxTargets>& table, int32_t mmsi, uint64_t now_us) {
+    const int32_t index = ais_find_target_index(table, mmsi);
+    if (index < 0) return false;
+    table.targets[static_cast<uint8_t>(index)] = AisTargetData<Real>{};
+    const int32_t count = table.target_count.valid ? table.target_count.value : 0;
+    if (count > 0) table.target_count.set(count - 1, now_us);
+    return true;
+}
+
+template<typename Real, uint8_t MaxTargets>
+void ais_clear_targets(AisTargetTableData<Real, MaxTargets>& table) {
+    table = AisTargetTableData<Real, MaxTargets>{};
+}
+
+template<typename Real, uint8_t MaxTargets>
+int32_t ais_expire_targets_older_than(AisTargetTableData<Real, MaxTargets>& table,
+                                     uint64_t cutoff_us,
+                                     uint64_t now_us) {
+    int32_t expired = 0;
+    int32_t remaining = 0;
+    for (uint8_t i = 0; i < MaxTargets; ++i) {
+        auto& target = table.targets[i];
+        if (!target.occupied) continue;
+        if (target.last_seen_us != 0 && target.last_seen_us < cutoff_us) {
+            target = AisTargetData<Real>{};
+            ++expired;
+        } else {
+            ++remaining;
+        }
+    }
+    table.target_count.set(remaining, now_us);
+    return expired;
+}
+
+template<typename Real, uint8_t MaxTargets>
+int32_t ais_mark_targets_stale_older_than(AisTargetTableData<Real, MaxTargets>& table,
+                                         uint64_t cutoff_us,
+                                         uint64_t now_us) {
+    int32_t marked = 0;
+    for (uint8_t i = 0; i < MaxTargets; ++i) {
+        auto& target = table.targets[i];
+        if (!target.occupied || target.stale) continue;
+        if (target.last_seen_us != 0 && target.last_seen_us < cutoff_us) {
+            target.stale = true;
+            target.last_seen_us = target.last_seen_us == 0 ? now_us : target.last_seen_us;
+            ++marked;
+        }
+    }
+    return marked;
+}
+
+template<typename Real>
+int32_t ais_find_target_index(const AisTargetTableData<Real>& table, int32_t mmsi) {
+    return ais_find_target_index<Real, AIS_TARGET_TABLE_CAPACITY>(table, mmsi);
+}
+
+template<typename Real>
+bool ais_clear_target(AisTargetTableData<Real>& table, int32_t mmsi, uint64_t now_us) {
+    return ais_clear_target<Real, AIS_TARGET_TABLE_CAPACITY>(table, mmsi, now_us);
+}
+
+template<typename Real>
+void ais_clear_targets(AisTargetTableData<Real>& table) {
+    ais_clear_targets<Real, AIS_TARGET_TABLE_CAPACITY>(table);
+}
+
+template<typename Real>
+int32_t ais_expire_targets_older_than(AisTargetTableData<Real>& table, uint64_t cutoff_us, uint64_t now_us) {
+    return ais_expire_targets_older_than<Real, AIS_TARGET_TABLE_CAPACITY>(table, cutoff_us, now_us);
+}
+
+template<typename Real>
+int32_t ais_mark_targets_stale_older_than(AisTargetTableData<Real>& table, uint64_t cutoff_us, uint64_t now_us) {
+    return ais_mark_targets_stale_older_than<Real, AIS_TARGET_TABLE_CAPACITY>(table, cutoff_us, now_us);
+}
 
 } // namespace ship_data_model
