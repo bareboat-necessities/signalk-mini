@@ -42,6 +42,7 @@ public:
                         uint64_t now_us,
                         ship_data_model::SensorSource source) {
         last_error_ = "";
+        expire_pending_dsc_if_needed(model, now_us);
         update_multipart_message_state(sentence, now_us, source);
 
 #define NMEA_APPLY(ID, FN) if (sentence_is(sentence, ID)) return FN(sentence, model, now_us, source)
