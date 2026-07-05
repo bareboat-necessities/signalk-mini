@@ -139,9 +139,22 @@ inline float wrap_180_deg(float v) {
 }
 
 inline bool parse_int32(NmeaSpan field, int32_t& out) {
-    float value = 0.0f;
-    if (!parse_real(field, value)) return false;
-    out = static_cast<int32_t>(value);
+    if (field.empty() || !field.data) return false;
+    uint8_t i = 0;
+    bool negative = false;
+    if (field[0] == '+' || field[0] == '-') {
+        negative = field[0] == '-';
+        i = 1;
+        if (i >= field.length) return false;
+    }
+    int64_t value = 0;
+    for (; i < field.length; ++i) {
+        const char c = field[i];
+        if (c < '0' || c > '9') return false;
+        value = value * 10 + static_cast<int64_t>(c - '0');
+        if ((!negative && value > 2147483647LL) || (negative && value > 2147483648LL)) return false;
+    }
+    out = negative ? static_cast<int32_t>(-value) : static_cast<int32_t>(value);
     return true;
 }
 
