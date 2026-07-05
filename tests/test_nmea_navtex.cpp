@@ -205,5 +205,49 @@ int main() {
     REQUIRE(lifecycle.history.count.valid == false);
     REQUIRE(find_navtex_id(lifecycle.history, "QE12") == nullptr);
 
+    signalk_mini::SignalKMiniApp<float> fragment_app;
+    uint64_t fragment_now_us = 0;
+    feed(fragment_app, "CRNRX,3,1,44,ZCZC QF10 PART ", fragment_now_us);
+    feed(fragment_app, "CRNRX,3,2,44,TWO ", fragment_now_us);
+    feed(fragment_app, "CRNRX,3,2,44,TWO ", fragment_now_us);
+    REQUIRE(fragment_app.nmea0183().message_state().navtex_message.duplicate_fragment_count.value == 1);
+    feed(fragment_app, "CRNRX,3,3,44,END NNNN", fragment_now_us);
+    REQUIRE(fragment_app.nmea0183().message_state().navtex_message.complete == true);
+    REQUIRE(fragment_app.nmea0183().message_state().navtex_message.duplicate_fragment_count.value == 1);
+    REQUIRE(std::strcmp(fragment_app.store().model().notifications.navtex.received.navtex_message_id, "QF10") == 0);
+    REQUIRE(std::strcmp(fragment_app.store().model().notifications.navtex.received.body_text, "PART TWO END") == 0);
+
+    signalk_mini::SignalKMiniApp<float> orphan_app;
+    uint64_t orphan_now_us = 0;
+    feed(orphan_app, "CRNRX,2,2,55,ORPHAN NNNN", orphan_now_us);
+    REQUIRE(orphan_app.nmea0183().message_state().navtex_message.bad_fragment_count.value == 1);
+    REQUIRE(orphan_app.nmea0183().message_state().navtex_message.complete == false);
+    REQUIRE(orphan_app.store().model().notifications.navtex.history.count.valid == false);
+
+    signalk_mini::SignalKMiniApp<float> stale_app;
+    uint64_t stale_now_us = 0;
+    feed(stale_app, "CRNRX,2,1,66,ZCZC QG20 OLD ", stale_now_us);
+    REQUIRE(stale_app.nmea0183().message_state().navtex_message.in_progress == true);
+    stale_now_us += nmea0183_connector::NMEA_NAVTEX_MULTIPART_STALE_TIMEOUT_US + 1u;
+    feed(stale_app, "CRNRX,2,1,67,ZCZC QH21 NEW ", stale_now_us);
+    REQUIRE(stale_app.nmea0183().message_state().navtex_multipart_stale_count.value == 1);
+    feed(stale_app, "CRNRX,2,2,66,DONE NNNN", stale_now_us);
+    REQUIRE(stale_app.nmea0183().message_state().navtex_message.bad_fragment_count.value == 1);
+
+    signalk_mini::SignalKMiniApp<float> expiry_app;
+    uint64_t expiry_now_us = 0;
+    feed(expiry_app, "CRNRX,1,1,31,ZCZC QJ31 OLD NNNN", expiry_now_us);
+    feed(expiry_app, "CRNRX,1,1,32,ZCZC QK32 NEW NNNN", expiry_now_us);
+    auto& expiry = expiry_app.store().model().notifications.navtex;
+    REQUIRE(expiry.history.count.value == 2);
+    REQUIRE(ship_data_model::navtex_expire_history_older_than(expiry, 1500, expiry_now_us + 100) == 1);
+    REQUIRE(expiry.history.count.value == 1);
+    REQUIRE(find_navtex_id(expiry.history, "QJ31") == nullptr);
+    REQUIRE(find_navtex_id(expiry.history, "QK32") != nullptr);
+    REQUIRE(std::strcmp(expiry.received.navtex_message_id, "QK32") == 0);
+    REQUIRE(ship_data_model::navtex_expire_history_older_than(expiry, expiry_now_us + 1000, expiry_now_us + 2000) == 1);
+    REQUIRE(expiry.history.count.value == 0);
+    REQUIRE(expiry.received.navtex_message_id[0] == '\0');
+
     return 0;
 }
