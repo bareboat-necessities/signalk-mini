@@ -252,6 +252,10 @@ bool apply_dse(const NmeaSentence& sentence,
     dse.last_update_us = now_us;
 
     if (dse_matches_pending_dsc(source)) {
+        if (sentence.fragment.is_fragmented && !dsc_state_.multipart.complete) return true;
+        if (sentence.fragment.is_fragmented && dsc_state_.multipart.complete) {
+            nmea_copy_cstr(dse.payload, sizeof(dse.payload), dsc_state_.multipart.text);
+        }
         dsc_pending_commit_ = false;
         dsc_pending_started_us_ = 0;
         dsc_pending_source_ = ship_data_model::SensorSource::none;
