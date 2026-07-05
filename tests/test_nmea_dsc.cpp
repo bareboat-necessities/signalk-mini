@@ -36,6 +36,9 @@ static void require_direct_dsc_commit() {
 
     const auto& call = app.store().model().comm.dsc.latest_call;
     REQUIRE(app.store().model().comm.dsc.call_count.value == 1);
+    REQUIRE(app.store().model().comm.dsc.recent_call_count.value == 1);
+    REQUIRE(call.repeat_count.value == 1);
+    REQUIRE(call.duplicate == false);
     REQUIRE(call.format_specifier.value == 120);
     REQUIRE(std::strcmp(call.sender_mmsi, "338040079") == 0);
     REQUIRE(call.category.value == 100);
@@ -101,6 +104,7 @@ static void require_dsc_dse_merge() {
     feed(app, "CDDSE,1,1,A,338040079,00,EXPANDED", now_us);
     const auto& call = app.store().model().comm.dsc.latest_call;
     REQUIRE(app.store().model().comm.dsc.call_count.value == 1);
+    REQUIRE(app.store().model().comm.dsc.recent_call_count.value == 1);
     REQUIRE(call.priority == ship_data_model::DscPriority::routine);
     REQUIRE(call.address_type == ship_data_model::DscAddressType::individual);
     REQUIRE(call.expansion_expected == true);
@@ -159,6 +163,31 @@ static void require_multipart_dse_waits_until_complete() {
     REQUIRE(std::strcmp(call.dse_payload, "HELLO DSC") == 0);
 }
 
+static void require_dsc_duplicate_suppression() {
+    signalk_mini::SignalKMiniApp<float> app;
+    uint64_t now_us = 0;
+    const char* body = "CDDSC,120,338040079,100,10,20,0123407356,1234,366123456,00,B";
+
+    feed(app, body, now_us);
+    feed(app, body, now_us);
+
+    const auto& dsc = app.store().model().comm.dsc;
+    REQUIRE(dsc.call_count.value == 1);
+    REQUIRE(dsc.recent_call_count.value == 1);
+    REQUIRE(dsc.duplicate_count.value == 1);
+    REQUIRE(dsc.latest_call.duplicate == true);
+    REQUIRE(dsc.latest_call.repeat_count.value == 2);
+    REQUIRE(dsc.recent_calls[0].duplicate == true);
+    REQUIRE(dsc.recent_calls[0].repeat_count.value == 2);
+
+    feed(app, body, now_us, 11000000);
+    REQUIRE(app.store().model().comm.dsc.call_count.value == 2);
+    REQUIRE(app.store().model().comm.dsc.recent_call_count.value == 2);
+    REQUIRE(app.store().model().comm.dsc.duplicate_count.value == 1);
+    REQUIRE(app.store().model().comm.dsc.latest_call.duplicate == false);
+    REQUIRE(app.store().model().comm.dsc.latest_call.repeat_count.value == 1);
+}
+
 int main() {
     require_direct_dsc_commit();
     require_dsc_alert_promotion();
@@ -166,5 +195,6 @@ int main() {
     require_orphan_dse_ignored();
     require_dsc_dse_timeout();
     require_multipart_dse_waits_until_complete();
+    require_dsc_duplicate_suppression();
     return 0;
 }
