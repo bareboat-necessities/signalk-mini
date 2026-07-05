@@ -5,6 +5,7 @@
 namespace ship_data_model {
 
 static const uint8_t DSC_CALL_HISTORY_CAPACITY = 4;
+static const uint8_t INMARSAT_MESSAGE_HISTORY_CAPACITY = 4;
 
 template<typename Real = float>
 struct RadioFrequencySetData {
