@@ -7,6 +7,7 @@ namespace ship_data_model {
 template<typename Real = float>
 struct GnssData {
     Setting<SensorSource> source;
+    char talker_id[3] = {0};
     RangeSetting<Real> rate_hz;
 
     Stamped<Real> timestamp_s;
@@ -24,6 +25,9 @@ struct GnssData {
     Stamped<int32_t> fix_quality;
     char fix_mode_indicator[8] = {0};
     char navigational_status = 0;
+    char mode_indicator = 0;
+    Stamped<int32_t> system_id;
+    Stamped<int32_t> signal_id;
     Stamped<int32_t> satellites_used;
     Stamped<Real> hdop;
     Stamped<Real> geoidal_separation_m;
@@ -42,6 +46,7 @@ struct GnssData {
 template<typename Real = float>
 struct GnssAlmanacData {
     Setting<SensorSource> source;
+    char talker_id[3] = {0};
     Stamped<int32_t> total_messages;
     Stamped<int32_t> message_number;
     Stamped<int32_t> satellite_prn;
@@ -63,6 +68,7 @@ struct GnssAlmanacData {
 template<typename Real = float>
 struct GnssFaultDetectionData {
     Setting<SensorSource> source;
+    char talker_id[3] = {0};
     Stamped<Real> utc_time_s;
     Stamped<Real> expected_error_lat_m;
     Stamped<Real> expected_error_lon_m;
@@ -71,12 +77,36 @@ struct GnssFaultDetectionData {
     Stamped<Real> missed_detection_probability;
     Stamped<Real> failed_satellite_bias_m;
     Stamped<Real> failed_satellite_bias_stddev_m;
+    Stamped<int32_t> system_id;
+    Stamped<int32_t> signal_id;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct GnssFixAccuracyData {
+    Setting<SensorSource> source;
+    char talker_id[3] = {0};
+    Stamped<Real> utc_time_s;
+    char mode_indicator = 0;
+    char status = 0;
+    Stamped<Real> horizontal_accuracy_m;
+    Stamped<Real> vertical_accuracy_m;
+    Stamped<Real> semi_major_accuracy_m;
+    Stamped<Real> semi_minor_accuracy_m;
+    Stamped<Real> semi_major_orientation_deg;
+    Stamped<Real> pdop;
+    Stamped<Real> hdop;
+    Stamped<Real> vdop;
+    Stamped<int32_t> system_id;
+    Stamped<int32_t> signal_id;
+    Stamped<int32_t> field_count;
     uint64_t last_update_us = 0;
 };
 
 template<typename Real = float>
 struct GnssRangeResidualData {
     Setting<SensorSource> source;
+    char talker_id[3] = {0};
     Stamped<Real> utc_time_s;
     Stamped<int32_t> mode;
     Stamped<Real> satellite_residual_m[12];
@@ -86,6 +116,7 @@ struct GnssRangeResidualData {
 template<typename Real = float>
 struct GnssNoiseStatisticsData {
     Setting<SensorSource> source;
+    char talker_id[3] = {0};
     Stamped<Real> utc_time_s;
     Stamped<Real> rms_range_stddev_m;
     Stamped<Real> semi_major_stddev_m;
@@ -100,18 +131,22 @@ struct GnssNoiseStatisticsData {
 template<typename Real = float>
 struct GnssDopActiveSatellitesData {
     Setting<SensorSource> source;
+    char talker_id[3] = {0};
     char selection_mode = 0;
     Stamped<int32_t> fix_mode;
     Stamped<int32_t> satellite_prn[12];
     Stamped<Real> pdop;
     Stamped<Real> hdop;
     Stamped<Real> vdop;
+    Stamped<int32_t> system_id;
+    Stamped<int32_t> signal_id;
     uint64_t last_update_us = 0;
 };
 
 template<typename Real = float>
 struct GnssSatellitesInViewData {
     Setting<SensorSource> source;
+    char talker_id[3] = {0};
     Stamped<int32_t> total_messages;
     Stamped<int32_t> message_number;
     Stamped<int32_t> satellites_in_view;
@@ -119,6 +154,8 @@ struct GnssSatellitesInViewData {
     Stamped<Real> elevation_deg[4];
     Stamped<Real> azimuth_true_deg[4];
     Stamped<Real> snr_db[4];
+    Stamped<int32_t> system_id;
+    Stamped<int32_t> signal_id;
     uint64_t last_update_us = 0;
 };
 
@@ -127,6 +164,7 @@ struct GnssModelData {
     GnssData<Real> fix;
     GnssAlmanacData<Real> almanac;
     GnssFaultDetectionData<Real> fault_detection;
+    GnssFixAccuracyData<Real> fix_accuracy;
     GnssRangeResidualData<Real> range_residual;
     GnssNoiseStatisticsData<Real> noise_statistics;
     GnssDopActiveSatellitesData<Real> dop_active_satellites;
