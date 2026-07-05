@@ -25,6 +25,15 @@ static void feed(signalk_mini::SignalKMiniApp<float>& app, const char* body, uin
     REQUIRE(app.nmea0183().feed_line(line.c_str(), 1, now_us));
 }
 
+static void feed_gga_for_talker(signalk_mini::SignalKMiniApp<float>& app, const char* talker, uint64_t& now_us) {
+    char body[128];
+    std::snprintf(body, sizeof(body), "%sGGA,123519,4807.038,N,01131.000,E,1,08,0.9,10.0,M,46.9,M,,", talker);
+    feed(app, body, now_us);
+    REQUIRE(std::strcmp(app.store().model().gnss.fix.talker_id, talker) == 0);
+    NEAR(app.store().model().gnss.fix.fix_lat_deg.value, 48.1173f, 0.001f);
+    NEAR(app.store().model().gnss.fix.fix_lon_deg.value, 11.516666f, 0.001f);
+}
+
 int main() {
     signalk_mini::SignalKMiniApp<float> app;
     uint64_t now_us = 0;
@@ -63,6 +72,22 @@ int main() {
     REQUIRE(app.store().model().gnss.satellites_in_view.signal_id.value == 6);
     REQUIRE(app.store().model().gnss.satellites_in_view.system_id.value == 3);
     REQUIRE(app.store().model().gnss.satellites_in_view.satellite_prn[3].value == 4);
+
+    feed_gga_for_talker(app, "GP", now_us);
+    feed_gga_for_talker(app, "GL", now_us);
+    feed_gga_for_talker(app, "GA", now_us);
+    feed_gga_for_talker(app, "GB", now_us);
+    feed_gga_for_talker(app, "BD", now_us);
+    feed_gga_for_talker(app, "GQ", now_us);
+    feed_gga_for_talker(app, "GI", now_us);
+    feed_gga_for_talker(app, "GN", now_us);
+
+    feed(app, "GNDTM,W84,,0.10,N,0.20,E,1.5,W84", now_us);
+    REQUIRE(std::strcmp(app.store().model().nav.datum.local_datum_code, "W84") == 0);
+    REQUIRE(std::strcmp(app.store().model().nav.datum.reference_datum_code, "W84") == 0);
+    NEAR(app.store().model().nav.datum.latitude_offset_min.value, 0.10f, 0.001f);
+    NEAR(app.store().model().nav.datum.longitude_offset_min.value, 0.20f, 0.001f);
+    NEAR(app.store().model().nav.datum.altitude_offset_m.value, 1.5f, 0.001f);
 
     return 0;
 }
