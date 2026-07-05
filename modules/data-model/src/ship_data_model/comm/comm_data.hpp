@@ -46,6 +46,29 @@ struct ReturnLinkMessageData {
     uint64_t last_update_us = 0;
 };
 
+enum class DscPriority : uint8_t {
+    unknown,
+    routine,
+    safety,
+    urgency,
+    distress
+};
+
+enum class DscAddressType : uint8_t {
+    unknown,
+    distress,
+    individual,
+    all_ships,
+    group,
+    geographic_area
+};
+
+enum class DscEndSignalType : uint8_t {
+    unknown,
+    ack,
+    end_of_sequence
+};
+
 template<typename Real = float>
 struct DscCallData {
     Setting<SensorSource> source;
@@ -61,6 +84,9 @@ struct DscCallData {
     char address_or_distress_mmsi[16] = {0};
     char field10[16] = {0};
     char end_of_sequence = 0;
+    DscPriority priority = DscPriority::unknown;
+    DscAddressType address_type = DscAddressType::unknown;
+    DscEndSignalType end_signal_type = DscEndSignalType::unknown;
     bool expansion_expected = false;
     bool expansion_received = false;
     bool expansion_timeout = false;
