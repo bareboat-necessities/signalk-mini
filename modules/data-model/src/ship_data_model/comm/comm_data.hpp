@@ -4,6 +4,8 @@
 
 namespace ship_data_model {
 
+static const uint8_t DSC_CALL_HISTORY_CAPACITY = 4;
+
 template<typename Real = float>
 struct RadioFrequencySetData {
     Setting<SensorSource> source;
@@ -95,6 +97,8 @@ struct DscCallData {
     char dse_query_flag = 0;
     Stamped<int32_t> dse_expansion_specifier;
     char dse_payload[64] = {0};
+    bool duplicate = false;
+    Stamped<int32_t> repeat_count;
     Stamped<int32_t> field_count;
     uint64_t first_seen_us = 0;
     uint64_t last_update_us = 0;
@@ -103,7 +107,11 @@ struct DscCallData {
 template<typename Real = float>
 struct DscCommData {
     DscCallData<Real> latest_call;
+    DscCallData<Real> recent_calls[DSC_CALL_HISTORY_CAPACITY];
+    Stamped<int32_t> recent_call_count;
+    Stamped<int32_t> recent_call_next_index;
     Stamped<int32_t> call_count;
+    Stamped<int32_t> duplicate_count;
     Stamped<int32_t> distress_count;
     Stamped<int32_t> urgency_count;
     Stamped<int32_t> safety_count;
