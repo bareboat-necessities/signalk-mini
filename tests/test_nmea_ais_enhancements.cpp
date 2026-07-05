@@ -73,6 +73,19 @@ static std::string single_vdm_body(const AisPayload& payload, char channel = 'A'
     return std::string(out);
 }
 
+static std::string single_vdo_body(const AisPayload& payload, char channel = 'A') {
+    char out[256];
+    std::snprintf(out, sizeof(out), "AIVDO,1,1,,%c,%s,%d", channel, payload.payload.c_str(), payload.fill_bits);
+    return std::string(out);
+}
+
+static const ship_data_model::AisTargetData<float>* find_target(const ship_data_model::AisTargetTableData<float>& table, int32_t mmsi) {
+    for (uint8_t i = 0; i < ship_data_model::AIS_TARGET_TABLE_CAPACITY; ++i) {
+        if (table.targets[i].occupied && table.targets[i].mmsi.valid && table.targets[i].mmsi.value == mmsi) return &table.targets[i];
+    }
+    return nullptr;
+}
+
 static AisPayload make_type8_binary_payload() {
     std::string bits;
     append_bits(bits, 8, 6);
@@ -85,11 +98,11 @@ static AisPayload make_type8_binary_payload() {
     return make_payload(bits);
 }
 
-static AisPayload make_type18_class_b_payload() {
+static AisPayload make_type18_class_b_payload(uint32_t mmsi = 123123123u) {
     std::string bits;
     append_bits(bits, 18, 6);
     append_bits(bits, 0, 2);
-    append_bits(bits, 123123123u, 30);
+    append_bits(bits, mmsi, 30);
     append_bits(bits, 0, 8);
     append_bits(bits, 123, 10);
     append_bits(bits, 1, 1);
@@ -99,13 +112,13 @@ static AisPayload make_type18_class_b_payload() {
     append_bits(bits, 91, 9);
     append_bits(bits, 35, 6);
     append_bits(bits, 0, 2);
-    append_bits(bits, 1, 1); // CS unit
-    append_bits(bits, 1, 1); // display
-    append_bits(bits, 0, 1); // DSC
-    append_bits(bits, 1, 1); // band
-    append_bits(bits, 1, 1); // accepts message 22
-    append_bits(bits, 1, 1); // assigned mode
-    append_bits(bits, 1, 1); // RAIM
+    append_bits(bits, 1, 1);
+    append_bits(bits, 1, 1);
+    append_bits(bits, 0, 1);
+    append_bits(bits, 1, 1);
+    append_bits(bits, 1, 1);
+    append_bits(bits, 1, 1);
+    append_bits(bits, 1, 1);
     append_bits(bits, 0, 1);
     append_bits(bits, 0x12345, 19);
     return make_payload(bits);
@@ -127,13 +140,40 @@ static AisPayload make_type21_aton_payload() {
     append_bits(bits, 3, 6);
     append_bits(bits, 1, 4);
     append_bits(bits, 22, 6);
-    append_bits(bits, 0, 1); // off position
+    append_bits(bits, 0, 1);
     while (bits.size() < 268u) bits.push_back('0');
-    append_bits(bits, 1, 1); // raim
-    append_bits(bits, 1, 1); // virtual aid
-    append_bits(bits, 1, 1); // assigned mode
+    append_bits(bits, 1, 1);
+    append_bits(bits, 1, 1);
+    append_bits(bits, 1, 1);
     append_bits(bits, 0, 1);
     append_text(bits, "EXTNAME", 14);
+    return make_payload(bits);
+}
+
+static AisPayload make_type24_part_a(uint32_t mmsi, const char* name) {
+    std::string bits;
+    append_bits(bits, 24, 6);
+    append_bits(bits, 0, 2);
+    append_bits(bits, mmsi, 30);
+    append_bits(bits, 0, 2);
+    append_text(bits, name, 20);
+    append_bits(bits, 0, 8);
+    return make_payload(bits);
+}
+
+static AisPayload make_type24_part_b(uint32_t mmsi, uint32_t ship_type, const char* vendor, const char* call_sign) {
+    std::string bits;
+    append_bits(bits, 24, 6);
+    append_bits(bits, 0, 2);
+    append_bits(bits, mmsi, 30);
+    append_bits(bits, 1, 2);
+    append_bits(bits, ship_type, 8);
+    append_text(bits, vendor, 7);
+    append_text(bits, call_sign, 7);
+    append_bits(bits, 11, 9);
+    append_bits(bits, 12, 9);
+    append_bits(bits, 3, 6);
+    append_bits(bits, 4, 6);
     return make_payload(bits);
 }
 
@@ -179,6 +219,69 @@ int main() {
     REQUIRE(aton.assigned_mode == true);
     REQUIRE(aton.name_extension_available == true);
     REQUIRE(std::strcmp(aton.name_extension, "EXTNAME") == 0);
+
+    signalk_mini::SignalKMiniApp<float> own_app;
+    uint64_t own_us = 0;
+    feed_ais(own_app, single_vdo_body(make_type18_class_b_payload(321321321u)), own_us);
+    REQUIRE(own_app.store().model().ais.own_vessel.valid == true);
+    REQUIRE(own_app.store().model().ais.own_vessel.mmsi.value == 321321321);
+    REQUIRE(own_app.store().model().ais.own_vessel.class_b == true);
+    REQUIRE(own_app.store().model().ais.targets.target_count.valid == false);
+    REQUIRE(find_target(own_app.store().model().ais.targets, 321321321) == nullptr);
+
+    signalk_mini::SignalKMiniApp<float> type24_app;
+    uint64_t type24_us = 0;
+    feed_ais(type24_app, single_vdm_body(make_type24_part_a(444000111u, "CLASSB ONE")), type24_us);
+    const auto& part_a = type24_app.store().model().ais.class_b_static;
+    REQUIRE(part_a.message_type.value == 24);
+    REQUIRE(part_a.part_number.value == 0);
+    REQUIRE(part_a.merge_mmsi.value == 444000111);
+    REQUIRE(part_a.part_a_received == true);
+    REQUIRE(part_a.part_b_received == false);
+    REQUIRE(part_a.complete == false);
+    REQUIRE(std::strcmp(part_a.vessel_name, "CLASSB ONE") == 0);
+
+    feed_ais(type24_app, single_vdm_body(make_type24_part_b(444000111u, 36, "VEN1234", "CALL999")), type24_us);
+    const auto& part_b = type24_app.store().model().ais.class_b_static;
+    REQUIRE(part_b.part_number.value == 1);
+    REQUIRE(part_b.merge_mmsi.value == 444000111);
+    REQUIRE(part_b.part_a_received == true);
+    REQUIRE(part_b.part_b_received == true);
+    REQUIRE(part_b.complete == true);
+    REQUIRE(part_b.ship_type.value == 36);
+    REQUIRE(std::strcmp(part_b.call_sign, "CALL999") == 0);
+    REQUIRE(std::strcmp(part_b.vessel_name, "CLASSB ONE") == 0);
+
+    feed_ais(type24_app, single_vdm_body(make_type24_part_b(555000222u, 37, "VEN5678", "CALL222")), type24_us);
+    const auto& changed = type24_app.store().model().ais.class_b_static;
+    REQUIRE(changed.merge_mmsi.value == 555000222);
+    REQUIRE(changed.part_a_received == false);
+    REQUIRE(changed.part_b_received == true);
+    REQUIRE(changed.complete == false);
+    REQUIRE(changed.ship_type.value == 37);
+
+    signalk_mini::SignalKMiniApp<float> lifecycle_app;
+    uint64_t lifecycle_us = 0;
+    feed_ais(lifecycle_app, single_vdm_body(make_type8_binary_payload()), lifecycle_us);
+    feed_ais(lifecycle_app, single_vdm_body(make_type18_class_b_payload(123123123u)), lifecycle_us);
+    auto& targets = lifecycle_app.store().model().ais.targets;
+    REQUIRE(targets.target_count.value == 2);
+    REQUIRE(ship_data_model::ais_mark_targets_stale_older_than(targets, 1500, lifecycle_us + 100) == 1);
+    REQUIRE(find_target(targets, 333444555) != nullptr);
+    REQUIRE(find_target(targets, 333444555)->stale == true);
+    REQUIRE(find_target(targets, 123123123)->stale == false);
+    REQUIRE(ship_data_model::ais_expire_targets_older_than(targets, 1500, lifecycle_us + 200) == 1);
+    REQUIRE(targets.target_count.value == 1);
+    REQUIRE(find_target(targets, 333444555) == nullptr);
+    REQUIRE(find_target(targets, 123123123) != nullptr);
+    REQUIRE(ship_data_model::ais_clear_target(targets, 123123123, lifecycle_us + 300) == true);
+    REQUIRE(targets.target_count.value == 0);
+    REQUIRE(ship_data_model::ais_clear_target(targets, 123123123, lifecycle_us + 400) == false);
+    feed_ais(lifecycle_app, single_vdm_body(make_type8_binary_payload()), lifecycle_us);
+    REQUIRE(targets.target_count.value == 1);
+    ship_data_model::ais_clear_targets(targets);
+    REQUIRE(targets.target_count.valid == false);
+    REQUIRE(find_target(targets, 333444555) == nullptr);
 
     signalk_mini::SignalKMiniApp<float> hardening;
     uint64_t hardening_us = 0;
