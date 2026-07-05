@@ -63,6 +63,10 @@ if(BUILD_TESTING)
   target_link_libraries(test_nmea_dsc_lifecycle PRIVATE signalk_mini_core)
   add_test(NAME test_nmea_dsc_lifecycle COMMAND test_nmea_dsc_lifecycle)
 
+  add_executable(test_nmea_dsc_interpretation tests/test_nmea_dsc_interpretation.cpp)
+  target_link_libraries(test_nmea_dsc_interpretation PRIVATE signalk_mini_core)
+  add_test(NAME test_nmea_dsc_interpretation COMMAND test_nmea_dsc_interpretation)
+
   add_executable(test_nmea_ais tests/test_nmea_ais.cpp)
   target_link_libraries(test_nmea_ais PRIVATE signalk_mini_core)
   add_test(NAME test_nmea_ais COMMAND test_nmea_ais)
