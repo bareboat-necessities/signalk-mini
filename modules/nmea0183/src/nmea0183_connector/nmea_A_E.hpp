@@ -407,21 +407,6 @@ bool apply_dpt(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 }
 
 template<typename Model>
-bool apply_dtm(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
-    if (sentence.field_count < 8) { last_error_ = "short DTM"; return false; }
-    float value = 0.0f;
-    nmea_copy_span(model.nav.datum.local_datum_code, sizeof(model.nav.datum.local_datum_code), sentence.field(0));
-    nmea_copy_span(model.nav.datum.local_datum_subcode, sizeof(model.nav.datum.local_datum_subcode), sentence.field(1));
-    if (parse_north_south_signed(sentence.field(2), sentence.field(3), value)) model.nav.datum.latitude_offset_min.set(static_cast<Real>(value), now_us);
-    if (parse_east_west_signed(sentence.field(4), sentence.field(5), value)) model.nav.datum.longitude_offset_min.set(static_cast<Real>(value), now_us);
-    if (parse_real(sentence.field(6), value)) model.nav.datum.altitude_offset_m.set(static_cast<Real>(value), now_us);
-    nmea_copy_span(model.nav.datum.reference_datum_code, sizeof(model.nav.datum.reference_datum_code), sentence.field(7));
-    set_source(model.nav.datum.source, source);
-    model.nav.datum.last_update_us = now_us;
-    return true;
-}
-
-template<typename Model>
 bool apply_etl(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 1) { last_error_ = "short ETL"; return false; }
     auto& event_log = model.notifications.messages.event_log;
