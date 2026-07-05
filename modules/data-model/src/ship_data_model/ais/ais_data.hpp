@@ -5,6 +5,8 @@
 namespace ship_data_model {
 
 static const uint8_t AIS_TARGET_TABLE_CAPACITY = 16;
+static const uint8_t AIS_AREA_NOTICE_SUBAREA_CAPACITY = 4;
+static const uint8_t AIS_DGNSS_PAYLOAD_PREFIX_BYTES = 32;
 
 template<typename Real = float>
 struct AisMessageHeaderData {
@@ -278,6 +280,10 @@ struct AisBinaryApplicationData : AisMessageHeaderData<Real> {
     Stamped<int32_t> first_payload_bits;
     Stamped<int32_t> decoded_field_count;
     Stamped<int32_t> quantity;
+    Stamped<int32_t> cargo_code;
+    Stamped<int32_t> cargo_subcode;
+    Stamped<int32_t> cargo_amount;
+    Stamped<int32_t> cargo_unit;
     Stamped<int32_t> link_id;
     Stamped<int32_t> notice_type;
     Stamped<int32_t> month;
@@ -285,8 +291,43 @@ struct AisBinaryApplicationData : AisMessageHeaderData<Real> {
     Stamped<int32_t> hour;
     Stamped<int32_t> minute;
     Stamped<int32_t> duration_min;
+    Stamped<int32_t> subarea_count;
+    Stamped<int32_t> subarea_shape[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
+    Stamped<int32_t> subarea_scale_factor[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
+    Stamped<Real> subarea_longitude_deg[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
+    Stamped<Real> subarea_latitude_deg[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
+    Stamped<int32_t> subarea_precision[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
+    Stamped<int32_t> subarea_radius_m[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
+    Stamped<int32_t> subarea_dimension_e_m[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
+    Stamped<int32_t> subarea_dimension_n_m[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
+    Stamped<int32_t> subarea_orientation_deg[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
     Stamped<Real> longitude_deg;
     Stamped<Real> latitude_deg;
+    Stamped<int32_t> wind_speed_kn;
+    Stamped<int32_t> wind_gust_kn;
+    Stamped<int32_t> wind_direction_deg;
+    Stamped<int32_t> wind_gust_direction_deg;
+    Stamped<Real> air_temperature_c;
+    Stamped<int32_t> relative_humidity_pct;
+    Stamped<Real> dew_point_c;
+    Stamped<int32_t> air_pressure_hpa;
+    Stamped<int32_t> air_pressure_tendency;
+    Stamped<Real> horizontal_visibility_nmi;
+    Stamped<Real> water_level_m;
+    Stamped<int32_t> water_level_trend;
+    Stamped<Real> surface_current_speed_kn;
+    Stamped<int32_t> surface_current_direction_deg;
+    Stamped<Real> wave_height_m;
+    Stamped<int32_t> wave_period_s;
+    Stamped<int32_t> wave_direction_deg;
+    Stamped<Real> swell_height_m;
+    Stamped<int32_t> swell_period_s;
+    Stamped<int32_t> swell_direction_deg;
+    Stamped<int32_t> sea_state;
+    Stamped<Real> water_temperature_c;
+    Stamped<int32_t> precipitation_type;
+    Stamped<Real> salinity_ppt;
+    Stamped<int32_t> ice_mm;
     char text[96] = {0};
     char application_label[32] = {0};
     bool known_application = false;
@@ -349,6 +390,9 @@ struct AisDgnssBroadcastData : AisMessageHeaderData<Real> {
     Stamped<int32_t> payload_start_bit;
     Stamped<int32_t> payload_byte_count;
     Stamped<int32_t> first_payload_bits;
+    Stamped<int32_t> payload_prefix_byte_count;
+    uint8_t payload_prefix[AIS_DGNSS_PAYLOAD_PREFIX_BYTES] = {0};
+    bool payload_truncated = false;
     uint64_t last_update_us = 0;
 };
 
