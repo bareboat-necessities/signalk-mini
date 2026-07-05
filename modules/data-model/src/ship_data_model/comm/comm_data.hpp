@@ -98,6 +98,7 @@ struct DscCallData {
     Stamped<int32_t> dse_expansion_specifier;
     char dse_payload[64] = {0};
     bool duplicate = false;
+    bool orphan_ack = false;
     Stamped<int32_t> repeat_count;
     Stamped<int32_t> field_count;
     uint64_t first_seen_us = 0;
@@ -112,6 +113,8 @@ struct DscCommData {
     Stamped<int32_t> recent_call_next_index;
     Stamped<int32_t> call_count;
     Stamped<int32_t> duplicate_count;
+    Stamped<int32_t> acknowledged_count;
+    Stamped<int32_t> orphan_ack_count;
     Stamped<int32_t> distress_count;
     Stamped<int32_t> urgency_count;
     Stamped<int32_t> safety_count;
