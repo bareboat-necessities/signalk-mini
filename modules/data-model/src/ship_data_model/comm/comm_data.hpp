@@ -71,6 +71,14 @@ enum class DscEndSignalType : uint8_t {
     end_of_sequence
 };
 
+enum class DscDsePayloadType : uint8_t {
+    none,
+    text,
+    digits,
+    mixed_ascii,
+    invalid
+};
+
 template<typename Real = float>
 struct DscCallData {
     Setting<SensorSource> source;
@@ -97,6 +105,11 @@ struct DscCallData {
     char dse_query_flag = 0;
     Stamped<int32_t> dse_expansion_specifier;
     char dse_payload[64] = {0};
+    char dse_decoded_text[64] = {0};
+    DscDsePayloadType dse_payload_type = DscDsePayloadType::none;
+    Stamped<int32_t> dse_payload_length;
+    Stamped<int32_t> dse_digit_count;
+    bool dse_ascii_valid = false;
     bool duplicate = false;
     bool orphan_ack = false;
     Stamped<int32_t> repeat_count;
