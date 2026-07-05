@@ -4,16 +4,24 @@
 
 static constexpr uint64_t DSC_DSE_TIMEOUT_US = 500000ULL;
 
-static bool dsc_code_is_distress(int32_t code) {
+static bool dsc_format_is_distress(int32_t code) {
     return code == 112;
 }
 
-static bool dsc_code_is_urgency(int32_t code) {
+static bool dsc_category_is_distress(int32_t code) {
+    return code == 112;
+}
+
+static bool dsc_category_is_urgency(int32_t code) {
     return code == 110;
 }
 
-static bool dsc_code_is_safety(int32_t code) {
+static bool dsc_category_is_safety(int32_t code) {
     return code == 108;
+}
+
+static bool dsc_end_signal_is_ack(char eos) {
+    return eos == 'A' || eos == 'R';
 }
 
 bool dsc_expansion_expected() const {
@@ -72,13 +80,13 @@ void promote_dsc_notifications(Model& model,
     const int32_t format = dsc.format_specifier.last_update_us ? dsc.format_specifier.value : 0;
     const int32_t category = dsc.category.last_update_us ? dsc.category.value : 0;
 
-    if (dsc_code_is_distress(format) || dsc_code_is_distress(category)) {
+    if (dsc_format_is_distress(format) || dsc_category_is_distress(category)) {
         commit_dsc_alert(model, model.notifications.dsc.distress, "DSC distress", now_us, source);
         model.comm.dsc.distress_count.set(model.comm.dsc.distress_count.value + 1, now_us);
-    } else if (dsc_code_is_urgency(category)) {
+    } else if (dsc_category_is_urgency(category)) {
         commit_dsc_alert(model, model.notifications.dsc.urgency, "DSC urgency", now_us, source);
         model.comm.dsc.urgency_count.set(model.comm.dsc.urgency_count.value + 1, now_us);
-    } else if (dsc_code_is_safety(category)) {
+    } else if (dsc_category_is_safety(category)) {
         commit_dsc_alert(model, model.notifications.dsc.safety, "DSC safety", now_us, source);
         model.comm.dsc.safety_count.set(model.comm.dsc.safety_count.value + 1, now_us);
     }
