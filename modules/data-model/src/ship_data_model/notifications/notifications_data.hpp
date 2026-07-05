@@ -7,6 +7,7 @@
 namespace ship_data_model {
 
 static const uint8_t NAVTEX_MESSAGE_HISTORY_CAPACITY = 8;
+static const uint8_t ALERT_LIST_ENTRY_CAPACITY = 8;
 
 template<typename Real = float>
 struct AlertAcknowledgementData {
@@ -44,10 +45,80 @@ struct AlertConditionData {
 };
 
 template<typename Real = float>
+struct AlertCyclicListData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> total_messages;
+    Stamped<int32_t> message_number;
+    char sequential_message_id[16] = {0};
+    char alert_identifier[ALERT_LIST_ENTRY_CAPACITY][24] = {{0}};
+    Stamped<int32_t> alert_count;
+    Stamped<int32_t> field_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct AlertReportData {
+    Setting<SensorSource> source;
+    Stamped<int32_t> total_fragments;
+    Stamped<int32_t> fragment_number;
+    char sequential_message_id[16] = {0};
+    char alert_identifier[24] = {0};
+    Stamped<int32_t> alert_instance;
+    Stamped<int32_t> revision_counter;
+    Stamped<int32_t> escalation_counter;
+    char category = 0;
+    char priority = 0;
+    char alert_state = 0;
+    char alert_text[72] = {0};
+    Stamped<int32_t> field_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct AlertAlarmStateData {
+    Setting<SensorSource> source;
+    Stamped<Real> utc_time_s;
+    char alarm_identifier[24] = {0};
+    Stamped<int32_t> local_alarm_number;
+    char condition_state = 0;
+    char acknowledgement_state = 0;
+    char description[72] = {0};
+    Stamped<int32_t> field_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct AlertCommandRefusedData {
+    Setting<SensorSource> source;
+    char alert_identifier[24] = {0};
+    Stamped<int32_t> alert_instance;
+    char refused_command[24] = {0};
+    char reason_code[24] = {0};
+    char reason_text[72] = {0};
+    Stamped<int32_t> field_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct AlertHeartbeatData {
+    Setting<SensorSource> source;
+    char status = 0;
+    Stamped<Real> interval_s;
+    char sequential_message_id[16] = {0};
+    Stamped<int32_t> field_count;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
 struct NotificationAlertsData {
     AlertAcknowledgementData<Real> acknowledgement;
     AlertAcknowledgementDetailData<Real> acknowledgement_detail;
     AlertConditionData<Real> condition;
+    AlertCyclicListData<Real> cyclic_list;
+    AlertReportData<Real> alert_report;
+    AlertAlarmStateData<Real> alarm_state;
+    AlertCommandRefusedData<Real> command_refused;
+    AlertHeartbeatData<Real> heartbeat;
     NmeaTextRecordData<Real> fire;
 };
 
@@ -235,7 +306,6 @@ int32_t navtex_expire_history_older_than(NotificationNavtexData<Real>& navtex,
     int32_t expired = 0;
     int32_t remaining = 0;
     bool latest_expired = false;
-
     for (uint8_t i = 0; i < Capacity; ++i) {
         auto& slot = navtex.history.messages[i];
         if (slot.first_seen_us == 0) continue;
@@ -248,7 +318,6 @@ int32_t navtex_expire_history_older_than(NotificationNavtexData<Real>& navtex,
             ++remaining;
         }
     }
-
     navtex.history.count.set(remaining, now_us);
     if (latest_expired) navtex.received = NavtexReceivedMessageData<Real>{};
     return expired;
