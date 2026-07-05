@@ -232,9 +232,26 @@ private:
         return true;
     }
 
-    NmeaMultipartMessageRecord& select_ais_multipart_record(const NmeaSentence& sentence, uint64_t now_us) {
+    void cleanup_ais_multipart_slots(uint64_t now_us,
+                                     uint64_t timeout_us = NMEA_AIS_MULTIPART_STALE_TIMEOUT_US) {
+        if (timeout_us == 0u) return;
+        for (uint8_t i = 0; i < NMEA_AIS_MULTIPART_SLOT_COUNT; ++i) {
+            auto& slot = state_.ais_messages[i];
+            if (!slot.in_progress || slot.last_update_us == 0u) continue;
+            if (now_us < slot.last_update_us || now_us - slot.last_update_us <= timeout_us) continue;
+            reset_multipart_record(slot);
+            state_.ais_multipart_stale_count.set(state_.ais_multipart_stale_count.value + 1, now_us);
+        }
+    }
+
+    NmeaMultipartMessageRecord& select_ais_multipart_record(const NmeaSentence& sentence,
+                                                            uint64_t now_us,
+                                                            bool& matched_existing) {
+        cleanup_ais_multipart_slots(now_us);
+        matched_existing = false;
         for (uint8_t i = 0; i < NMEA_AIS_MULTIPART_SLOT_COUNT; ++i) {
             if (multipart_record_matches(sentence, state_.ais_messages[i])) {
+                matched_existing = true;
                 state_.active_ais_slot.set(static_cast<int32_t>(i), now_us);
                 return state_.ais_messages[i];
             }
@@ -388,8 +405,9 @@ private:
     void update_ais_multipart_message_state(const NmeaSentence& sentence,
                                             uint64_t now_us,
                                             ship_data_model::SensorSource source) {
-        auto& selected = select_ais_multipart_record(sentence, now_us);
-        update_multipart_record(sentence, selected, now_us, source);
+        bool matched_existing = false;
+        auto& selected = select_ais_multipart_record(sentence, now_us, matched_existing);
+        update_multipart_record(sentence, selected, now_us, source, matched_existing);
         state_.ais_message = selected;
     }
 
