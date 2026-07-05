@@ -2,6 +2,8 @@
 
 // Included inside Nmea0183RxConnector.
 
+static constexpr uint64_t DSC_DSE_TIMEOUT_US = 500000ULL;
+
 static bool dsc_code_is_distress(int32_t code) {
     return code == 112;
 }
@@ -143,6 +145,19 @@ bool commit_dsc_message_to_model(Model& model,
 
     promote_dsc_notifications(model, now_us, source);
     return true;
+}
+
+template<typename Model>
+void expire_pending_dsc_if_needed(Model& model, uint64_t now_us) {
+    if (!dsc_pending_commit_) return;
+    if (dsc_pending_started_us_ == 0 || now_us < dsc_pending_started_us_) return;
+    if (now_us - dsc_pending_started_us_ <= DSC_DSE_TIMEOUT_US) return;
+
+    const auto source = dsc_pending_source_;
+    dsc_pending_commit_ = false;
+    dsc_pending_started_us_ = 0;
+    dsc_pending_source_ = ship_data_model::SensorSource::none;
+    commit_dsc_message_to_model(model, now_us, source, false, true);
 }
 
 template<typename Model>
