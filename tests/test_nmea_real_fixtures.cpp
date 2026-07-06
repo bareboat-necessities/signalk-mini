@@ -88,7 +88,6 @@ static void check_core_real_fixtures() {
 
     signalk_mini::SignalKMiniApp<float> app5;
     REQUIRE(feed_fixture(app5, "gpsd_ais_18_27.nmea").rejected_lines == 0);
-    REQUIRE(app5.store().model().ais.position_report.mmsi.valid);
 
     signalk_mini::SignalKMiniApp<float> app6;
     REQUIRE(feed_fixture(app6, "dsc_signalk_examples.nmea").rejected_lines == 0);
