@@ -131,7 +131,7 @@ static void check_gpsd_reference_edges() {
     NEAR(model.gnss.fix.speed_kn.value, 5.5f, 0.001f);
     NEAR(model.gnss.fix.track_deg.value, 54.7f, 0.001f);
     REQUIRE(model.gnss.fault_detection.failed_satellite_prn.value == 7);
-    REQUIRE(model.route.waypoint.arrival_circle_entered.value);
+    REQUIRE(model.route.waypoint_arrival.arrival_circle_entered.value);
 }
 
 static void check_ais_vdm_vdo_samples() {
