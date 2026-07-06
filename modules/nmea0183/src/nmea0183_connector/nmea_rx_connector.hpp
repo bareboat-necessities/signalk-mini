@@ -184,7 +184,6 @@ private:
 #include "nmea_dsc.hpp"
 #include "nmea_inmarsat.hpp"
 #include "nmea_ais.hpp"
-#include "nmea_ais_control.hpp"
 #include "nmea_ais_own_vessel.hpp"
 #include "nmea_A_E.hpp"
 #include "nmea_F_G.hpp"
