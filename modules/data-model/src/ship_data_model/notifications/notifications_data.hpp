@@ -8,6 +8,7 @@ namespace ship_data_model {
 
 static const uint8_t NAVTEX_MESSAGE_HISTORY_CAPACITY = 8;
 static const uint8_t ALERT_LIST_ENTRY_CAPACITY = 8;
+static const uint8_t INMARSAT_SAFETYNET_MESSAGE_HISTORY_CAPACITY = 4;
 
 template<typename Real = float>
 struct AlertAcknowledgementData {
@@ -200,6 +201,44 @@ struct NotificationDscData {
 };
 
 template<typename Real = float>
+struct InmarsatSafetyNetMessageData {
+    Setting<SensorSource> source;
+    char message_id[16] = {0};
+    char terminal_id[24] = {0};
+    char status[16] = {0};
+    char message_text[160] = {0};
+    Stamped<int32_t> total_fragments;
+    Stamped<int32_t> fragment_number;
+    Stamped<int32_t> text_length;
+    Stamped<int32_t> field_count;
+    bool complete = false;
+    bool overflow = false;
+    bool duplicate = false;
+    bool acknowledged = false;
+    Stamped<int32_t> repeat_count;
+    uint64_t first_seen_us = 0;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
+struct InmarsatSafetyNetData {
+    InmarsatSafetyNetMessageData<Real> latest_message;
+    InmarsatSafetyNetMessageData<Real> recent_messages[INMARSAT_SAFETYNET_MESSAGE_HISTORY_CAPACITY];
+    Stamped<int32_t> recent_message_count;
+    Stamped<int32_t> recent_message_next_index;
+    Stamped<int32_t> message_count;
+    Stamped<int32_t> duplicate_count;
+    Stamped<int32_t> overwrite_count;
+    Stamped<int32_t> unsupported_count;
+    Stamped<int32_t> bad_fragment_count;
+};
+
+template<typename Real = float>
+struct NotificationInmarsatData {
+    InmarsatSafetyNetData<Real> safetynet;
+};
+
+template<typename Real = float>
 struct SmvData {
     Setting<SensorSource> source;
     char message_id[24] = {0};
@@ -290,6 +329,7 @@ struct NotificationsData {
     NotificationAlertsData<Real> alerts;
     NotificationMessagesData<Real> messages;
     NotificationDscData<Real> dsc;
+    NotificationInmarsatData<Real> inmarsat;
     NotificationSpecialData<Real> special;
     NotificationNavtexData<Real> navtex;
 };
