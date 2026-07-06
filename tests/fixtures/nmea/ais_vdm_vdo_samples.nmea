@@ -1,0 +1,11 @@
+# Source: public AIS VDM example plus generated AIS edge payloads with valid NMEA checksums.
+# Covers received VDM, own-vessel VDO, multipart type 5, ATON, channel-management, long-range, and binary envelope handling.
+!AIVDM,1,1,,A,14eG;o@034o8sd<L9i:a;WF>062D,0*7D
+!AIVDO,1,1,,A,14eG;o@034o8sd<L9i:a;WF>062D,0*7F
+!AIVDM,2,1,7,B,51mg=5@00000000000000000000000000000,0*67
+!AIVDM,2,2,7,B,000T0000040000000000000000000000000,2*40
+!AIVDM,1,1,,A,E1mg=5@P00000000000000000000000000000000006000,4*42
+!AIVDM,1,1,,A,F1mg=5B2N2P00000000000020000,0*3D
+!AIVDM,1,1,,A,H1mg=5@00000000000000000000,2*1F
+!AIVDM,1,1,,A,K1mg=5@0000002P`,0*1C
+!AIVDM,1,1,,A,81mg=5@00000,0*5D

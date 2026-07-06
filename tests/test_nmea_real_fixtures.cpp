@@ -29,9 +29,17 @@ static std::string fixture_path(const char* name) {
 }
 
 static bool is_expected_reject(const char* name, const std::string& line, const char* last_error) {
-    return std::strcmp(name, "aerorust_gnss_supported.nmea") == 0 &&
-           line.find("$GPGGA,133605.0") == 0 &&
-           std::strcmp(last_error, "invalid GGA") == 0;
+    if (std::strcmp(name, "aerorust_gnss_supported.nmea") == 0 &&
+        line.find("$GPGGA,133605.0") == 0 &&
+        std::strcmp(last_error, "invalid GGA") == 0) {
+        return true;
+    }
+    if (std::strcmp(name, "gpsd_reference_edges.nmea") == 0 &&
+        line.find("$GPRMC,,V") == 0 &&
+        std::strcmp(last_error, "bad RMC") == 0) {
+        return true;
+    }
+    return false;
 }
 
 static FixtureCounts feed_fixture(signalk_mini::SignalKMiniApp<float>& app, const char* name) {
@@ -106,8 +114,67 @@ static void check_tripmate_sample() {
     REQUIRE(model.gnss.satellites_in_view.satellites_in_view.value == 11);
 }
 
+static void check_gpsd_reference_edges() {
+    signalk_mini::SignalKMiniApp<float> app;
+    const auto counts = feed_fixture(app, "gpsd_reference_edges.nmea");
+    REQUIRE(counts.data_lines == 8);
+    REQUIRE(counts.accepted_lines == 7);
+    REQUIRE(counts.rejected_lines == 1);
+    const auto& model = app.store().model();
+
+    REQUIRE(model.gnss.fix.fix_lat_deg.valid);
+    REQUIRE(model.gnss.fix.fix_lon_deg.valid);
+    NEAR(model.gnss.fix.fix_lat_deg.value, 49.274166f, 0.001f);
+    NEAR(model.gnss.fix.fix_lon_deg.value, -123.185333f, 0.001f);
+    REQUIRE(model.gnss.fix.speed_kn.valid);
+    REQUIRE(model.gnss.fix.track_deg.valid);
+    NEAR(model.gnss.fix.speed_kn.value, 5.5f, 0.001f);
+    NEAR(model.gnss.fix.track_deg.value, 54.7f, 0.001f);
+    REQUIRE(model.gnss.fault_detection.failed_satellite_prn.value == 7);
+    REQUIRE(model.route.waypoint.arrival_circle_entered.value);
+}
+
+static void check_ais_vdm_vdo_samples() {
+    signalk_mini::SignalKMiniApp<float> app;
+    const auto counts = feed_fixture(app, "ais_vdm_vdo_samples.nmea");
+    REQUIRE(counts.data_lines == 9);
+    REQUIRE(counts.accepted_lines == 9);
+    REQUIRE(counts.rejected_lines == 0);
+    const auto& model = app.store().model();
+
+    REQUIRE(model.ais.own_vessel.valid);
+    REQUIRE(model.ais.position_report.mmsi.valid);
+    REQUIRE(model.ais.static_voyage.mmsi.valid);
+    REQUIRE(model.ais.aid_to_navigation.mmsi.valid);
+    REQUIRE(model.ais.channel_management.mmsi.valid);
+    REQUIRE(model.ais.binary_envelope.mmsi.valid);
+}
+
+static void check_mixed_marine_stream() {
+    signalk_mini::SignalKMiniApp<float> app;
+    const auto counts = feed_fixture(app, "opencpn_signalk_mixed_stream.nmea");
+    REQUIRE(counts.data_lines == 13);
+    REQUIRE(counts.accepted_lines == 13);
+    REQUIRE(counts.rejected_lines == 0);
+    const auto& model = app.store().model();
+
+    REQUIRE(model.gnss.fix.fix_lat_deg.valid);
+    REQUIRE(model.gnss.fix.fix_lon_deg.valid);
+    REQUIRE(model.wind.apparent.speed_kn.valid);
+    REQUIRE(model.wind.apparent.direction_deg.valid);
+    REQUIRE(model.sea.speed_kn.valid);
+    REQUIRE(model.ins.imu.heading_deg.valid);
+    REQUIRE(model.route.waypoint.distance_nmi.valid);
+    REQUIRE(model.ais.position_report.mmsi.valid);
+    NEAR(model.wind.apparent.speed_kn.value, 1.0f, 0.001f);
+    NEAR(model.sea.speed_kn.value, 10.5f, 0.001f);
+}
+
 int main() {
     check_aerorust_gnss_supported();
     check_tripmate_sample();
+    check_gpsd_reference_edges();
+    check_ais_vdm_vdo_samples();
+    check_mixed_marine_stream();
     return 0;
 }

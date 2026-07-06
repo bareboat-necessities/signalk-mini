@@ -1,0 +1,10 @@
+# Source: gpsd/NMEA Revealed style examples and public NMEA reference examples.
+# Keeps valid checksums and intentionally includes one invalid/no-fix RMC edge case.
+$GPRMC,125504.049,A,5542.2389,N,03741.6063,E,0.06,25.82,200906,,,A*56
+$GPRMC,,V,,,,,,,080907,9.6,E,N*31
+$GPGLL,4916.45,N,12311.12,W,225444,A,A*5C
+$GPGSA,A,1,,,,,,,,,,,,,99.99,99.99,99.99*30
+$GPGST,024603.00,3.2,1.1,2.2,45.0,0.8,1.7,2.1*69
+$GPGBS,024603.00,1.2,2.3,3.4,07,0.99,12.3,2.4*68
+$GPVTG,054.7,T,034.4,M,005.5,N,010.2,K,A*25
+$GPAAM,A,A,0.10,N,WPTNME*32
