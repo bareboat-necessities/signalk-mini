@@ -2,8 +2,85 @@
 
 // Included inside Nmea0183RxConnector.
 
+enum AisMessageType : int32_t {
+    AIS_MESSAGE_TYPE_UNKNOWN = 0,
+    AIS_MESSAGE_TYPE_POSITION_REPORT_CLASS_A_SCHEDULED = 1,
+    AIS_MESSAGE_TYPE_POSITION_REPORT_CLASS_A_ASSIGNED = 2,
+    AIS_MESSAGE_TYPE_POSITION_REPORT_CLASS_A_RESPONSE = 3,
+    AIS_MESSAGE_TYPE_BASE_STATION_REPORT = 4,
+    AIS_MESSAGE_TYPE_STATIC_AND_VOYAGE_RELATED_DATA = 5,
+    AIS_MESSAGE_TYPE_BINARY_ADDRESSED_MESSAGE = 6,
+    AIS_MESSAGE_TYPE_BINARY_ACKNOWLEDGE = 7,
+    AIS_MESSAGE_TYPE_BINARY_BROADCAST_MESSAGE = 8,
+    AIS_MESSAGE_TYPE_SAR_AIRCRAFT_POSITION_REPORT = 9,
+    AIS_MESSAGE_TYPE_UTC_DATE_INQUIRY = 10,
+    AIS_MESSAGE_TYPE_UTC_DATE_RESPONSE = 11,
+    AIS_MESSAGE_TYPE_ADDRESSED_SAFETY_RELATED_MESSAGE = 12,
+    AIS_MESSAGE_TYPE_SAFETY_RELATED_ACKNOWLEDGEMENT = 13,
+    AIS_MESSAGE_TYPE_SAFETY_RELATED_BROADCAST_MESSAGE = 14,
+    AIS_MESSAGE_TYPE_INTERROGATION = 15,
+    AIS_MESSAGE_TYPE_ASSIGNMENT_MODE_COMMAND = 16,
+    AIS_MESSAGE_TYPE_DGNSS_BINARY_BROADCAST_MESSAGE = 17,
+    AIS_MESSAGE_TYPE_STANDARD_CLASS_B_POSITION_REPORT = 18,
+    AIS_MESSAGE_TYPE_EXTENDED_CLASS_B_POSITION_REPORT = 19,
+    AIS_MESSAGE_TYPE_DATA_LINK_MANAGEMENT = 20,
+    AIS_MESSAGE_TYPE_AID_TO_NAVIGATION_REPORT = 21,
+    AIS_MESSAGE_TYPE_CHANNEL_MANAGEMENT = 22,
+    AIS_MESSAGE_TYPE_GROUP_ASSIGNMENT_COMMAND = 23,
+    AIS_MESSAGE_TYPE_STATIC_DATA_REPORT = 24,
+    AIS_MESSAGE_TYPE_SINGLE_SLOT_BINARY_MESSAGE = 25,
+    AIS_MESSAGE_TYPE_MULTI_SLOT_BINARY_MESSAGE = 26,
+    AIS_MESSAGE_TYPE_LONG_RANGE_AIS_BROADCAST_MESSAGE = 27
+};
+
+AisMessageType ais_message_type_from_int(int32_t value) const {
+    switch (value) {
+    case AIS_MESSAGE_TYPE_POSITION_REPORT_CLASS_A_SCHEDULED:
+    case AIS_MESSAGE_TYPE_POSITION_REPORT_CLASS_A_ASSIGNED:
+    case AIS_MESSAGE_TYPE_POSITION_REPORT_CLASS_A_RESPONSE:
+    case AIS_MESSAGE_TYPE_BASE_STATION_REPORT:
+    case AIS_MESSAGE_TYPE_STATIC_AND_VOYAGE_RELATED_DATA:
+    case AIS_MESSAGE_TYPE_BINARY_ADDRESSED_MESSAGE:
+    case AIS_MESSAGE_TYPE_BINARY_ACKNOWLEDGE:
+    case AIS_MESSAGE_TYPE_BINARY_BROADCAST_MESSAGE:
+    case AIS_MESSAGE_TYPE_SAR_AIRCRAFT_POSITION_REPORT:
+    case AIS_MESSAGE_TYPE_UTC_DATE_INQUIRY:
+    case AIS_MESSAGE_TYPE_UTC_DATE_RESPONSE:
+    case AIS_MESSAGE_TYPE_ADDRESSED_SAFETY_RELATED_MESSAGE:
+    case AIS_MESSAGE_TYPE_SAFETY_RELATED_ACKNOWLEDGEMENT:
+    case AIS_MESSAGE_TYPE_SAFETY_RELATED_BROADCAST_MESSAGE:
+    case AIS_MESSAGE_TYPE_INTERROGATION:
+    case AIS_MESSAGE_TYPE_ASSIGNMENT_MODE_COMMAND:
+    case AIS_MESSAGE_TYPE_DGNSS_BINARY_BROADCAST_MESSAGE:
+    case AIS_MESSAGE_TYPE_STANDARD_CLASS_B_POSITION_REPORT:
+    case AIS_MESSAGE_TYPE_EXTENDED_CLASS_B_POSITION_REPORT:
+    case AIS_MESSAGE_TYPE_DATA_LINK_MANAGEMENT:
+    case AIS_MESSAGE_TYPE_AID_TO_NAVIGATION_REPORT:
+    case AIS_MESSAGE_TYPE_CHANNEL_MANAGEMENT:
+    case AIS_MESSAGE_TYPE_GROUP_ASSIGNMENT_COMMAND:
+    case AIS_MESSAGE_TYPE_STATIC_DATA_REPORT:
+    case AIS_MESSAGE_TYPE_SINGLE_SLOT_BINARY_MESSAGE:
+    case AIS_MESSAGE_TYPE_MULTI_SLOT_BINARY_MESSAGE:
+    case AIS_MESSAGE_TYPE_LONG_RANGE_AIS_BROADCAST_MESSAGE:
+        return static_cast<AisMessageType>(value);
+    default:
+        return AIS_MESSAGE_TYPE_UNKNOWN;
+    }
+}
+
+bool ais_message_type_is_class_a_position(AisMessageType type) const {
+    return type == AIS_MESSAGE_TYPE_POSITION_REPORT_CLASS_A_SCHEDULED ||
+           type == AIS_MESSAGE_TYPE_POSITION_REPORT_CLASS_A_ASSIGNED ||
+           type == AIS_MESSAGE_TYPE_POSITION_REPORT_CLASS_A_RESPONSE;
+}
+
+bool ais_message_type_is_class_b_position(AisMessageType type) const {
+    return type == AIS_MESSAGE_TYPE_STANDARD_CLASS_B_POSITION_REPORT ||
+           type == AIS_MESSAGE_TYPE_EXTENDED_CLASS_B_POSITION_REPORT;
+}
+
 struct AisDecodedHeader {
-    int32_t message_type = 0;
+    AisMessageType message_type = AIS_MESSAGE_TYPE_UNKNOWN;
     int32_t repeat_indicator = 0;
     int32_t mmsi = 0;
 };
@@ -58,10 +135,11 @@ int32_t ais_get_s(const char* payload, size_t payload_len, size_t bit_offset, ui
 
 bool ais_decode_header(const char* payload, size_t payload_len, AisDecodedHeader& out) const {
     bool ok = true;
-    out.message_type = static_cast<int32_t>(ais_get_u(payload, payload_len, 0, 6, ok));
+    const int32_t raw_message_type = static_cast<int32_t>(ais_get_u(payload, payload_len, 0, 6, ok));
+    out.message_type = ais_message_type_from_int(raw_message_type);
     out.repeat_indicator = static_cast<int32_t>(ais_get_u(payload, payload_len, 6, 2, ok));
     out.mmsi = static_cast<int32_t>(ais_get_u(payload, payload_len, 8, 30, ok));
-    return ok && out.message_type >= 1 && out.message_type <= 27;
+    return ok && out.message_type != AIS_MESSAGE_TYPE_UNKNOWN;
 }
 
 template<typename Record>
@@ -217,7 +295,7 @@ bool ais_parse_position_report(const char* payload,
     bool ok = true;
     ais_set_header_record(out, header, now_us, source);
 
-    if (header.message_type == 1 || header.message_type == 2 || header.message_type == 3) {
+    if (ais_message_type_is_class_a_position(header.message_type)) {
         const int32_t nav_status = static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 4, ok));
         const int32_t rot_raw = ais_get_s(payload, payload_len, 42, 8, ok);
         const int32_t sog_raw = static_cast<int32_t>(ais_get_u(payload, payload_len, 50, 10, ok));
@@ -246,7 +324,7 @@ bool ais_parse_position_report(const char* payload,
         if (heading_raw < 511) out.true_heading_deg.set(static_cast<Real>(heading_raw), now_us);
         if (timestamp < 60) out.timestamp_s.set(timestamp, now_us);
         out.maneuver_indicator.set(maneuver, now_us);
-    } else if (header.message_type == 18 || header.message_type == 19) {
+    } else if (ais_message_type_is_class_b_position(header.message_type)) {
         const int32_t sog_raw = static_cast<int32_t>(ais_get_u(payload, payload_len, 46, 10, ok));
         const bool accuracy = ais_get_u(payload, payload_len, 56, 1, ok) != 0u;
         const int32_t lon_raw = ais_get_s(payload, payload_len, 57, 28, ok);
@@ -270,7 +348,7 @@ bool ais_parse_position_report(const char* payload,
     }
     out.last_update_us = now_us;
     ais_update_legacy_target_from_position(out, legacy_target, now_us, source);
-    ais_update_target_from_position(target_table, out, header.message_type == 18 || header.message_type == 19, now_us, source);
+    ais_update_target_from_position(target_table, out, ais_message_type_is_class_b_position(header.message_type), now_us, source);
     return true;
 }
 
@@ -604,7 +682,7 @@ bool ais_parse_safety_text(const char* payload,
     bool ok = true;
     ais_set_header_record(out, header, now_us, source);
     ais_update_target_header(target_table, header, now_us, source);
-    if (header.message_type == 12) {
+    if (header.message_type == AIS_MESSAGE_TYPE_ADDRESSED_SAFETY_RELATED_MESSAGE) {
         const int32_t sequence = static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 2, ok));
         const int32_t destination = static_cast<int32_t>(ais_get_u(payload, payload_len, 40, 30, ok));
         const bool retransmit = ais_get_u(payload, payload_len, 70, 1, ok) != 0u;
@@ -613,7 +691,7 @@ bool ais_parse_safety_text(const char* payload,
         out.destination_mmsi.set(destination, now_us);
         out.retransmit = retransmit;
         ais_copy_text(out.text, sizeof(out.text), payload, payload_len, 72, static_cast<uint8_t>((payload_len * 6u - 72u) / 6u));
-    } else if (header.message_type == 14) {
+    } else if (header.message_type == AIS_MESSAGE_TYPE_SAFETY_RELATED_BROADCAST_MESSAGE) {
         ais_copy_text(out.text, sizeof(out.text), payload, payload_len, 40, static_cast<uint8_t>((payload_len * 6u - 40u) / 6u));
     } else {
         return false;
@@ -634,7 +712,7 @@ bool ais_parse_binary_envelope(const char* payload,
     ais_update_target_header(target_table, header, now_us, source);
     const int32_t total_bits = static_cast<int32_t>(payload_len * 6u);
 
-    if (header.message_type == 6) {
+    if (header.message_type == AIS_MESSAGE_TYPE_BINARY_ADDRESSED_MESSAGE) {
         const int32_t sequence = static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 2, ok));
         const int32_t destination = static_cast<int32_t>(ais_get_u(payload, payload_len, 40, 30, ok));
         const bool retransmit = ais_get_u(payload, payload_len, 70, 1, ok) != 0u;
@@ -648,7 +726,7 @@ bool ais_parse_binary_envelope(const char* payload,
         out.dac.set(dac, now_us);
         out.function_id.set(function_id, now_us);
         out.payload_bit_count.set(total_bits > 88 ? total_bits - 88 : 0, now_us);
-    } else if (header.message_type == 8) {
+    } else if (header.message_type == AIS_MESSAGE_TYPE_BINARY_BROADCAST_MESSAGE) {
         const int32_t dac = static_cast<int32_t>(ais_get_u(payload, payload_len, 40, 10, ok));
         const int32_t function_id = static_cast<int32_t>(ais_get_u(payload, payload_len, 50, 6, ok));
         if (!ok) return false;
@@ -656,7 +734,7 @@ bool ais_parse_binary_envelope(const char* payload,
         out.dac.set(dac, now_us);
         out.function_id.set(function_id, now_us);
         out.payload_bit_count.set(total_bits > 56 ? total_bits - 56 : 0, now_us);
-    } else if (header.message_type == 25) {
+    } else if (header.message_type == AIS_MESSAGE_TYPE_SINGLE_SLOT_BINARY_MESSAGE) {
         const bool addressed = ais_get_u(payload, payload_len, 38, 1, ok) != 0u;
         const bool structured = ais_get_u(payload, payload_len, 39, 1, ok) != 0u;
         size_t offset = 40;
@@ -673,7 +751,7 @@ bool ais_parse_binary_envelope(const char* payload,
         }
         if (!ok) return false;
         out.payload_bit_count.set(total_bits > static_cast<int32_t>(offset) ? total_bits - static_cast<int32_t>(offset) : 0, now_us);
-    } else if (header.message_type == 26) {
+    } else if (header.message_type == AIS_MESSAGE_TYPE_MULTI_SLOT_BINARY_MESSAGE) {
         const bool addressed = ais_get_u(payload, payload_len, 38, 1, ok) != 0u;
         const bool structured = ais_get_u(payload, payload_len, 39, 1, ok) != 0u;
         size_t offset = 40;
@@ -741,35 +819,35 @@ bool apply_ais_vdm_vdo(const NmeaSentence& sentence,
 
     bool parsed = false;
     switch (header.message_type) {
-    case 1:
-    case 2:
-    case 3:
+    case AIS_MESSAGE_TYPE_POSITION_REPORT_CLASS_A_SCHEDULED:
+    case AIS_MESSAGE_TYPE_POSITION_REPORT_CLASS_A_ASSIGNED:
+    case AIS_MESSAGE_TYPE_POSITION_REPORT_CLASS_A_RESPONSE:
         parsed = ais_parse_position_report(payload, payload_len, header, now_us, source, model.ais.position_report, model.ais.tracked_target, model.ais.targets);
         break;
-    case 4:
-    case 11:
+    case AIS_MESSAGE_TYPE_BASE_STATION_REPORT:
+    case AIS_MESSAGE_TYPE_UTC_DATE_RESPONSE:
         parsed = ais_parse_base_station(payload, payload_len, header, now_us, source, model.ais.base_station, model.ais.targets);
         break;
-    case 5:
+    case AIS_MESSAGE_TYPE_STATIC_AND_VOYAGE_RELATED_DATA:
         parsed = ais_parse_static_voyage(payload, payload_len, header, now_us, source, model.ais.static_voyage, model.ais.tracked_target, model.ais.targets);
         break;
-    case 6:
-    case 8:
-    case 25:
-    case 26:
+    case AIS_MESSAGE_TYPE_BINARY_ADDRESSED_MESSAGE:
+    case AIS_MESSAGE_TYPE_BINARY_BROADCAST_MESSAGE:
+    case AIS_MESSAGE_TYPE_SINGLE_SLOT_BINARY_MESSAGE:
+    case AIS_MESSAGE_TYPE_MULTI_SLOT_BINARY_MESSAGE:
         parsed = ais_parse_binary_envelope(payload, payload_len, header, now_us, source, model.ais.binary_envelope, model.ais.targets);
         break;
-    case 9:
+    case AIS_MESSAGE_TYPE_SAR_AIRCRAFT_POSITION_REPORT:
         parsed = ais_parse_sar_aircraft_position(payload, payload_len, header, now_us, source, model.ais.sar_aircraft_position, model.ais.targets);
         break;
-    case 12:
-    case 14:
+    case AIS_MESSAGE_TYPE_ADDRESSED_SAFETY_RELATED_MESSAGE:
+    case AIS_MESSAGE_TYPE_SAFETY_RELATED_BROADCAST_MESSAGE:
         parsed = ais_parse_safety_text(payload, payload_len, header, now_us, source, model.ais.safety_text, model.ais.targets);
         break;
-    case 18:
-    case 19:
+    case AIS_MESSAGE_TYPE_STANDARD_CLASS_B_POSITION_REPORT:
+    case AIS_MESSAGE_TYPE_EXTENDED_CLASS_B_POSITION_REPORT:
         parsed = ais_parse_position_report(payload, payload_len, header, now_us, source, model.ais.class_b_position_report, model.ais.tracked_target, model.ais.targets);
-        if (parsed && header.message_type == 19) {
+        if (parsed && header.message_type == AIS_MESSAGE_TYPE_EXTENDED_CLASS_B_POSITION_REPORT) {
             set_source(model.ais.class_b_static.source, source);
             model.ais.class_b_static.message_type.set(header.message_type, now_us);
             model.ais.class_b_static.repeat_indicator.set(header.repeat_indicator, now_us);
@@ -784,13 +862,13 @@ bool apply_ais_vdm_vdo(const NmeaSentence& sentence,
             }
         }
         break;
-    case 21:
+    case AIS_MESSAGE_TYPE_AID_TO_NAVIGATION_REPORT:
         parsed = ais_parse_aid_to_navigation(payload, payload_len, header, now_us, source, model.ais.aid_to_navigation, model.ais.targets);
         break;
-    case 24:
+    case AIS_MESSAGE_TYPE_STATIC_DATA_REPORT:
         parsed = ais_parse_class_b_static(payload, payload_len, header, now_us, source, model.ais.class_b_static, model.ais.tracked_target, model.ais.targets);
         break;
-    case 27:
+    case AIS_MESSAGE_TYPE_LONG_RANGE_AIS_BROADCAST_MESSAGE:
         parsed = ais_parse_long_range_broadcast(payload, payload_len, header, now_us, source, model.ais.long_range_broadcast, model.ais.targets);
         break;
     default:
