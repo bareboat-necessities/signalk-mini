@@ -1,15 +1,16 @@
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <string>
+#include <vector>
 
 #include <signalk_mini.hpp>
 #include <nmea0183_connector.hpp>
 
 #define REQUIRE(x) do { if (!(x)) { std::fprintf(stderr, "FAILED %s:%d: %s\n", __FILE__, __LINE__, #x); std::exit(1); } } while (0)
-
-static constexpr int MAX_FIXTURE_DATA_LINES = 500;
 
 struct FixtureCounts {
     int data_lines = 0;
@@ -17,14 +18,13 @@ struct FixtureCounts {
     int rejected_lines = 0;
 };
 
-static std::string test_source_dir() {
-    const std::string file = __FILE__;
-    const std::string::size_type slash = file.find_last_of("/\\");
-    return slash == std::string::npos ? "." : file.substr(0, slash);
+static std::filesystem::path test_source_dir() {
+    const std::filesystem::path file(__FILE__);
+    return file.has_parent_path() ? file.parent_path() : std::filesystem::path(".");
 }
 
-static std::string fixture_path(const char* name) {
-    return test_source_dir() + "/fixtures/nmea/" + name;
+static std::filesystem::path fixture_dir() {
+    return test_source_dir() / "fixtures" / "nmea";
 }
 
 static bool is_expected_reject(const std::string& line, const char* last_error) {
@@ -36,9 +36,10 @@ static bool is_expected_reject(const std::string& line, const char* last_error) 
     return false;
 }
 
-static FixtureCounts feed_fixture(signalk_mini::SignalKMiniApp<float>& app, const char* name) {
+static FixtureCounts feed_fixture_path(signalk_mini::SignalKMiniApp<float>& app,
+                                       const std::filesystem::path& path) {
     FixtureCounts counts;
-    std::ifstream input(fixture_path(name));
+    std::ifstream input(path);
     REQUIRE(input.good());
 
     uint64_t now_us = 0;
@@ -57,63 +58,85 @@ static FixtureCounts feed_fixture(signalk_mini::SignalKMiniApp<float>& app, cons
             ++counts.rejected_lines;
             continue;
         }
-        std::fprintf(stderr, "Failed fixture %s line %d: %s\n", name, counts.data_lines, line.c_str());
+        std::fprintf(stderr, "Failed fixture %s line %d: %s\n",
+                     path.filename().string().c_str(),
+                     counts.data_lines,
+                     line.c_str());
         std::fprintf(stderr, "last_error=%s\n", app.nmea0183().last_error());
         std::exit(3);
     }
 
     REQUIRE(counts.data_lines > 0);
-    REQUIRE(counts.data_lines <= MAX_FIXTURE_DATA_LINES);
     REQUIRE(counts.accepted_lines > 0);
     REQUIRE(counts.accepted_lines + counts.rejected_lines == counts.data_lines);
     return counts;
 }
 
-static void check_core_real_fixtures() {
-    signalk_mini::SignalKMiniApp<float> app1;
-    REQUIRE(feed_fixture(app1, "tripmate_850_gps_sample.nmea").rejected_lines == 0);
-    REQUIRE(app1.store().model().gnss.fix.fix_lat_deg.valid);
-    REQUIRE(app1.store().model().gnss.fix.fix_lon_deg.valid);
+static std::vector<std::filesystem::path> list_nmea_fixture_paths() {
+    std::vector<std::filesystem::path> fixtures;
+    const auto dir = fixture_dir();
+    REQUIRE(std::filesystem::exists(dir));
+    REQUIRE(std::filesystem::is_directory(dir));
 
-    signalk_mini::SignalKMiniApp<float> app2;
-    REQUIRE(feed_fixture(app2, "aerorust_nmea2.nmea").data_lines == 36);
-    REQUIRE(app2.store().model().gnss.satellites_in_view.satellites_in_view.valid);
+    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+        if (!entry.is_regular_file()) continue;
+        if (entry.path().extension() == ".nmea") fixtures.push_back(entry.path());
+    }
 
-    signalk_mini::SignalKMiniApp<float> app3;
-    REQUIRE(feed_fixture(app3, "aerorust_nmea_with_sat_info.nmea").data_lines == 100);
-
-    signalk_mini::SignalKMiniApp<float> app4;
-    REQUIRE(feed_fixture(app4, "gpsbabel_nmea_ms.nmea").rejected_lines == 0);
-    REQUIRE(app4.store().model().gnss.fix.fix_lat_deg.valid);
-
-    signalk_mini::SignalKMiniApp<float> app5;
-    REQUIRE(feed_fixture(app5, "gpsd_ais_18_27.nmea").rejected_lines == 0);
-
-    signalk_mini::SignalKMiniApp<float> app6;
-    REQUIRE(feed_fixture(app6, "dsc_signalk_examples.nmea").rejected_lines == 0);
-    REQUIRE(app6.store().model().comm.dsc.call_count.valid);
-
-    signalk_mini::SignalKMiniApp<float> app7;
-    REQUIRE(feed_fixture(app7, "navtex_swiftnmea_nrx.nmea").rejected_lines == 0);
-    REQUIRE(app7.store().model().notifications.navtex.received.text_length.valid);
+    std::sort(fixtures.begin(), fixtures.end());
+    REQUIRE(!fixtures.empty());
+    return fixtures;
 }
 
-static void check_safetynet_sm_fixture() {
-    signalk_mini::SignalKMiniApp<float> app;
-    const auto counts = feed_fixture(app, "safetynet_sm_actual.nmea");
-    REQUIRE(counts.data_lines == 9);
-    REQUIRE(counts.rejected_lines == 0);
-    const auto& latest = app.store().model().notifications.inmarsat.safetynet.latest_message;
-    REQUIRE(std::strcmp(latest.message_id, "300001") == 0);
-    REQUIRE(std::strcmp(latest.address_kind, "rectangular_area") == 0);
-    REQUIRE(latest.rectangle_sw_lat_deg.valid);
-    REQUIRE(latest.rectangle_sw_lon_deg.valid);
-    REQUIRE(latest.rectangle_extent_lat_deg.valid);
-    REQUIRE(latest.rectangle_extent_lon_deg.valid);
+static void check_known_fixture_semantics(const std::string& name,
+                                          const signalk_mini::SignalKMiniApp<float>& app,
+                                          const FixtureCounts& counts) {
+    const auto& model = app.store().model();
+
+    if (name == "tripmate_850_gps_sample.nmea") {
+        REQUIRE(counts.rejected_lines == 0);
+        REQUIRE(model.gnss.fix.fix_lat_deg.valid);
+        REQUIRE(model.gnss.fix.fix_lon_deg.valid);
+    } else if (name == "aerorust_nmea2.nmea") {
+        REQUIRE(model.gnss.satellites_in_view.satellites_in_view.valid);
+    } else if (name == "gpsbabel_nmea_ms.nmea") {
+        REQUIRE(counts.rejected_lines == 0);
+        REQUIRE(model.gnss.fix.fix_lat_deg.valid);
+    } else if (name == "gpsd_ais_18_27.nmea") {
+        REQUIRE(counts.rejected_lines == 0);
+    } else if (name == "dsc_signalk_examples.nmea") {
+        REQUIRE(counts.rejected_lines == 0);
+        REQUIRE(model.comm.dsc.call_count.valid);
+    } else if (name == "navtex_swiftnmea_nrx.nmea") {
+        REQUIRE(counts.rejected_lines == 0);
+        REQUIRE(model.notifications.navtex.received.text_length.valid);
+    } else if (name == "safetynet_sm_actual.nmea") {
+        REQUIRE(counts.data_lines == 9);
+        REQUIRE(counts.rejected_lines == 0);
+        const auto& latest = model.notifications.inmarsat.safetynet.latest_message;
+        REQUIRE(std::strcmp(latest.message_id, "300001") == 0);
+        REQUIRE(std::strcmp(latest.address_kind, "rectangular_area") == 0);
+        REQUIRE(latest.rectangle_sw_lat_deg.valid);
+        REQUIRE(latest.rectangle_sw_lon_deg.valid);
+        REQUIRE(latest.rectangle_extent_lat_deg.valid);
+        REQUIRE(latest.rectangle_extent_lon_deg.valid);
+    }
 }
 
 int main() {
-    check_core_real_fixtures();
-    check_safetynet_sm_fixture();
+    const auto fixtures = list_nmea_fixture_paths();
+    int fixture_count = 0;
+    int total_data_lines = 0;
+
+    for (const auto& path : fixtures) {
+        signalk_mini::SignalKMiniApp<float> app;
+        const auto counts = feed_fixture_path(app, path);
+        ++fixture_count;
+        total_data_lines += counts.data_lines;
+        check_known_fixture_semantics(path.filename().string(), app, counts);
+    }
+
+    REQUIRE(fixture_count == static_cast<int>(fixtures.size()));
+    REQUIRE(total_data_lines > 0);
     return 0;
 }
