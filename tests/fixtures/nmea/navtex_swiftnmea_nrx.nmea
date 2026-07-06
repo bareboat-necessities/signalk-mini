@@ -1,0 +1,3 @@
+# Source: RISCfuture/SwiftNMEA Tests/SwiftNMEATests/Messages/NRXSpec.swift commit fbe582c2357014ee0a469b76a850357005af683e
+# Real public NRX example lines copied without synthetic repetition.
+$CRNRX,007,001,00,IE69,1,135600,27,06,2001,241,3,A,==========================*09
