@@ -1,5 +1,7 @@
-# Source: RISCfuture/SwiftNMEA Tests/SwiftNMEATests/Messages/NRXSpec.swift commit fbe582c2357014ee0a469b76a850357005af683e
-# Real public NRX example lines copied without synthetic repetition.
+# Source: RISCfuture/SwiftNMEA Tests/SwiftNMEATests/Messages/NRXSpec.swift and NRMSpec.swift commit fbe582c2357014ee0a469b76a850357005af683e
+# Real public NRX/NRM example lines copied without synthetic repetition.
 $CRNRX,007,001,00,IE69,1,135600,27,06,2001,241,3,A,==========================*09
 $CRNRX,007,002,00,,,,,,,,,,========^0D^0AISSUED ON SATURDAY 06 JANUARY 2001.*29
 $CRNRX,007,003,00,,,,,,,,,,^0D^0AINSHORE WATERS FORECAST TO 12 MILES^0D^0AOFF*0D
+$INNRM,2,1,00001E1F,00000023,R*29
+$INNRM,0,2,00001E1F,0FFFFFFF,R*5F
