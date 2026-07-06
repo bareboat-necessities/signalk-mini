@@ -100,10 +100,10 @@ static void check_aerorust_nmea2() {
     REQUIRE(model.notifications.messages.text.field_count.valid);
 }
 
-static void check_aerorust_satellite_chunk(const char* name) {
+static void check_aerorust_satellite_fixture() {
     signalk_mini::SignalKMiniApp<float> app;
-    const auto counts = feed_fixture(app, name);
-    REQUIRE(counts.data_lines == 50);
+    const auto counts = feed_fixture(app, "aerorust_nmea_with_sat_info.nmea");
+    REQUIRE(counts.data_lines == 100);
     const auto& model = app.store().model();
     REQUIRE(model.gnss.fix.fix_lat_deg.valid || model.gnss.satellites_in_view.satellites_in_view.valid);
 }
@@ -133,10 +133,7 @@ static void check_gpsd_ais_18_27() {
 int main() {
     check_tripmate_sample();
     check_aerorust_nmea2();
-    check_aerorust_satellite_chunk("aerorust_nmea_with_sat_info_001_050.nmea");
-    check_aerorust_satellite_chunk("aerorust_nmea_with_sat_info_051_100.nmea");
-    check_aerorust_satellite_chunk("aerorust_nmea_with_sat_info_101_150.nmea");
-    check_aerorust_satellite_chunk("aerorust_nmea_with_sat_info_151_200.nmea");
+    check_aerorust_satellite_fixture();
     check_gpsbabel_nmea_ms();
     check_gpsd_ais_18_27();
     return 0;
