@@ -116,9 +116,14 @@ inline bool nmea_is_dsc_sentence(const NmeaSentence& s) {
     return sentence_is_any(s, "DSC", "DSE", "DSI") || sentence_is(s, "DSR");
 }
 
+inline bool nmea_is_inmarsat_sm_sentence(const NmeaSentence& s) {
+    return sentence_is_any(s, "SM1", "SM2", "SM3");
+}
+
 inline bool nmea_is_inmarsat_sentence(const NmeaSentence& s) {
     return nmea_span_starts_with(s.body, "PINM") || nmea_span_starts_with(s.body, "INM") ||
-           sentence_is_any(s, "IMK", "IMN", "IMR") || talker_is(s, "IC") || talker_is(s, "CS");
+           sentence_is_any(s, "IMK", "IMN", "IMR") || nmea_is_inmarsat_sm_sentence(s) ||
+           talker_is(s, "IC") || talker_is(s, "CS");
 }
 
 inline bool nmea_is_proprietary_sentence(const NmeaSentence& s) {
