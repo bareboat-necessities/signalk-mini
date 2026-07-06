@@ -5,6 +5,7 @@
 namespace ship_data_model {
 
 static const uint8_t DSC_CALL_HISTORY_CAPACITY = 4;
+static const uint8_t INMARSAT_MESSAGE_HISTORY_CAPACITY = 4;
 
 template<typename Real = float>
 struct RadioFrequencySetData {
@@ -182,6 +183,8 @@ struct InmarsatMessageData {
     Stamped<int32_t> field_count;
     bool complete = false;
     bool overflow = false;
+    bool duplicate = false;
+    Stamped<int32_t> repeat_count;
     uint64_t first_seen_us = 0;
     uint64_t last_update_us = 0;
 };
@@ -189,7 +192,12 @@ struct InmarsatMessageData {
 template<typename Real = float>
 struct InmarsatData {
     InmarsatMessageData<Real> latest_message;
+    InmarsatMessageData<Real> recent_messages[INMARSAT_MESSAGE_HISTORY_CAPACITY];
+    Stamped<int32_t> recent_message_count;
+    Stamped<int32_t> recent_message_next_index;
     Stamped<int32_t> message_count;
+    Stamped<int32_t> duplicate_count;
+    Stamped<int32_t> overwrite_count;
     Stamped<int32_t> unsupported_count;
     Stamped<int32_t> bad_fragment_count;
 };

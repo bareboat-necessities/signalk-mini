@@ -119,6 +119,56 @@ void set_inmarsat_sentence_decoding(Message& message, ship_data_model::InmarsatS
 }
 
 template<typename Message>
+bool inmarsat_same_decoded_message(const Message& a, const Message& b) const {
+    return strcmp(a.message_id, b.message_id) == 0 &&
+           strcmp(a.terminal_id, b.terminal_id) == 0 &&
+           strcmp(a.message_type, b.message_type) == 0 &&
+           strcmp(a.message_status, b.message_status) == 0 &&
+           strcmp(a.decoded_text, b.decoded_text) == 0;
+}
+
+template<typename InmarsatData, typename Message>
+void store_inmarsat_recent_message(InmarsatData& inmarsat, Message& message, uint64_t now_us) const {
+    const uint8_t capacity = ship_data_model::INMARSAT_MESSAGE_HISTORY_CAPACITY;
+    for (uint8_t i = 0; i < capacity; ++i) {
+        auto& slot = inmarsat.recent_messages[i];
+        if (slot.first_seen_us != 0 && inmarsat_same_decoded_message(slot, message)) {
+            const int32_t repeat = slot.repeat_count.valid ? slot.repeat_count.value + 1 : 2;
+            const uint64_t first_seen = slot.first_seen_us;
+            slot = message;
+            slot.first_seen_us = first_seen;
+            slot.last_update_us = now_us;
+            slot.duplicate = true;
+            slot.repeat_count.set(repeat, now_us);
+            message = slot;
+            inmarsat.duplicate_count.set(inmarsat.duplicate_count.value + 1, now_us);
+            return;
+        }
+    }
+
+    int32_t next = inmarsat.recent_message_next_index.valid ? inmarsat.recent_message_next_index.value : 0;
+    if (next < 0 || next >= static_cast<int32_t>(capacity)) next = 0;
+    auto& slot = inmarsat.recent_messages[static_cast<uint8_t>(next)];
+    const bool overwriting = slot.first_seen_us != 0;
+    if (message.first_seen_us == 0) message.first_seen_us = now_us;
+    message.last_update_us = now_us;
+    message.duplicate = false;
+    message.repeat_count.set(1, now_us);
+    slot = message;
+
+    const int32_t count = inmarsat.recent_message_count.valid ? inmarsat.recent_message_count.value : 0;
+    if (count < static_cast<int32_t>(capacity)) inmarsat.recent_message_count.set(count + 1, now_us);
+    if (overwriting) inmarsat.overwrite_count.set(inmarsat.overwrite_count.value + 1, now_us);
+    inmarsat.recent_message_next_index.set((next + 1) % static_cast<int32_t>(capacity), now_us);
+}
+
+template<typename InmarsatData, typename Message>
+void commit_inmarsat_decoded_message(InmarsatData& inmarsat, Message& message, uint64_t now_us) const {
+    store_inmarsat_recent_message(inmarsat, message, now_us);
+    inmarsat.message_count.set(inmarsat.message_count.value + 1, now_us);
+}
+
+template<typename Message>
 void decode_inmarsat_payload(Message& dst, const char* text, uint64_t now_us) const {
     dst.payload_type = ship_data_model::InmarsatPayloadType::none;
     dst.ascii_valid = true;
@@ -264,7 +314,7 @@ bool commit_inmarsat_multipart_message(const NmeaSentence& sentence,
     dst.overflow = assembled.overflow || strlen(assembled.text) >= sizeof(dst.decoded_text);
     dst.first_seen_us = now_us;
     dst.last_update_us = now_us;
-    inmarsat.message_count.set(inmarsat.message_count.value + 1, now_us);
+    commit_inmarsat_decoded_message(inmarsat, dst, now_us);
     return true;
 }
 
@@ -315,7 +365,7 @@ bool commit_inmarsat_single_message(const NmeaSentence& sentence,
     dst.overflow = payload.length >= sizeof(dst.decoded_text);
     dst.first_seen_us = now_us;
     dst.last_update_us = now_us;
-    inmarsat.message_count.set(inmarsat.message_count.value + 1, now_us);
+    commit_inmarsat_decoded_message(inmarsat, dst, now_us);
     return true;
 }
 
