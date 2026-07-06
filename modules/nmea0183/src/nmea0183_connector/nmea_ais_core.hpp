@@ -176,14 +176,14 @@ bool ais_position_deg(int32_t raw, bool longitude, Real& out_deg) const {
     const int32_t unavailable = longitude ? 108600000 : 54600000;
     const int32_t max_abs = longitude ? 108000000 : 54000000;
     if (raw == unavailable || raw > max_abs || raw < -max_abs) return false;
-    out_deg = static_cast<Real>(static_cast<float>(raw) / 600000.0f);
+    out_deg = static_cast<Real>(static_cast<float>(raw) * AIS_POSITION_1_10000_MIN_TO_DEG);
     return true;
 }
 
 bool ais_long_range_position_deg(int32_t raw, bool longitude, Real& out_deg) const {
     const int32_t max_abs = longitude ? 108000 : 54000;
     if (raw > max_abs || raw < -max_abs) return false;
-    out_deg = static_cast<Real>(static_cast<float>(raw) / 600.0f);
+    out_deg = static_cast<Real>(static_cast<float>(raw) * AIS_POSITION_1_10_MIN_TO_DEG);
     return true;
 }
 
@@ -296,7 +296,7 @@ bool ais_parse_position_report(const char* payload,
     ais_set_header_record(out, header, now_us, source);
 
     if (ais_message_type_is_class_a_position(header.message_type)) {
-        const int32_t nav_status = static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 4, ok));
+        const AisNavigationStatus nav_status = ais_navigation_status_from_int(static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 4, ok)));
         const int32_t rot_raw = ais_get_s(payload, payload_len, 42, 8, ok);
         const int32_t sog_raw = static_cast<int32_t>(ais_get_u(payload, payload_len, 50, 10, ok));
         const bool accuracy = ais_get_u(payload, payload_len, 60, 1, ok) != 0u;
@@ -305,24 +305,24 @@ bool ais_parse_position_report(const char* payload,
         const int32_t cog_raw = static_cast<int32_t>(ais_get_u(payload, payload_len, 116, 12, ok));
         const int32_t heading_raw = static_cast<int32_t>(ais_get_u(payload, payload_len, 128, 9, ok));
         const int32_t timestamp = static_cast<int32_t>(ais_get_u(payload, payload_len, 137, 6, ok));
-        const int32_t maneuver = static_cast<int32_t>(ais_get_u(payload, payload_len, 143, 2, ok));
+        const AisManeuverIndicator maneuver = ais_maneuver_indicator_from_int(static_cast<int32_t>(ais_get_u(payload, payload_len, 143, 2, ok)));
         out.raim = ais_get_u(payload, payload_len, 148, 1, ok) != 0u;
         if (!ok) return false;
         out.navigation_status.set(nav_status, now_us);
-        if (rot_raw != -128) {
-            const float signed_rot = static_cast<float>(rot_raw) / 4.733f;
+        if (rot_raw != AIS_ROT_NOT_AVAILABLE) {
+            const float signed_rot = static_cast<float>(rot_raw) / AIS_ROT_SCALE;
             const float rot_deg_min = signed_rot < 0.0f ? -(signed_rot * signed_rot) : signed_rot * signed_rot;
             out.rate_of_turn_deg_min.set(static_cast<Real>(rot_deg_min), now_us);
         }
-        if (sog_raw < 1023) out.speed_over_ground_kn.set(static_cast<Real>(static_cast<float>(sog_raw) / 10.0f), now_us);
+        if (sog_raw < AIS_SOG_NOT_AVAILABLE) out.speed_over_ground_kn.set(static_cast<Real>(static_cast<float>(sog_raw) * AIS_TENTHS_SCALE), now_us);
         out.position_accuracy = accuracy;
         Real lon = Real{};
         Real lat = Real{};
         if (ais_position_deg(lon_raw, true, lon)) out.longitude_deg.set(lon, now_us);
         if (ais_position_deg(lat_raw, false, lat)) out.latitude_deg.set(lat, now_us);
-        if (cog_raw < 3600) out.course_over_ground_deg.set(static_cast<Real>(static_cast<float>(cog_raw) / 10.0f), now_us);
-        if (heading_raw < 511) out.true_heading_deg.set(static_cast<Real>(heading_raw), now_us);
-        if (timestamp < 60) out.timestamp_s.set(timestamp, now_us);
+        if (cog_raw < AIS_COG_NOT_AVAILABLE) out.course_over_ground_deg.set(static_cast<Real>(static_cast<float>(cog_raw) * AIS_TENTHS_SCALE), now_us);
+        if (heading_raw < AIS_HEADING_NOT_AVAILABLE) out.true_heading_deg.set(static_cast<Real>(heading_raw), now_us);
+        if (timestamp < AIS_TIMESTAMP_NOT_AVAILABLE_S) out.timestamp_s.set(timestamp, now_us);
         out.maneuver_indicator.set(maneuver, now_us);
     } else if (ais_message_type_is_class_b_position(header.message_type)) {
         const int32_t sog_raw = static_cast<int32_t>(ais_get_u(payload, payload_len, 46, 10, ok));
@@ -334,15 +334,15 @@ bool ais_parse_position_report(const char* payload,
         const int32_t timestamp = static_cast<int32_t>(ais_get_u(payload, payload_len, 133, 6, ok));
         out.raim = ais_get_u(payload, payload_len, 147, 1, ok) != 0u;
         if (!ok) return false;
-        if (sog_raw < 1023) out.speed_over_ground_kn.set(static_cast<Real>(static_cast<float>(sog_raw) / 10.0f), now_us);
+        if (sog_raw < AIS_SOG_NOT_AVAILABLE) out.speed_over_ground_kn.set(static_cast<Real>(static_cast<float>(sog_raw) * AIS_TENTHS_SCALE), now_us);
         out.position_accuracy = accuracy;
         Real lon = Real{};
         Real lat = Real{};
         if (ais_position_deg(lon_raw, true, lon)) out.longitude_deg.set(lon, now_us);
         if (ais_position_deg(lat_raw, false, lat)) out.latitude_deg.set(lat, now_us);
-        if (cog_raw < 3600) out.course_over_ground_deg.set(static_cast<Real>(static_cast<float>(cog_raw) / 10.0f), now_us);
-        if (heading_raw < 511) out.true_heading_deg.set(static_cast<Real>(heading_raw), now_us);
-        if (timestamp < 60) out.timestamp_s.set(timestamp, now_us);
+        if (cog_raw < AIS_COG_NOT_AVAILABLE) out.course_over_ground_deg.set(static_cast<Real>(static_cast<float>(cog_raw) * AIS_TENTHS_SCALE), now_us);
+        if (heading_raw < AIS_HEADING_NOT_AVAILABLE) out.true_heading_deg.set(static_cast<Real>(heading_raw), now_us);
+        if (timestamp < AIS_TIMESTAMP_NOT_AVAILABLE_S) out.timestamp_s.set(timestamp, now_us);
     } else {
         return false;
     }
@@ -373,15 +373,15 @@ bool ais_parse_sar_aircraft_position(const char* payload,
     const bool raim = ais_get_u(payload, payload_len, 148, 1, ok) != 0u;
     if (!ok) return false;
     ais_set_header_record(out, header, now_us, source);
-    if (altitude < 4095) out.altitude_m.set(altitude, now_us);
-    if (sog_raw < 1023) out.speed_over_ground_kn.set(static_cast<Real>(static_cast<float>(sog_raw) / 10.0f), now_us);
+    if (altitude < AIS_ALTITUDE_NOT_AVAILABLE) out.altitude_m.set(altitude, now_us);
+    if (sog_raw < AIS_SOG_NOT_AVAILABLE) out.speed_over_ground_kn.set(static_cast<Real>(static_cast<float>(sog_raw) * AIS_TENTHS_SCALE), now_us);
     out.position_accuracy = accuracy;
     Real lon = Real{};
     Real lat = Real{};
     if (ais_position_deg(lon_raw, true, lon)) out.longitude_deg.set(lon, now_us);
     if (ais_position_deg(lat_raw, false, lat)) out.latitude_deg.set(lat, now_us);
-    if (cog_raw < 3600) out.course_over_ground_deg.set(static_cast<Real>(static_cast<float>(cog_raw) / 10.0f), now_us);
-    if (timestamp < 60) out.timestamp_s.set(timestamp, now_us);
+    if (cog_raw < AIS_COG_NOT_AVAILABLE) out.course_over_ground_deg.set(static_cast<Real>(static_cast<float>(cog_raw) * AIS_TENTHS_SCALE), now_us);
+    if (timestamp < AIS_TIMESTAMP_NOT_AVAILABLE_S) out.timestamp_s.set(timestamp, now_us);
     out.altitude_sensor_barometric = altitude_sensor;
     out.dte_ready = !dte_not_ready;
     out.assigned_mode = assigned_mode;
@@ -422,7 +422,7 @@ bool ais_parse_base_station(const char* payload,
     const bool accuracy = ais_get_u(payload, payload_len, 78, 1, ok) != 0u;
     const int32_t lon_raw = ais_get_s(payload, payload_len, 79, 28, ok);
     const int32_t lat_raw = ais_get_s(payload, payload_len, 107, 27, ok);
-    const int32_t epfd = static_cast<int32_t>(ais_get_u(payload, payload_len, 134, 4, ok));
+    const AisEpfdType epfd = ais_epfd_type_from_int(static_cast<int32_t>(ais_get_u(payload, payload_len, 134, 4, ok)));
     const bool raim = ais_get_u(payload, payload_len, 148, 1, ok) != 0u;
     if (!ok) return false;
     ais_set_header_record(out, header, now_us, source);
@@ -466,12 +466,12 @@ bool ais_parse_static_voyage(const char* payload,
     bool ok = true;
     const int32_t ais_version = static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 2, ok));
     const int32_t imo = static_cast<int32_t>(ais_get_u(payload, payload_len, 40, 30, ok));
-    const int32_t ship_type = static_cast<int32_t>(ais_get_u(payload, payload_len, 232, 8, ok));
+    const AisShipType ship_type = static_cast<AisShipType>(ais_get_u(payload, payload_len, 232, 8, ok));
     const int32_t bow = static_cast<int32_t>(ais_get_u(payload, payload_len, 240, 9, ok));
     const int32_t stern = static_cast<int32_t>(ais_get_u(payload, payload_len, 249, 9, ok));
     const int32_t port = static_cast<int32_t>(ais_get_u(payload, payload_len, 258, 6, ok));
     const int32_t starboard = static_cast<int32_t>(ais_get_u(payload, payload_len, 264, 6, ok));
-    const int32_t epfd = static_cast<int32_t>(ais_get_u(payload, payload_len, 270, 4, ok));
+    const AisEpfdType epfd = ais_epfd_type_from_int(static_cast<int32_t>(ais_get_u(payload, payload_len, 270, 4, ok)));
     const int32_t eta_month = static_cast<int32_t>(ais_get_u(payload, payload_len, 274, 4, ok));
     const int32_t eta_day = static_cast<int32_t>(ais_get_u(payload, payload_len, 278, 5, ok));
     const int32_t eta_hour = static_cast<int32_t>(ais_get_u(payload, payload_len, 283, 5, ok));
@@ -494,7 +494,7 @@ bool ais_parse_static_voyage(const char* payload,
     out.eta_day.set(eta_day, now_us);
     out.eta_hour.set(eta_hour, now_us);
     out.eta_minute.set(eta_minute, now_us);
-    out.draught_m.set(static_cast<Real>(static_cast<float>(draught_dm) / 10.0f), now_us);
+    out.draught_m.set(static_cast<Real>(static_cast<float>(draught_dm) * AIS_TENTHS_SCALE), now_us);
     ais_copy_text(out.destination, sizeof(out.destination), payload, payload_len, 302, 20);
     out.dte_ready = !dte_not_ready;
     out.last_update_us = now_us;
@@ -526,15 +526,15 @@ bool ais_parse_class_b_static(const char* payload,
                               ship_data_model::TrackedTargetData<Real>& legacy_target,
                               ship_data_model::AisTargetTableData<Real>& target_table) {
     bool ok = true;
-    const int32_t part = static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 2, ok));
+    const AisStaticDataPart part = ais_static_data_part_from_int(static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 2, ok)));
     if (!ok) return false;
     ais_set_header_record(out, header, now_us, source);
     out.part_number.set(part, now_us);
-    if (part == 0) {
+    if (part == AIS_STATIC_DATA_PART_A) {
         ais_copy_text(out.vessel_name, sizeof(out.vessel_name), payload, payload_len, 40, 20);
         nmea_copy_cstr(legacy_target.target_name, sizeof(legacy_target.target_name), out.vessel_name);
-    } else if (part == 1) {
-        const int32_t ship_type = static_cast<int32_t>(ais_get_u(payload, payload_len, 40, 8, ok));
+    } else if (part == AIS_STATIC_DATA_PART_B) {
+        const AisShipType ship_type = static_cast<AisShipType>(ais_get_u(payload, payload_len, 40, 8, ok));
         const int32_t bow = static_cast<int32_t>(ais_get_u(payload, payload_len, 132, 9, ok));
         const int32_t stern = static_cast<int32_t>(ais_get_u(payload, payload_len, 141, 9, ok));
         const int32_t port = static_cast<int32_t>(ais_get_u(payload, payload_len, 150, 6, ok));
@@ -574,7 +574,7 @@ bool ais_parse_aid_to_navigation(const char* payload,
                                  ship_data_model::AisAidToNavigationData<Real>& out,
                                  ship_data_model::AisTargetTableData<Real>& target_table) {
     bool ok = true;
-    const int32_t aid_type = static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 5, ok));
+    const AisAidType aid_type = static_cast<AisAidType>(ais_get_u(payload, payload_len, 38, 5, ok));
     const bool accuracy = ais_get_u(payload, payload_len, 163, 1, ok) != 0u;
     const int32_t lon_raw = ais_get_s(payload, payload_len, 164, 28, ok);
     const int32_t lat_raw = ais_get_s(payload, payload_len, 192, 27, ok);
@@ -582,7 +582,7 @@ bool ais_parse_aid_to_navigation(const char* payload,
     const int32_t stern = static_cast<int32_t>(ais_get_u(payload, payload_len, 228, 9, ok));
     const int32_t port = static_cast<int32_t>(ais_get_u(payload, payload_len, 237, 6, ok));
     const int32_t starboard = static_cast<int32_t>(ais_get_u(payload, payload_len, 243, 6, ok));
-    const int32_t epfd = static_cast<int32_t>(ais_get_u(payload, payload_len, 249, 4, ok));
+    const AisEpfdType epfd = ais_epfd_type_from_int(static_cast<int32_t>(ais_get_u(payload, payload_len, 249, 4, ok)));
     const int32_t timestamp = static_cast<int32_t>(ais_get_u(payload, payload_len, 253, 6, ok));
     const bool off_position = ais_get_u(payload, payload_len, 259, 1, ok) != 0u;
     const bool raim = ais_get_u(payload, payload_len, 268, 1, ok) != 0u;
@@ -602,7 +602,7 @@ bool ais_parse_aid_to_navigation(const char* payload,
     out.dimension_to_port_m.set(port, now_us);
     out.dimension_to_starboard_m.set(starboard, now_us);
     out.epfd_type.set(epfd, now_us);
-    if (timestamp < 60) out.timestamp_s.set(timestamp, now_us);
+    if (timestamp < AIS_TIMESTAMP_NOT_AVAILABLE_S) out.timestamp_s.set(timestamp, now_us);
     out.off_position = off_position;
     out.raim = raim;
     out.virtual_aid = virtual_aid;
@@ -636,7 +636,7 @@ bool ais_parse_long_range_broadcast(const char* payload,
     bool ok = true;
     const bool accuracy = ais_get_u(payload, payload_len, 38, 1, ok) != 0u;
     const bool raim = ais_get_u(payload, payload_len, 39, 1, ok) != 0u;
-    const int32_t nav_status = static_cast<int32_t>(ais_get_u(payload, payload_len, 40, 4, ok));
+    const AisNavigationStatus nav_status = ais_navigation_status_from_int(static_cast<int32_t>(ais_get_u(payload, payload_len, 40, 4, ok)));
     const int32_t lon_raw = ais_get_s(payload, payload_len, 44, 18, ok);
     const int32_t lat_raw = ais_get_s(payload, payload_len, 62, 17, ok);
     const int32_t sog_raw = static_cast<int32_t>(ais_get_u(payload, payload_len, 79, 6, ok));
@@ -651,8 +651,8 @@ bool ais_parse_long_range_broadcast(const char* payload,
     Real lat = Real{};
     if (ais_long_range_position_deg(lon_raw, true, lon)) out.longitude_deg.set(lon, now_us);
     if (ais_long_range_position_deg(lat_raw, false, lat)) out.latitude_deg.set(lat, now_us);
-    if (sog_raw < 63) out.speed_over_ground_kn.set(static_cast<Real>(sog_raw), now_us);
-    if (cog_raw < 360) out.course_over_ground_deg.set(static_cast<Real>(cog_raw), now_us);
+    if (sog_raw < AIS_LONG_RANGE_SOG_NOT_AVAILABLE) out.speed_over_ground_kn.set(static_cast<Real>(sog_raw), now_us);
+    if (cog_raw < AIS_LONG_RANGE_COG_NOT_AVAILABLE) out.course_over_ground_deg.set(static_cast<Real>(cog_raw), now_us);
     out.gnss_position_status = gnss_status;
     out.last_update_us = now_us;
 
