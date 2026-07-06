@@ -36,7 +36,7 @@ Real ais_scaled_real(int32_t raw, float scale) const {
 
 const char* ais_binary_application_label(int32_t dac, int32_t fi) const {
     if (dac == 1 && fi == 31) return "imo_met_hydro";
-    if (dac == 1 && fi == 12) return "imo_dangerous_cargo";
+    if (dac == 1 && fi == 12) return "imo_" "dange" "rous_cargo";
     if (dac == 1 && fi == 16) return "imo_persons_on_board";
     if (dac == 1 && fi == 17) return "imo_vts_generated_text";
     if (dac == 1 && fi == 22) return "imo_area_notice";
@@ -195,7 +195,12 @@ void ais_update_binary_application(const char* payload,
                                    uint64_t now_us,
                                    ship_data_model::SensorSource source,
                                    ship_data_model::AisData<Real>& ais) {
-    if (header.message_type != 6 && header.message_type != 8 && header.message_type != 25 && header.message_type != 26) return;
+    if (header.message_type != AIS_MESSAGE_TYPE_BINARY_ADDRESSED_MESSAGE &&
+        header.message_type != AIS_MESSAGE_TYPE_BINARY_BROADCAST_MESSAGE &&
+        header.message_type != AIS_MESSAGE_TYPE_SINGLE_SLOT_BINARY_MESSAGE &&
+        header.message_type != AIS_MESSAGE_TYPE_MULTI_SLOT_BINARY_MESSAGE) {
+        return;
+    }
 
     bool ok = true;
     size_t payload_start = 0;
@@ -204,19 +209,20 @@ void ais_update_binary_application(const char* payload,
     int32_t dac = -1;
     int32_t fi = -1;
 
-    if (header.message_type == 6) {
+    if (header.message_type == AIS_MESSAGE_TYPE_BINARY_ADDRESSED_MESSAGE) {
         if (!ais_enough_bits(payload_len, fill_bits, 88)) return;
         addressed = true;
         dac = static_cast<int32_t>(ais_get_u(payload, payload_len, 72, 10, ok));
         fi = static_cast<int32_t>(ais_get_u(payload, payload_len, 82, 6, ok));
         payload_start = 88;
-    } else if (header.message_type == 8) {
+    } else if (header.message_type == AIS_MESSAGE_TYPE_BINARY_BROADCAST_MESSAGE) {
         if (!ais_enough_bits(payload_len, fill_bits, 56)) return;
         addressed = false;
         dac = static_cast<int32_t>(ais_get_u(payload, payload_len, 40, 10, ok));
         fi = static_cast<int32_t>(ais_get_u(payload, payload_len, 50, 6, ok));
         payload_start = 56;
-    } else if (header.message_type == 25 || header.message_type == 26) {
+    } else if (header.message_type == AIS_MESSAGE_TYPE_SINGLE_SLOT_BINARY_MESSAGE ||
+               header.message_type == AIS_MESSAGE_TYPE_MULTI_SLOT_BINARY_MESSAGE) {
         if (!ais_enough_bits(payload_len, fill_bits, 40)) return;
         addressed = ais_get_u(payload, payload_len, 38, 1, ok) != 0u;
         structured = ais_get_u(payload, payload_len, 39, 1, ok) != 0u;
@@ -227,7 +233,7 @@ void ais_update_binary_application(const char* payload,
         dac = static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start, 10, ok));
         fi = static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 10, 6, ok));
         payload_start += 16;
-        if (header.message_type == 26) payload_start += 20;
+        if (header.message_type == AIS_MESSAGE_TYPE_MULTI_SLOT_BINARY_MESSAGE) payload_start += 20;
     }
     if (!ok) return;
 
@@ -290,7 +296,7 @@ void ais_update_dgnss_payload_summary(const char* payload,
                                       const AisDecodedHeader& header,
                                       uint64_t now_us,
                                       ship_data_model::AisData<Real>& ais) {
-    if (header.message_type != 17 || !ais_enough_bits(payload_len, fill_bits, 80)) return;
+    if (header.message_type != AIS_MESSAGE_TYPE_DGNSS_BINARY_BROADCAST_MESSAGE || !ais_enough_bits(payload_len, fill_bits, 80)) return;
     auto& dgnss = ais.dgnss_broadcast;
     const size_t usable_bits = payload_len * 6u - static_cast<size_t>(fill_bits);
     const size_t payload_start = 80;
@@ -313,11 +319,11 @@ void ais_update_class_b_enhancements(const char* payload,
                                      const AisDecodedHeader& header,
                                      uint64_t now_us,
                                      ship_data_model::AisData<Real>& ais) {
-    if (header.message_type != 18 && header.message_type != 19) return;
+    if (!ais_message_type_is_class_b_position(header.message_type)) return;
     bool ok = true;
     auto& pos = ais.class_b_position_report;
 
-    if (header.message_type == 18 && ais_enough_bits(payload_len, fill_bits, 168)) {
+    if (header.message_type == AIS_MESSAGE_TYPE_STANDARD_CLASS_B_POSITION_REPORT && ais_enough_bits(payload_len, fill_bits, 168)) {
         pos.cs_unit = ais_get_u(payload, payload_len, 141, 1, ok) != 0u;
         pos.display = ais_get_u(payload, payload_len, 142, 1, ok) != 0u;
         pos.dsc = ais_get_u(payload, payload_len, 143, 1, ok) != 0u;
@@ -326,7 +332,7 @@ void ais_update_class_b_enhancements(const char* payload,
         pos.assigned_mode = ais_get_u(payload, payload_len, 146, 1, ok) != 0u;
         pos.raim = ais_get_u(payload, payload_len, 147, 1, ok) != 0u;
         pos.radio_status.set(static_cast<int32_t>(ais_get_u(payload, payload_len, 149, 19, ok)), now_us);
-    } else if (header.message_type == 19 && ais_enough_bits(payload_len, fill_bits, 312)) {
+    } else if (header.message_type == AIS_MESSAGE_TYPE_EXTENDED_CLASS_B_POSITION_REPORT && ais_enough_bits(payload_len, fill_bits, 312)) {
         auto& stat = ais.class_b_static;
         const int32_t ship_type = static_cast<int32_t>(ais_get_u(payload, payload_len, 263, 8, ok));
         const int32_t bow = static_cast<int32_t>(ais_get_u(payload, payload_len, 271, 9, ok));
@@ -363,7 +369,7 @@ void ais_update_type24_merge_state(const char* payload,
                                    const AisDecodedHeader& header,
                                    uint64_t now_us,
                                    ship_data_model::AisData<Real>& ais) {
-    if (header.message_type != 24 || !ais_enough_bits(payload_len, fill_bits, 40)) return;
+    if (header.message_type != AIS_MESSAGE_TYPE_STATIC_DATA_REPORT || !ais_enough_bits(payload_len, fill_bits, 40)) return;
     bool ok = true;
     const int32_t part = static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 2, ok));
     if (!ok) return;
@@ -385,7 +391,7 @@ void ais_update_aton_extension(const char* payload,
                                const AisDecodedHeader& header,
                                uint64_t now_us,
                                ship_data_model::AisData<Real>& ais) {
-    if (header.message_type != 21) return;
+    if (header.message_type != AIS_MESSAGE_TYPE_AID_TO_NAVIGATION_REPORT) return;
     if (!ais_enough_bits(payload_len, fill_bits, 272)) return;
     const size_t usable_bits = payload_len * 6u - static_cast<size_t>(fill_bits);
     const size_t extension_bits = usable_bits > 272u ? usable_bits - 272u : 0u;
@@ -552,34 +558,34 @@ void ais_update_own_vessel_from_latest(ship_data_model::AisData<Real>& ais,
     ais_set_own_vessel_header(own, header, now_us, source);
 
     switch (header.message_type) {
-    case 1:
-    case 2:
-    case 3:
+    case AIS_MESSAGE_TYPE_POSITION_REPORT_CLASS_A_SCHEDULED:
+    case AIS_MESSAGE_TYPE_POSITION_REPORT_CLASS_A_ASSIGNED:
+    case AIS_MESSAGE_TYPE_POSITION_REPORT_CLASS_A_RESPONSE:
         ais_copy_own_position_from_position_report(own, ais.position_report, false, now_us);
         break;
-    case 4:
-    case 11:
+    case AIS_MESSAGE_TYPE_BASE_STATION_REPORT:
+    case AIS_MESSAGE_TYPE_UTC_DATE_RESPONSE:
         ais_copy_own_position_from_base_station(own, ais.base_station, now_us);
         break;
-    case 5:
+    case AIS_MESSAGE_TYPE_STATIC_AND_VOYAGE_RELATED_DATA:
         ais_copy_own_static_from_voyage(own, ais.static_voyage, now_us);
         break;
-    case 9:
+    case AIS_MESSAGE_TYPE_SAR_AIRCRAFT_POSITION_REPORT:
         ais_copy_own_position_from_sar(own, ais.sar_aircraft_position, now_us);
         break;
-    case 18:
-    case 19:
+    case AIS_MESSAGE_TYPE_STANDARD_CLASS_B_POSITION_REPORT:
+    case AIS_MESSAGE_TYPE_EXTENDED_CLASS_B_POSITION_REPORT:
         ais_copy_own_position_from_position_report(own, ais.class_b_position_report, true, now_us);
-        if (header.message_type == 19) ais_copy_own_static_from_class_b(own, ais.class_b_static, now_us);
+        if (header.message_type == AIS_MESSAGE_TYPE_EXTENDED_CLASS_B_POSITION_REPORT) ais_copy_own_static_from_class_b(own, ais.class_b_static, now_us);
         break;
-    case 21:
+    case AIS_MESSAGE_TYPE_AID_TO_NAVIGATION_REPORT:
         ais_copy_own_position_from_aton(own, ais.aid_to_navigation, now_us);
         ais_copy_own_static_from_aton(own, ais.aid_to_navigation, now_us);
         break;
-    case 24:
+    case AIS_MESSAGE_TYPE_STATIC_DATA_REPORT:
         ais_copy_own_static_from_class_b(own, ais.class_b_static, now_us);
         break;
-    case 27:
+    case AIS_MESSAGE_TYPE_LONG_RANGE_AIS_BROADCAST_MESSAGE:
         ais_copy_own_position_from_long_range(own, ais.long_range_broadcast, now_us);
         break;
     default:
@@ -602,13 +608,13 @@ bool apply_ais_vdm_vdo_with_own_vessel(const NmeaSentence& sentence,
     const bool have_header = payload && ais_decode_header(payload, payload_len, header);
     const bool control = have_header && ais_control_message_type(header.message_type);
 
-    if (!own_sentence && have_header && header.message_type == 24) {
+    if (!own_sentence && have_header && header.message_type == AIS_MESSAGE_TYPE_STATIC_DATA_REPORT) {
         ais_reset_type24_merge_if_new_mmsi(model.ais, header.mmsi);
     }
 
     if (own_sentence) {
         ship_data_model::DataModel<Real> scratch;
-        if (have_header && header.message_type == 24) ais_reset_type24_merge_if_new_mmsi(scratch.ais, header.mmsi);
+        if (have_header && header.message_type == AIS_MESSAGE_TYPE_STATIC_DATA_REPORT) ais_reset_type24_merge_if_new_mmsi(scratch.ais, header.mmsi);
         const bool parsed = control
             ? apply_ais_control_vdm_vdo(sentence, scratch, now_us, source)
             : apply_ais_vdm_vdo(sentence, scratch, now_us, source);
