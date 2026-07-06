@@ -70,8 +70,10 @@ public:
         if (sentence_is(sentence, "BWC")) return apply_bwc_bwr(sentence, model, now_us, source);
         if (sentence_is(sentence, "BWR")) return apply_bwc_bwr(sentence, model, now_us, source);
         if (sentence_is(sentence, "BWW")) return apply_bod_bww(sentence, model, now_us, source);
+        NMEA_APPLY("CAN", apply_inmarsat_can);
         NMEA_APPLY("CEK", apply_cek);
         NMEA_APPLY("COP", apply_cop);
+        NMEA_APPLY("CRQ", apply_inmarsat_crq);
         NMEA_APPLY("CUR", apply_cur);
         NMEA_APPLY("DBK", apply_depth_below_keel);
         NMEA_APPLY("DBS", apply_depth_below_surface);
@@ -84,6 +86,7 @@ public:
         NMEA_APPLY("DSC", apply_dsc);
         NMEA_APPLY("DSE", apply_dse);
         NMEA_APPLY("DSI", apply_dsi);
+        NMEA_APPLY("DSM", apply_inmarsat_dsm);
         NMEA_APPLY("DSR", apply_dsr);
         NMEA_APPLY("DTM", apply_dtm);
         NMEA_APPLY("ETL", apply_etl);
@@ -138,6 +141,7 @@ public:
         NMEA_APPLY("TFI", apply_tfi);
         NMEA_APPLY("TLB", apply_tlb);
         NMEA_APPLY("TLL", apply_tll);
+        NMEA_APPLY("TMD", apply_inmarsat_tmd);
         NMEA_APPLY("TPC", apply_tpc);
         NMEA_APPLY("TPR", apply_tpr);
         NMEA_APPLY("TPT", apply_tpt);
@@ -187,6 +191,7 @@ private:
 #include "nmea_rx_multipart.hpp"
 #include "nmea_dsc.hpp"
 #include "nmea_inmarsat.hpp"
+#include "nmea_inmarsat_cr.hpp"
 #include "nmea_ais.hpp"
 #include "nmea_ais_own_vessel.hpp"
 #include "nmea_phase3_amendments.hpp"
