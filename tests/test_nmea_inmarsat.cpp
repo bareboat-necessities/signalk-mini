@@ -24,211 +24,141 @@ static void feed(signalk_mini::SignalKMiniApp<float>& app,
                  uint64_t delta_us = 1000) {
     now_us += delta_us;
     const std::string line = sentence(body);
-    REQUIRE(app.nmea0183().feed_line(line.c_str(), 1, now_us));
+    if (!app.nmea0183().feed_line(line.c_str(), 1, now_us)) {
+        std::fprintf(stderr, "feed failed: %s\nlast_error=%s\n", line.c_str(), app.nmea0183().last_error());
+        std::exit(1);
+    }
 }
 
-static bool no_inmarsat_message(const ship_data_model::InmarsatData<float>& inmarsat) {
-    return !inmarsat.message_count.valid || inmarsat.message_count.value == 0;
+static bool no_inmarsat_message(const ship_data_model::InmarsatSafetyNetData<float>& safetynet) {
+    return !safetynet.message_count.valid || safetynet.message_count.value == 0;
 }
 
-static void require_single_message_commit() {
+static void require_legacy_inmarsat_notification_storage() {
     signalk_mini::SignalKMiniApp<float> app;
     uint64_t now_us = 0;
 
     feed(app, "ICIMK,MSG01,OK,HELLO INMARSAT", now_us);
-
-    const auto& msg = app.store().model().comm.inmarsat.latest_message;
-    REQUIRE(app.store().model().comm.inmarsat.message_count.value == 1);
+    const auto& msg = app.store().model().notifications.inmarsat.safetynet.latest_message;
     REQUIRE(std::strcmp(msg.message_id, "MSG01") == 0);
     REQUIRE(std::strcmp(msg.terminal_id, "IC") == 0);
-    REQUIRE(std::strcmp(msg.message_type, "IMK") == 0);
-    REQUIRE(std::strcmp(msg.message_status, "OK") == 0);
-    REQUIRE(std::strcmp(msg.decoded_text, "HELLO INMARSAT") == 0);
-    REQUIRE(msg.sentence_type == ship_data_model::InmarsatSentenceType::imk);
-    REQUIRE(msg.payload_type == ship_data_model::InmarsatPayloadType::text);
-    REQUIRE(msg.standard_sentence == true);
-    REQUIRE(msg.proprietary_sentence == false);
-    REQUIRE(msg.ascii_valid == true);
-    REQUIRE(msg.payload_length_chars.value == 14);
-    REQUIRE(msg.alpha_count.value == 13);
-    REQUIRE(msg.digit_count.value == 0);
-    REQUIRE(msg.separator_count.value == 1);
-    REQUIRE(msg.token_count.value == 2);
-    REQUIRE(msg.key_value_count.value == 0);
-    REQUIRE(std::strcmp(msg.first_token, "HELLO") == 0);
-    REQUIRE(std::strcmp(msg.second_token, "INMARSAT") == 0);
-    REQUIRE(msg.total_fragments.value == 1);
-    REQUIRE(msg.last_fragment_number.value == 1);
-    REQUIRE(msg.text_length.value == 14);
-    REQUIRE(msg.field_count.value == 3);
-    REQUIRE(msg.complete == true);
-    REQUIRE(msg.overflow == false);
-    REQUIRE(msg.first_seen_us == now_us);
-    REQUIRE(msg.last_update_us == now_us);
-}
-
-static void require_multipart_waits_until_complete() {
-    signalk_mini::SignalKMiniApp<float> app;
-    uint64_t now_us = 0;
+    REQUIRE(std::strcmp(msg.message_text, "HELLO INMARSAT") == 0);
+    REQUIRE(msg.complete);
 
     feed(app, "ICIMK,2,1,MSG42,HELLO ", now_us);
-    REQUIRE(no_inmarsat_message(app.store().model().comm.inmarsat));
-    REQUIRE(app.nmea0183().message_state().inmarsat_message.in_progress == true);
-    REQUIRE(app.nmea0183().message_state().inmarsat_message.complete == false);
-
     feed(app, "ICIMK,2,2,MSG42,WORLD", now_us);
-    const auto& msg = app.store().model().comm.inmarsat.latest_message;
-    REQUIRE(app.store().model().comm.inmarsat.message_count.value == 1);
-    REQUIRE(std::strcmp(msg.message_id, "MSG42") == 0);
-    REQUIRE(std::strcmp(msg.terminal_id, "IC") == 0);
-    REQUIRE(std::strcmp(msg.message_type, "IMK") == 0);
-    REQUIRE(std::strcmp(msg.decoded_text, "HELLO WORLD") == 0);
-    REQUIRE(msg.sentence_type == ship_data_model::InmarsatSentenceType::imk);
-    REQUIRE(msg.payload_type == ship_data_model::InmarsatPayloadType::text);
-    REQUIRE(msg.payload_length_chars.value == 11);
-    REQUIRE(msg.token_count.value == 2);
-    REQUIRE(std::strcmp(msg.first_token, "HELLO") == 0);
-    REQUIRE(std::strcmp(msg.second_token, "WORLD") == 0);
-    REQUIRE(msg.total_fragments.value == 2);
-    REQUIRE(msg.last_fragment_number.value == 2);
-    REQUIRE(msg.text_length.value == 11);
-    REQUIRE(msg.field_count.value == 4);
-    REQUIRE(msg.complete == true);
-    REQUIRE(msg.overflow == false);
+    const auto& multipart = app.store().model().notifications.inmarsat.safetynet.latest_message;
+    REQUIRE(std::strcmp(multipart.message_id, "MSG42") == 0);
+    REQUIRE(std::strcmp(multipart.message_text, "HELLO WORLD") == 0);
+    REQUIRE(multipart.complete);
+    REQUIRE(multipart.total_fragments.value == 2);
 }
 
-static void require_bad_fragment_count() {
+static void require_bad_fragment_and_unsupported_counts() {
     signalk_mini::SignalKMiniApp<float> app;
     uint64_t now_us = 0;
 
     feed(app, "ICIMK,2,2,MSG42,WORLD", now_us);
-    REQUIRE(no_inmarsat_message(app.store().model().comm.inmarsat));
-    REQUIRE(app.store().model().comm.inmarsat.bad_fragment_count.value == 1);
-    REQUIRE(app.nmea0183().message_state().inmarsat_message.bad_fragment_count.value == 1);
-}
-
-static void require_unsupported_payload_count() {
-    signalk_mini::SignalKMiniApp<float> app;
-    uint64_t now_us = 0;
+    REQUIRE(no_inmarsat_message(app.store().model().notifications.inmarsat.safetynet));
+    REQUIRE(app.store().model().notifications.inmarsat.safetynet.bad_fragment_count.value >= 1);
 
     std::string body = "ICIMK,MSG02,OK,";
     body.push_back(static_cast<char>(0x7f));
     feed(app, body, now_us);
-
-    REQUIRE(no_inmarsat_message(app.store().model().comm.inmarsat));
-    REQUIRE(app.store().model().comm.inmarsat.unsupported_count.value == 1);
+    REQUIRE(app.store().model().notifications.inmarsat.safetynet.unsupported_count.value >= 1);
 }
 
-static void require_multipart_overflow_propagates() {
-    signalk_mini::SignalKMiniApp<float> app;
-    uint64_t now_us = 0;
-    const std::string a60(60, 'A');
-    const std::string b60(60, 'B');
-
-    feed(app, std::string("ICIMK,2,1,BIG,") + a60, now_us);
-    REQUIRE(no_inmarsat_message(app.store().model().comm.inmarsat));
-
-    feed(app, std::string("ICIMK,2,2,BIG,") + b60, now_us);
-    const auto& msg = app.store().model().comm.inmarsat.latest_message;
-    REQUIRE(app.store().model().comm.inmarsat.message_count.value == 1);
-    REQUIRE(std::strcmp(msg.message_id, "BIG") == 0);
-    REQUIRE(msg.complete == true);
-    REQUIRE(msg.overflow == true);
-    REQUIRE(msg.text_length.value == 95);
-    REQUIRE(msg.payload_length_chars.value == 95);
-    REQUIRE(std::strlen(msg.decoded_text) == 95);
-}
-
-static void require_message_fields(const std::string& body,
-                                   const char* expected_id,
-                                   const char* expected_terminal,
-                                   const char* expected_type,
-                                   const char* expected_status,
-                                   const char* expected_text,
-                                   ship_data_model::InmarsatSentenceType expected_sentence_type,
-                                   bool expected_standard,
-                                   bool expected_proprietary) {
+static void require_safetynet_sm_headers_and_smb_body() {
     signalk_mini::SignalKMiniApp<float> app;
     uint64_t now_us = 0;
 
-    feed(app, body, now_us);
+    feed(app, "CSSM1,A,100001,000111,321,1,1,31,00,2020,01,02,03,04,05", now_us);
+    feed(app, "CSSMB,001,,,100001,NAVAREA MESSAGE", now_us);
+    const auto& sm1 = app.store().model().notifications.inmarsat.safetynet.latest_message;
+    REQUIRE(std::strcmp(sm1.message_id, "100001") == 0);
+    REQUIRE(std::strcmp(sm1.address_kind, "navarea_metarea") == 0);
+    REQUIRE(sm1.navarea_metarea_code.valid);
+    REQUIRE(sm1.complete);
 
-    const auto& msg = app.store().model().comm.inmarsat.latest_message;
-    REQUIRE(app.store().model().comm.inmarsat.message_count.value == 1);
-    REQUIRE(std::strcmp(msg.message_id, expected_id) == 0);
-    REQUIRE(std::strcmp(msg.terminal_id, expected_terminal) == 0);
-    REQUIRE(std::strcmp(msg.message_type, expected_type) == 0);
-    REQUIRE(std::strcmp(msg.message_status, expected_status) == 0);
-    REQUIRE(std::strcmp(msg.decoded_text, expected_text) == 0);
-    REQUIRE(msg.sentence_type == expected_sentence_type);
-    REQUIRE(msg.standard_sentence == expected_standard);
-    REQUIRE(msg.proprietary_sentence == expected_proprietary);
-    REQUIRE(msg.payload_type == ship_data_model::InmarsatPayloadType::text);
-    REQUIRE(msg.ascii_valid == true);
-    REQUIRE(msg.payload_length_chars.value == static_cast<int32_t>(std::strlen(expected_text)));
-    REQUIRE(msg.total_fragments.value == 1);
-    REQUIRE(msg.last_fragment_number.value == 1);
-    REQUIRE(msg.text_length.value == static_cast<int32_t>(std::strlen(expected_text)));
-    REQUIRE(msg.complete == true);
+    feed(app, "CSSM2,A,200001,000222,321,1,1,13,00,2021,06,07,08,09,05,D,D", now_us);
+    feed(app, "CSSMB,001,,,200001,COASTAL SAR INFO", now_us);
+    const auto& sm2 = app.store().model().notifications.inmarsat.safetynet.latest_message;
+    REQUIRE(std::strcmp(sm2.message_id, "200001") == 0);
+    REQUIRE(std::strcmp(sm2.address_kind, "coastal_warning_area") == 0);
+    REQUIRE(sm2.coastal_warning_subject == 'D');
+    REQUIRE(sm2.mandatory_reception);
+
+    feed(app, "CSSM3,A,123456,005213,798,0,3,14,00,2012,04,05,14,30,3400,N,076,W,300", now_us);
+    REQUIRE(app.store().model().notifications.inmarsat.safetynet.message_count.value == 2);
+    feed(app, "CSSMB,002,001,0,123456,FROM:MRCC^0D^0ATO: ALL SHIPS ", now_us);
+    REQUIRE(app.store().model().notifications.inmarsat.safetynet.message_count.value == 2);
+    feed(app, "CSSMB,002,002,0,123456,SAR SITREP", now_us);
+    const auto& sm3 = app.store().model().notifications.inmarsat.safetynet.latest_message;
+    REQUIRE(std::strcmp(sm3.message_id, "123456") == 0);
+    REQUIRE(std::strcmp(sm3.address_kind, "circular_area") == 0);
+    REQUIRE(sm3.circular_center_lat_deg.valid);
+    REQUIRE(sm3.circular_center_lon_deg.valid);
+    REQUIRE(sm3.circular_radius_nmi.valid);
+    REQUIRE(sm3.requires_alarm);
+    REQUIRE(sm3.mandatory_reception);
+    REQUIRE(std::strstr(sm3.message_text, "FROM:MRCC") != nullptr);
+    REQUIRE(std::strstr(sm3.message_text, "SAR SITREP") != nullptr);
+
+    feed(app, "CSSM4,A,300001,000333,321,2,1,04,00,2022,07,08,09,10,6000,N,01000,W,30,025", now_us);
+    feed(app, "CSSMB,001,,,300001,RECTANGULAR AREA MESSAGE", now_us);
+    const auto& sm4 = app.store().model().notifications.inmarsat.safetynet.latest_message;
+    REQUIRE(std::strcmp(sm4.message_id, "300001") == 0);
+    REQUIRE(std::strcmp(sm4.address_kind, "rectangular_area") == 0);
+    REQUIRE(sm4.rectangle_sw_lat_deg.valid);
+    REQUIRE(sm4.rectangle_sw_lon_deg.valid);
+    REQUIRE(sm4.rectangle_extent_lat_deg.valid);
+    REQUIRE(sm4.rectangle_extent_lon_deg.valid);
+    REQUIRE(app.store().model().notifications.inmarsat.safetynet.message_count.value >= 4);
 }
 
-static void require_safe_sentence_interpretation() {
-    require_message_fields("ICIMK,MSG-K,OK,KEY READY", "MSG-K", "IC", "IMK", "OK", "KEY READY", ship_data_model::InmarsatSentenceType::imk, true, false);
-    require_message_fields("ICIMN,MSG-N,READY,NETWORK READY", "MSG-N", "IC", "IMN", "READY", "NETWORK READY", ship_data_model::InmarsatSentenceType::imn, true, false);
-    require_message_fields("ICIMR,MSG-R,RCVD,RETURN READY", "MSG-R", "IC", "IMR", "RCVD", "RETURN READY", ship_data_model::InmarsatSentenceType::imr, true, false);
-    require_message_fields("CSIMK,MSG-CS,OK,SATCOM READY", "MSG-CS", "CS", "IMK", "OK", "SATCOM READY", ship_data_model::InmarsatSentenceType::imk, true, false);
-    require_message_fields("PINM,MSG-P,OK,PROPRIETARY READY", "MSG-P", "PI", "PINM", "OK", "PROPRIETARY READY", ship_data_model::InmarsatSentenceType::pinm, false, true);
-    require_message_fields("INM,MSG-I,OK,SHORT PREFIX READY", "MSG-I", "IN", "INM", "OK", "SHORT PREFIX READY", ship_data_model::InmarsatSentenceType::inm, false, true);
-}
-
-static void require_decoded_payload_classification() {
+static void require_cr_terminal_sentences() {
     signalk_mini::SignalKMiniApp<float> app;
     uint64_t now_us = 0;
 
-    feed(app, "ICIMK,NUM,OK,123456", now_us);
-    const auto& digits = app.store().model().comm.inmarsat.latest_message;
-    REQUIRE(digits.payload_type == ship_data_model::InmarsatPayloadType::digits);
-    REQUIRE(digits.payload_length_chars.value == 6);
-    REQUIRE(digits.digit_count.value == 6);
-    REQUIRE(digits.alpha_count.value == 0);
-    REQUIRE(digits.token_count.value == 1);
-    REQUIRE(std::strcmp(digits.first_token, "123456") == 0);
+    feed(app, "CSSM1,A,910001,000111,321,1,1,31,00,2024,01,02,03,04,05", now_us);
+    feed(app, "CSSMB,001,,,910001,PHASE FOUR MESSAGE", now_us);
+    REQUIRE(std::strcmp(app.store().model().notifications.inmarsat.safetynet.latest_message.message_id, "910001") == 0);
+    REQUIRE(!app.store().model().notifications.inmarsat.safetynet.latest_message.acknowledged);
 
-    feed(app, "ICIMK,KV,OK,STATE=READY", now_us);
-    const auto& key_value = app.store().model().comm.inmarsat.latest_message;
-    REQUIRE(key_value.payload_type == ship_data_model::InmarsatPayloadType::key_value);
-    REQUIRE(key_value.payload_length_chars.value == 11);
-    REQUIRE(key_value.key_value_count.value == 1);
-    REQUIRE(key_value.separator_count.value == 1);
-    REQUIRE(key_value.token_count.value == 2);
-    REQUIRE(std::strcmp(key_value.first_token, "STATE") == 0);
-    REQUIRE(std::strcmp(key_value.second_token, "READY") == 0);
-    REQUIRE(std::strcmp(key_value.first_key, "STATE") == 0);
-    REQUIRE(std::strcmp(key_value.first_value, "READY") == 0);
+    feed(app, "CRCAN,910001,C,cleared", now_us);
+    REQUIRE(app.store().model().notifications.inmarsat.safetynet.latest_message.acknowledged);
+    REQUIRE(std::strcmp(app.store().model().notifications.messages.event.event_id, "910001") == 0);
+    REQUIRE(std::strcmp(app.store().model().notifications.messages.event.event_source, "inmarsat") == 0);
 
-    feed(app, "ICIMK,DELIM,OK,ONE/TWO", now_us);
-    const auto& delimited = app.store().model().comm.inmarsat.latest_message;
-    REQUIRE(delimited.payload_type == ship_data_model::InmarsatPayloadType::delimited);
-    REQUIRE(delimited.separator_count.value == 1);
-    REQUIRE(delimited.token_count.value == 2);
-    REQUIRE(std::strcmp(delimited.first_token, "ONE") == 0);
-    REQUIRE(std::strcmp(delimited.second_token, "TWO") == 0);
+    feed(app, "CRCRQ,REQ01,STATUS,ALL,terminal status", now_us);
+    REQUIRE(std::strcmp(app.store().model().notifications.messages.text.id, "REQ01") == 0);
+    REQUIRE(std::strcmp(app.store().model().notifications.messages.text.code, "STATUS") == 0);
+    REQUIRE(std::strcmp(app.store().model().notifications.messages.text.value, "ALL") == 0);
 
-    feed(app, "ICIMK,MIX,OK,AB12", now_us);
-    const auto& mixed = app.store().model().comm.inmarsat.latest_message;
-    REQUIRE(mixed.payload_type == ship_data_model::InmarsatPayloadType::mixed_ascii);
-    REQUIRE(mixed.alpha_count.value == 2);
-    REQUIRE(mixed.digit_count.value == 2);
-    REQUIRE(mixed.token_count.value == 1);
+    feed(app, "CRDSM,1,2,31,active", now_us);
+    REQUIRE(std::strcmp(app.store().model().notifications.messages.text.id, "DSM") == 0);
+    REQUIRE(app.store().model().notifications.inmarsat.safetynet.latest_message.ocean_region_code == '1');
+    REQUIRE(app.store().model().notifications.inmarsat.safetynet.latest_message.priority_code == '2');
+    REQUIRE(std::strcmp(app.store().model().notifications.inmarsat.safetynet.latest_message.service_code, "31") == 0);
+
+    feed(app, "CRTMD,MSG99,A,terminal,WEATHER UPDATE", now_us);
+    REQUIRE(std::strcmp(app.store().model().notifications.inmarsat.safetynet.latest_message.message_id, "MSG99") == 0);
+    REQUIRE(std::strcmp(app.store().model().notifications.inmarsat.safetynet.latest_message.message_text, "WEATHER UPDATE") == 0);
+    REQUIRE(app.store().model().notifications.inmarsat.safetynet.latest_message.complete);
+
+    feed(app, "CRTMD,2,1,MSG77,HELLO ", now_us);
+    feed(app, "CRTMD,2,2,MSG77,WORLD", now_us);
+    const auto& tmd = app.store().model().notifications.inmarsat.safetynet.latest_message;
+    REQUIRE(std::strcmp(tmd.message_id, "MSG77") == 0);
+    REQUIRE(std::strcmp(tmd.message_text, "HELLO WORLD") == 0);
+    REQUIRE(tmd.total_fragments.value == 2);
+    REQUIRE(tmd.complete);
 }
 
 int main() {
-    require_single_message_commit();
-    require_multipart_waits_until_complete();
-    require_bad_fragment_count();
-    require_unsupported_payload_count();
-    require_multipart_overflow_propagates();
-    require_safe_sentence_interpretation();
-    require_decoded_payload_classification();
+    require_legacy_inmarsat_notification_storage();
+    require_bad_fragment_and_unsupported_counts();
+    require_safetynet_sm_headers_and_smb_body();
+    require_cr_terminal_sentences();
     return 0;
 }

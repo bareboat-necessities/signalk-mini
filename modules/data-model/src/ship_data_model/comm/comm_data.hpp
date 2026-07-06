@@ -5,7 +5,6 @@
 namespace ship_data_model {
 
 static const uint8_t DSC_CALL_HISTORY_CAPACITY = 4;
-static const uint8_t INMARSAT_MESSAGE_HISTORY_CAPACITY = 4;
 
 template<typename Real = float>
 struct RadioFrequencySetData {
@@ -135,76 +134,6 @@ struct DscCommData {
     Stamped<int32_t> expansion_timeout_count;
 };
 
-enum class InmarsatSentenceType : uint8_t {
-    unknown,
-    imk,
-    imn,
-    imr,
-    sm1,
-    sm2,
-    sm3,
-    pinm,
-    inm
-};
-
-enum class InmarsatPayloadType : uint8_t {
-    none,
-    text,
-    digits,
-    key_value,
-    delimited,
-    mixed_ascii,
-    invalid
-};
-
-template<typename Real = float>
-struct InmarsatMessageData {
-    Setting<SensorSource> source;
-    char message_id[16] = {0};
-    char terminal_id[24] = {0};
-    char message_type[16] = {0};
-    char message_status[16] = {0};
-    char decoded_text[160] = {0};
-    InmarsatSentenceType sentence_type = InmarsatSentenceType::unknown;
-    InmarsatPayloadType payload_type = InmarsatPayloadType::none;
-    bool standard_sentence = false;
-    bool proprietary_sentence = false;
-    bool ascii_valid = false;
-    Stamped<int32_t> payload_length_chars;
-    Stamped<int32_t> digit_count;
-    Stamped<int32_t> alpha_count;
-    Stamped<int32_t> separator_count;
-    Stamped<int32_t> token_count;
-    Stamped<int32_t> key_value_count;
-    char first_token[32] = {0};
-    char second_token[32] = {0};
-    char first_key[32] = {0};
-    char first_value[64] = {0};
-    Stamped<int32_t> total_fragments;
-    Stamped<int32_t> last_fragment_number;
-    Stamped<int32_t> text_length;
-    Stamped<int32_t> field_count;
-    bool complete = false;
-    bool overflow = false;
-    bool duplicate = false;
-    Stamped<int32_t> repeat_count;
-    uint64_t first_seen_us = 0;
-    uint64_t last_update_us = 0;
-};
-
-template<typename Real = float>
-struct InmarsatData {
-    InmarsatMessageData<Real> latest_message;
-    InmarsatMessageData<Real> recent_messages[INMARSAT_MESSAGE_HISTORY_CAPACITY];
-    Stamped<int32_t> recent_message_count;
-    Stamped<int32_t> recent_message_next_index;
-    Stamped<int32_t> message_count;
-    Stamped<int32_t> duplicate_count;
-    Stamped<int32_t> overwrite_count;
-    Stamped<int32_t> unsupported_count;
-    Stamped<int32_t> bad_fragment_count;
-};
-
 template<typename Real = float>
 struct CommEquipmentControlCommandData {
     Setting<SensorSource> source;
@@ -276,7 +205,6 @@ struct CommData {
     BeaconReceiverStatusData<Real> beacon_status;
     ReturnLinkMessageData<Real> return_link_message;
     DscCommData<Real> dsc;
-    InmarsatData<Real> inmarsat;
     CommEquipmentData<Real> equipment;
 };
 
