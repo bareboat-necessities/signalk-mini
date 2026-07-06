@@ -130,11 +130,32 @@ static void check_gpsd_ais_18_27() {
     REQUIRE(model.ais.long_range_broadcast.mmsi.valid);
 }
 
+static void check_dsc_signalk_examples() {
+    signalk_mini::SignalKMiniApp<float> app;
+    const auto counts = feed_fixture(app, "dsc_signalk_examples.nmea");
+    REQUIRE(counts.data_lines == 19);
+    REQUIRE(counts.rejected_lines == 0);
+    // Most Signal K DSC examples set the DSE expansion flag. The one-second
+    // fixture cadence commits the prior pending DSC on the next input line.
+    REQUIRE(app.store().model().comm.dsc.call_count.valid);
+    REQUIRE(app.store().model().comm.dsc.call_count.value > 0);
+    REQUIRE(app.store().model().comm.dsc.latest_call.sender_mmsi[0] != '\0');
+}
+
+static void check_navtex_swiftnmea_nrx() {
+    signalk_mini::SignalKMiniApp<float> app;
+    const auto counts = feed_fixture(app, "navtex_swiftnmea_nrx.nmea");
+    REQUIRE(counts.data_lines == 3);
+    REQUIRE(counts.rejected_lines == 0);
+}
+
 int main() {
     check_tripmate_sample();
     check_aerorust_nmea2();
     check_aerorust_satellite_fixture();
     check_gpsbabel_nmea_ms();
     check_gpsd_ais_18_27();
+    check_dsc_signalk_examples();
+    check_navtex_swiftnmea_nrx();
     return 0;
 }
