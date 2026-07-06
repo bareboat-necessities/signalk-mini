@@ -49,7 +49,7 @@ static FixtureCounts feed_fixture(signalk_mini::SignalKMiniApp<float>& app, cons
     while (std::getline(input, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         if (line.empty() || line[0] == '#') continue;
-        REQUIRE(line[0] == '$' || line[0] == '!');
+        REQUIRE(line[0] == '$' || line[0] == '!' || line[0] == '/');
         ++counts.data_lines;
         now_us += 1000000ULL;
         if (app.nmea0183().feed_line(line.c_str(), 1, now_us)) {
@@ -151,6 +151,22 @@ static void check_navtex_swiftnmea_examples() {
     REQUIRE(app.store().model().notifications.navtex.receiver_mask.last_update_us != 0);
 }
 
+static void check_safetynet_sm_examples() {
+    signalk_mini::SignalKMiniApp<float> app;
+    const auto counts = feed_fixture(app, "safetynet_sm_actual.nmea");
+    REQUIRE(counts.data_lines == 9);
+    REQUIRE(counts.rejected_lines == 0);
+    const auto& safetynet = app.store().model().notifications.inmarsat.safetynet;
+    REQUIRE(safetynet.message_count.value == 4);
+    const auto& latest = safetynet.latest_message;
+    REQUIRE(std::strcmp(latest.message_id, "300001") == 0);
+    REQUIRE(std::strcmp(latest.address_kind, "rectangular_area") == 0);
+    NEAR(latest.rectangle_sw_lat_deg.value, 60.0f, 0.001f);
+    NEAR(latest.rectangle_sw_lon_deg.value, -10.0f, 0.001f);
+    REQUIRE(latest.rectangle_extent_lat_deg.value == 30);
+    REQUIRE(latest.rectangle_extent_lon_deg.value == 25);
+}
+
 int main() {
     check_tripmate_sample();
     check_aerorust_nmea2();
@@ -159,5 +175,6 @@ int main() {
     check_gpsd_ais_18_27();
     check_dsc_signalk_examples();
     check_navtex_swiftnmea_examples();
+    check_safetynet_sm_examples();
     return 0;
 }
