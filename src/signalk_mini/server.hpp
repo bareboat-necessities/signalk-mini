@@ -219,3 +219,160 @@ private:
         void on_error(async_event_loop::ITcpConnection& connection, int) override { connections.remove(connection); }
         void on_too_many_connections(async_event_loop::ITcpConnection& connection) override { connection.close(); }
     };
+
+    struct ConnectorTcpClientHandler : async_event_loop::ITcpClientHandler {
+        ConnectorTcpClientHandler(MiniSignalKServer& owner_ref, size_t connector_index) : owner(owner_ref), index(connector_index) {}
+        MiniSignalKServer& owner;
+        size_t index;
+        void on_data(async_event_loop::ITcpConnection& connection) override {
+            if (!owner.connector_allow_rx(index)) return;
+            char text[160];
+            while (connection.read_line(text, sizeof(text))) owner.handle_connector_nmea_line(index, text);
+        }
+        void on_close(async_event_loop::ITcpConnection&) override {}
+        void on_error(int) override {}
+    };
+
+    struct ConnectorRuntimeSlot {
+        ConnectorRuntimeSlot(MiniSignalKServer& owner_ref, size_t connector_index)
+            : owner(owner_ref), index(connector_index), tcp_server(owner_ref.loop_.scheduler()), tcp_client(owner_ref.loop_.scheduler()),
+#if defined(ARDUINO)
+              serial_stream(Serial),
+#else
+              serial_stream(),
+#endif
+              serial_reader(serial_stream, async_event_loop::LineProtocolOptions{}, [this](async_event_loop::LineView line) { owner.handle_connector_serial_line(index, line); }),
+              tcp_server_handler(owner_ref, connector_index), tcp_client_handler(owner_ref, connector_index), tcp_line_handler(tcp_server_handler) {}
+        MiniSignalKServer& owner;
+        size_t index = 0;
+        ConnectorConfig config;
+        ConnectionFlags connection_flags{true, false};
+        bool nmea0183_validate_checksum = false;
+        bool started = false;
+        async_event_loop::NativeTcpServer tcp_server;
+        async_event_loop::NativeTcpClient tcp_client;
+        async_event_loop::NativeSerialStream serial_stream;
+        async_event_loop::LineProtocolReader<192> serial_reader;
+        UdpListenerStream udp_listener;
+        ConnectorTcpServerHandler tcp_server_handler;
+        ConnectorTcpClientHandler tcp_client_handler;
+        async_event_loop::TcpLineServerHandler<192, MaxConnectionsPerConnector> tcp_line_handler;
+        async_event_loop::EventHandle serial_event{};
+        async_event_loop::EventHandle udp_event{};
+    };
+
+    ConnectorRuntimeSlot& connector_slot(size_t index) { return *connector_slots_[index]; }
+    const ConnectorRuntimeSlot& connector_slot(size_t index) const { return *connector_slots_[index]; }
+    const ConnectionFlags& connector_connection_flags(size_t index) const { return connector_slot(index).connection_flags; }
+    bool connector_allow_rx(size_t index) const { return connector_slot(index).connection_flags.allow_rx; }
+
+    void start_configured_connectors() {
+        connector_slots_.clear();
+        if (!config_.connectors || config_.connector_count == 0) return;
+        connector_slots_.reserve(config_.connector_count);
+        for (size_t i = 0; i < config_.connector_count; ++i) {
+            const ConnectorConfig& connector = config_.connectors[i];
+            std::unique_ptr<ConnectorRuntimeSlot> slot(new ConnectorRuntimeSlot(*this, i));
+            slot->config = connector;
+            slot->connection_flags = ConnectionFlags{connector.access.allow_rx, connector.access.allow_tx};
+            slot->nmea0183_validate_checksum = connector.protocol.kind == ConnectorProtocol::Nmea0183
+                ? effective_nmea0183_validate_checksum(connector.protocol.nmea0183, connector.transport.kind)
+                : false;
+            connector_slots_.push_back(std::move(slot));
+            ConnectorRuntimeSlot& runtime = *connector_slots_.back();
+            if (!connector.enabled) continue;
+            if (connector.protocol.kind == ConnectorProtocol::Nmea0183) runtime.started = start_nmea0183_connector(runtime);
+        }
+    }
+
+    bool start_nmea0183_connector(ConnectorRuntimeSlot& slot) {
+        switch (slot.config.transport.kind) {
+        case ConnectorTransport::TcpClient: {
+            async_event_loop::TcpConnectOptions options;
+            options.host = slot.config.transport.tcp_client.host;
+            options.port = slot.config.transport.tcp_client.port;
+            return slot.tcp_client.connect(options, slot.tcp_client_handler);
+        }
+        case ConnectorTransport::TcpServer:
+            return listen(slot.tcp_server, slot.tcp_line_handler, slot.config.transport.tcp_server.host, slot.config.transport.tcp_server.port);
+        case ConnectorTransport::Serial:
+            return start_nmea0183_serial_connector(slot);
+        case ConnectorTransport::Udp:
+            return start_nmea0183_udp_listener(slot);
+        default:
+            return false;
+        }
+    }
+
+    bool start_nmea0183_serial_connector(ConnectorRuntimeSlot& slot) {
+#if defined(ARDUINO)
+        Serial.begin(slot.config.transport.serial.baud);
+#else
+        if (!slot.serial_stream.open(slot.config.transport.serial.device, slot.config.transport.serial.baud)) return false;
+#endif
+        if (!slot.connection_flags.allow_rx) return true;
+        const size_t connector_index = slot.index;
+        slot.serial_event = loop_.on_bytes_ready(slot.serial_stream, [this, connector_index]() {
+            connector_slot(connector_index).serial_reader.poll(loop_.clock().micros());
+        });
+        return static_cast<bool>(slot.serial_event);
+    }
+
+    bool start_nmea0183_udp_listener(ConnectorRuntimeSlot& slot) {
+        if (!slot.udp_listener.open(slot.config.transport.udp)) return false;
+        if (!slot.connection_flags.allow_rx) return true;
+        const size_t connector_index = slot.index;
+        slot.udp_event = loop_.on_bytes_ready(slot.udp_listener, [this, connector_index]() {
+            handle_connector_udp_datagrams(connector_index);
+        });
+        return static_cast<bool>(slot.udp_event);
+    }
+
+    void handle_connector_serial_line(size_t index, async_event_loop::LineView line) {
+        ConnectorRuntimeSlot& slot = connector_slot(index);
+        if (!slot.connection_flags.allow_rx) return;
+        char text[160];
+        async_event_loop::line_to_cstr(line, text);
+        handle_connector_nmea_line(index, text);
+    }
+
+    void handle_connector_udp_datagrams(size_t index) {
+        ConnectorRuntimeSlot& slot = connector_slot(index);
+        if (!slot.connection_flags.allow_rx) return;
+        uint8_t buf[512];
+        while (slot.udp_listener.readable()) {
+            const int n = slot.udp_listener.read(buf, sizeof(buf) - 1);
+            if (n <= 0) break;
+            buf[n] = 0;
+            char* begin = reinterpret_cast<char*>(buf);
+            char* line = begin;
+            for (int i = 0; i <= n; ++i) {
+                if (begin[i] == '\r' || begin[i] == '\n' || begin[i] == '\0') {
+                    begin[i] = '\0';
+                    if (*line) handle_connector_nmea_line(index, line);
+                    line = begin + i + 1;
+                }
+            }
+        }
+    }
+
+    void handle_connector_nmea_line(size_t index, const char* text) {
+        const ConnectorRuntimeSlot& slot = connector_slot(index);
+        const SourceId source_id = static_cast<SourceId>(10 + index);
+        if (nmea_.feed_line(text, source_id, loop_.clock().micros(), slot.nmea0183_validate_checksum)) publish();
+    }
+    void publish() { publisher_.publish_pending(signalk_connections_.connections); }
+
+    SignalKMiniConfig config_;
+    async_event_loop::EventLoop<> loop_;
+    async_event_loop::NativeTcpServer signalk_tcp_server_;
+    ModelStore<Real> store_{};
+    Nmea0183Input<Real> nmea_{store_};
+    SignalKPublisher<Real> publisher_;
+    SignalKConnectionHandler signalk_connections_;
+    async_event_loop::TcpLineServerHandler<256, MaxSignalKConnections> signalk_line_handler_;
+    std::vector<std::unique_ptr<ConnectorRuntimeSlot>> connector_slots_;
+    async_event_loop::EventHandle timer_{};
+};
+
+} // namespace signalk_mini
