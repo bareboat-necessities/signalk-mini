@@ -2,7 +2,7 @@
 
 // Included inside Nmea0183RxConnector after nmea_inmarsat.hpp.
 
-bool inmarsat_cr_sentence_is_from_terminal(const NmeaSentence& sentence) const {
+bool inmarsat_cr_sentence_is_from_terminal(const NmeaSentence& sentence) {
     if (!talker_is(sentence, "CR")) {
         last_error_ = "unsupported CR terminal sentence talker";
         return false;
