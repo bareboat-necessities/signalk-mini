@@ -8,6 +8,49 @@
 
 namespace nmea0183_connector {
 
+enum NmeaDataStatus : char {
+    NMEA_DATA_STATUS_VALID = 'A',
+    NMEA_DATA_STATUS_WARNING = 'V'
+};
+
+enum NmeaBearingReference : char {
+    NMEA_BEARING_REFERENCE_TRUE = 'T',
+    NMEA_BEARING_REFERENCE_MAGNETIC = 'M'
+};
+
+enum NmeaSide : char {
+    NMEA_SIDE_LEFT = 'L',
+    NMEA_SIDE_RIGHT = 'R'
+};
+
+inline NmeaDataStatus nmea_data_status_from_char(char value) {
+    return value == NMEA_DATA_STATUS_VALID ? NMEA_DATA_STATUS_VALID : NMEA_DATA_STATUS_WARNING;
+}
+
+inline bool nmea_data_status_is_valid(char value) {
+    return nmea_data_status_from_char(value) == NMEA_DATA_STATUS_VALID;
+}
+
+inline NmeaBearingReference nmea_bearing_reference_from_char(char value) {
+    return value == NMEA_BEARING_REFERENCE_MAGNETIC ? NMEA_BEARING_REFERENCE_MAGNETIC : NMEA_BEARING_REFERENCE_TRUE;
+}
+
+inline bool nmea_bearing_reference_is_true(char value) {
+    return nmea_bearing_reference_from_char(value) == NMEA_BEARING_REFERENCE_TRUE;
+}
+
+inline bool nmea_bearing_reference_is_magnetic(char value) {
+    return nmea_bearing_reference_from_char(value) == NMEA_BEARING_REFERENCE_MAGNETIC;
+}
+
+inline bool nmea_side_from_char(char value, NmeaSide& out) {
+    if (value == NMEA_SIDE_LEFT || value == NMEA_SIDE_RIGHT) {
+        out = static_cast<NmeaSide>(value);
+        return true;
+    }
+    return false;
+}
+
 struct NmeaSpan {
     const char* data;
     uint8_t length;
@@ -189,11 +232,10 @@ inline bool parse_east_west_signed(NmeaSpan magnitude, NmeaSpan side, float& out
 
 inline bool parse_left_right_signed(NmeaSpan magnitude, NmeaSpan side, float& out) {
     float value = 0.0f;
-    if (!parse_real(magnitude, value) || side.empty()) return false;
+    NmeaSide side_code = NMEA_SIDE_LEFT;
+    if (!parse_real(magnitude, value) || side.empty() || !nmea_side_from_char(side[0], side_code)) return false;
 
-    if (side[0] == 'R') out = value;
-    else if (side[0] == 'L') out = -value;
-    else return false;
+    out = side_code == NMEA_SIDE_RIGHT ? value : -value;
     return true;
 }
 
