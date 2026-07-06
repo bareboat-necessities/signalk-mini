@@ -116,9 +116,49 @@ static void require_safetynet_sm_headers_and_smb_body() {
     REQUIRE(app.store().model().notifications.inmarsat.safetynet.message_count.value >= 4);
 }
 
+static void require_cr_terminal_sentences() {
+    signalk_mini::SignalKMiniApp<float> app;
+    uint64_t now_us = 0;
+
+    feed(app, "CSSM1,A,910001,000111,321,1,1,31,00,2024,01,02,03,04,05", now_us);
+    feed(app, "CSSMB,001,,,910001,PHASE FOUR MESSAGE", now_us);
+    REQUIRE(std::strcmp(app.store().model().notifications.inmarsat.safetynet.latest_message.message_id, "910001") == 0);
+    REQUIRE(!app.store().model().notifications.inmarsat.safetynet.latest_message.acknowledged);
+
+    feed(app, "CRCAN,910001,C,cleared", now_us);
+    REQUIRE(app.store().model().notifications.inmarsat.safetynet.latest_message.acknowledged);
+    REQUIRE(std::strcmp(app.store().model().notifications.messages.event.event_id, "910001") == 0);
+    REQUIRE(std::strcmp(app.store().model().notifications.messages.event.event_source, "inmarsat") == 0);
+
+    feed(app, "CRCRQ,REQ01,STATUS,ALL,terminal status", now_us);
+    REQUIRE(std::strcmp(app.store().model().notifications.messages.text.id, "REQ01") == 0);
+    REQUIRE(std::strcmp(app.store().model().notifications.messages.text.code, "STATUS") == 0);
+    REQUIRE(std::strcmp(app.store().model().notifications.messages.text.value, "ALL") == 0);
+
+    feed(app, "CRDSM,1,2,31,active", now_us);
+    REQUIRE(std::strcmp(app.store().model().notifications.messages.text.id, "DSM") == 0);
+    REQUIRE(app.store().model().notifications.inmarsat.safetynet.latest_message.ocean_region_code == '1');
+    REQUIRE(app.store().model().notifications.inmarsat.safetynet.latest_message.priority_code == '2');
+    REQUIRE(std::strcmp(app.store().model().notifications.inmarsat.safetynet.latest_message.service_code, "31") == 0);
+
+    feed(app, "CRTMD,MSG99,A,terminal,WEATHER UPDATE", now_us);
+    REQUIRE(std::strcmp(app.store().model().notifications.inmarsat.safetynet.latest_message.message_id, "MSG99") == 0);
+    REQUIRE(std::strcmp(app.store().model().notifications.inmarsat.safetynet.latest_message.message_text, "WEATHER UPDATE") == 0);
+    REQUIRE(app.store().model().notifications.inmarsat.safetynet.latest_message.complete);
+
+    feed(app, "CRTMD,2,1,MSG77,HELLO ", now_us);
+    feed(app, "CRTMD,2,2,MSG77,WORLD", now_us);
+    const auto& tmd = app.store().model().notifications.inmarsat.safetynet.latest_message;
+    REQUIRE(std::strcmp(tmd.message_id, "MSG77") == 0);
+    REQUIRE(std::strcmp(tmd.message_text, "HELLO WORLD") == 0);
+    REQUIRE(tmd.total_fragments.value == 2);
+    REQUIRE(tmd.complete);
+}
+
 int main() {
     require_legacy_inmarsat_notification_storage();
     require_bad_fragment_and_unsupported_counts();
     require_safetynet_sm_headers_and_smb_body();
+    require_cr_terminal_sentences();
     return 0;
 }
