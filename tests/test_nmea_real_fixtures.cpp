@@ -11,11 +11,10 @@
 #define REQUIRE(x) do { if (!(x)) { std::fprintf(stderr, "FAILED %s:%d: %s\n", __FILE__, __LINE__, #x); std::exit(1); } } while (0)
 #define NEAR(a,b,e) do { if (std::fabs(static_cast<double>((a) - (b))) > (e)) { std::fprintf(stderr, "NEAR failed %s:%d got %.9f expected %.9f\n", __FILE__, __LINE__, static_cast<double>(a), static_cast<double>(b)); std::exit(2); } } while (0)
 
-struct FixtureResult {
+struct FixtureCounts {
     int data_lines = 0;
     int accepted_lines = 0;
     int rejected_lines = 0;
-    signalk_mini::SignalKMiniApp<float> app;
 };
 
 static std::string test_source_dir() {
@@ -35,8 +34,8 @@ static bool is_expected_reject(const char* name, const std::string& line, const 
            std::strcmp(last_error, "invalid GGA") == 0;
 }
 
-static FixtureResult feed_fixture(const char* name) {
-    FixtureResult result;
+static FixtureCounts feed_fixture(signalk_mini::SignalKMiniApp<float>& app, const char* name) {
+    FixtureCounts counts;
     std::ifstream input(fixture_path(name));
     REQUIRE(input.good());
 
@@ -45,29 +44,30 @@ static FixtureResult feed_fixture(const char* name) {
     while (std::getline(input, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         if (line.empty() || line[0] == '#') continue;
-        ++result.data_lines;
+        ++counts.data_lines;
         now_us += 1000000ULL;
-        if (result.app.nmea0183().feed_line(line.c_str(), 1, now_us)) {
-            ++result.accepted_lines;
+        if (app.nmea0183().feed_line(line.c_str(), 1, now_us)) {
+            ++counts.accepted_lines;
             continue;
         }
-        if (is_expected_reject(name, line, result.app.nmea0183().last_error())) {
-            ++result.rejected_lines;
+        if (is_expected_reject(name, line, app.nmea0183().last_error())) {
+            ++counts.rejected_lines;
             continue;
         }
-        std::fprintf(stderr, "Failed fixture %s line %d: %s\n", name, result.data_lines, line.c_str());
-        std::fprintf(stderr, "last_error=%s\n", result.app.nmea0183().last_error());
+        std::fprintf(stderr, "Failed fixture %s line %d: %s\n", name, counts.data_lines, line.c_str());
+        std::fprintf(stderr, "last_error=%s\n", app.nmea0183().last_error());
         std::exit(3);
     }
-    return result;
+    return counts;
 }
 
 static void check_aerorust_gnss_supported() {
-    auto result = feed_fixture("aerorust_gnss_supported.nmea");
-    REQUIRE(result.data_lines == 9);
-    REQUIRE(result.accepted_lines == 8);
-    REQUIRE(result.rejected_lines == 1);
-    const auto& model = result.app.store().model();
+    signalk_mini::SignalKMiniApp<float> app;
+    const auto counts = feed_fixture(app, "aerorust_gnss_supported.nmea");
+    REQUIRE(counts.data_lines == 9);
+    REQUIRE(counts.accepted_lines == 8);
+    REQUIRE(counts.rejected_lines == 1);
+    const auto& model = app.store().model();
 
     REQUIRE(std::strcmp(model.gnss.fix.talker_id, "GP") == 0);
     REQUIRE(model.gnss.fix.fix_lat_deg.valid);
@@ -87,11 +87,12 @@ static void check_aerorust_gnss_supported() {
 }
 
 static void check_tripmate_sample() {
-    auto result = feed_fixture("tripmate_850_gps_sample.nmea");
-    REQUIRE(result.data_lines == 12);
-    REQUIRE(result.accepted_lines == 12);
-    REQUIRE(result.rejected_lines == 0);
-    const auto& model = result.app.store().model();
+    signalk_mini::SignalKMiniApp<float> app;
+    const auto counts = feed_fixture(app, "tripmate_850_gps_sample.nmea");
+    REQUIRE(counts.data_lines == 12);
+    REQUIRE(counts.accepted_lines == 12);
+    REQUIRE(counts.rejected_lines == 0);
+    const auto& model = app.store().model();
 
     REQUIRE(std::strcmp(model.gnss.fix.talker_id, "GP") == 0);
     REQUIRE(model.gnss.fix.fix_lat_deg.valid);
