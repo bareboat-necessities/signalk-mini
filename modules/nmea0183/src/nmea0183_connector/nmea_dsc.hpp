@@ -5,28 +5,50 @@
 static constexpr uint64_t DSC_DSE_TIMEOUT_US = 500000ULL;
 static constexpr uint64_t DSC_DUPLICATE_WINDOW_US = 10000000ULL;
 
+enum DscFormatSpecifier : int32_t {
+    DSC_FORMAT_GEOGRAPHIC_AREA = 102,
+    DSC_FORMAT_DISTRESS = 112,
+    DSC_FORMAT_GROUP = 114,
+    DSC_FORMAT_ALL_SHIPS = 116,
+    DSC_FORMAT_INDIVIDUAL = 120
+};
+
+enum DscCategory : int32_t {
+    DSC_CATEGORY_ROUTINE = 100,
+    DSC_CATEGORY_SAFETY = 108,
+    DSC_CATEGORY_URGENCY = 110,
+    DSC_CATEGORY_DISTRESS = 112
+};
+
+enum DscEndSignal : char {
+    DSC_END_SIGNAL_ACKNOWLEDGE = 'A',
+    DSC_END_SIGNAL_RETRANSMIT_ACK = 'R',
+    DSC_END_SIGNAL_END_OF_SEQUENCE = 'E'
+};
+
 static bool dsc_format_is_distress(int32_t code) {
-    return code == 112;
+    return code == DSC_FORMAT_DISTRESS;
 }
 
 static bool dsc_category_is_distress(int32_t code) {
-    return code == 112;
+    return code == DSC_CATEGORY_DISTRESS;
 }
 
 static bool dsc_category_is_urgency(int32_t code) {
-    return code == 110;
+    return code == DSC_CATEGORY_URGENCY;
 }
 
 static bool dsc_category_is_safety(int32_t code) {
-    return code == 108;
+    return code == DSC_CATEGORY_SAFETY;
 }
 
 static bool dsc_category_is_routine(int32_t code) {
-    return code == 100;
+    return code == DSC_CATEGORY_ROUTINE;
 }
 
 static bool dsc_end_signal_is_ack(char eos) {
-    return eos == 'A' || eos == 'R';
+    const auto signal = static_cast<DscEndSignal>(eos);
+    return signal == DSC_END_SIGNAL_ACKNOWLEDGE || signal == DSC_END_SIGNAL_RETRANSMIT_ACK;
 }
 
 static bool dsc_priority_is_alert(ship_data_model::DscPriority priority) {
@@ -61,11 +83,11 @@ static ship_data_model::DscPriority dsc_priority_from_codes(
 static ship_data_model::DscAddressType dsc_address_type_from_format(bool has_format, int32_t format) {
     if (!has_format) return ship_data_model::DscAddressType::unknown;
     switch (format) {
-    case 112: return ship_data_model::DscAddressType::distress;
-    case 120: return ship_data_model::DscAddressType::individual;
-    case 116: return ship_data_model::DscAddressType::all_ships;
-    case 114: return ship_data_model::DscAddressType::group;
-    case 102: return ship_data_model::DscAddressType::geographic_area;
+    case DSC_FORMAT_DISTRESS: return ship_data_model::DscAddressType::distress;
+    case DSC_FORMAT_INDIVIDUAL: return ship_data_model::DscAddressType::individual;
+    case DSC_FORMAT_ALL_SHIPS: return ship_data_model::DscAddressType::all_ships;
+    case DSC_FORMAT_GROUP: return ship_data_model::DscAddressType::group;
+    case DSC_FORMAT_GEOGRAPHIC_AREA: return ship_data_model::DscAddressType::geographic_area;
     default: return ship_data_model::DscAddressType::unknown;
     }
 }
