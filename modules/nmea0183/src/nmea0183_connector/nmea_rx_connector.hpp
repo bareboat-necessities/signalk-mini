@@ -50,8 +50,10 @@ public:
 #define NMEA_APPLY_NO_SOURCE(ID, FN) if (sentence_is(sentence, ID)) return FN(sentence, model, now_us)
         if (sentence_is(sentence, "VDM") || sentence_is(sentence, "VDO")) return apply_ais_vdm_vdo_with_own_vessel(sentence, model, now_us, source);
         NMEA_APPLY("AAM", apply_aam);
+        NMEA_APPLY("ABK", apply_abk);
         NMEA_APPLY("ACK", apply_ack);
         NMEA_APPLY("ADS", apply_ads);
+        NMEA_APPLY("AGA", apply_aga);
         NMEA_APPLY("AKD", apply_akd);
         NMEA_APPLY("ALA", apply_ala);
         NMEA_APPLY("ALC", apply_alc);
@@ -62,6 +64,7 @@ public:
         NMEA_APPLY("APB", apply_apb);
         NMEA_APPLY("ARC", apply_arc);
         NMEA_APPLY("ASD", apply_asd);
+        NMEA_APPLY("BCL", apply_bcl);
         NMEA_APPLY("BEC", apply_bec);
         if (sentence_is(sentence, "BOD")) return apply_bod_bww(sentence, model, now_us, source);
         if (sentence_is(sentence, "BWC")) return apply_bwc_bwr(sentence, model, now_us, source);
@@ -108,6 +111,7 @@ public:
         NMEA_APPLY("ITS", apply_its);
         NMEA_APPLY("LWY", apply_lwy);
         NMEA_APPLY("MDA", apply_mda);
+        NMEA_APPLY("MOB", apply_mob);
         NMEA_APPLY("MSK", apply_msk);
         NMEA_APPLY("MSS", apply_mss);
         NMEA_APPLY("MTW", apply_mtw);
@@ -185,6 +189,7 @@ private:
 #include "nmea_inmarsat.hpp"
 #include "nmea_ais.hpp"
 #include "nmea_ais_own_vessel.hpp"
+#include "nmea_phase3_amendments.hpp"
 #include "nmea_A_E.hpp"
 #include "nmea_F_G.hpp"
 #include "nmea_H_N.hpp"
