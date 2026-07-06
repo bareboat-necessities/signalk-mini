@@ -1,6 +1,6 @@
 #pragma once
 
-// Included inside Nmea0183RxConnector after nmea_ais.hpp and nmea_ais_control.hpp.
+// Included inside Nmea0183RxConnector after nmea_ais.hpp.
 
 void ais_remove_target_by_mmsi(ship_data_model::AisTargetTableData<Real>& table,
                                int32_t mmsi,
@@ -26,7 +26,7 @@ bool ais_enough_bits(size_t payload_len, int32_t fill_bits, size_t bit_count) co
 bool ais_app_position_deg(int32_t raw, bool longitude, Real& out_deg) const {
     const int32_t max_abs = longitude ? 10800000 : 5400000;
     if (raw > max_abs || raw < -max_abs) return false;
-    out_deg = static_cast<Real>(static_cast<float>(raw) / 60000.0f);
+    out_deg = static_cast<Real>(static_cast<float>(raw) * AIS_APP_POSITION_1_1000_MIN_TO_DEG);
     return true;
 }
 
@@ -35,13 +35,7 @@ Real ais_scaled_real(int32_t raw, float scale) const {
 }
 
 const char* ais_binary_application_label(int32_t dac, int32_t fi) const {
-    if (dac == 1 && fi == 31) return "imo_met_hydro";
-    if (dac == 1 && fi == 12) return "imo_" "dange" "rous_cargo";
-    if (dac == 1 && fi == 16) return "imo_persons_on_board";
-    if (dac == 1 && fi == 17) return "imo_vts_generated_text";
-    if (dac == 1 && fi == 22) return "imo_area_notice";
-    if (dac == 200 && fi == 10) return "regional_weather";
-    return "unknown";
+    return ais_binary_application_label_from_id(ais_binary_application_id(dac, fi));
 }
 
 void ais_decode_area_notice_subareas(const char* payload,
@@ -56,7 +50,7 @@ void ais_decode_area_notice_subareas(const char* payload,
     size_t offset = bit_offset;
     int32_t left = remaining_bits;
     while (count < ship_data_model::AIS_AREA_NOTICE_SUBAREA_CAPACITY && left >= 87 && ok) {
-        const int32_t shape = static_cast<int32_t>(ais_get_u(payload, payload_len, offset, 3, ok));
+        const AisAreaNoticeShape shape = ais_area_notice_shape_from_int(static_cast<int32_t>(ais_get_u(payload, payload_len, offset, 3, ok)));
         const int32_t scale = static_cast<int32_t>(ais_get_u(payload, payload_len, offset + 3u, 2, ok));
         const int32_t lon_raw = ais_get_s(payload, payload_len, offset + 5u, 25, ok);
         const int32_t lat_raw = ais_get_s(payload, payload_len, offset + 30u, 24, ok);
@@ -117,26 +111,30 @@ void ais_decode_met_hydro_fields(const char* payload,
     app.wind_gust_kn.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 7, ok)), now_us); o += 7u;
     app.wind_direction_deg.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 9, ok)), now_us); o += 9u;
     app.wind_gust_direction_deg.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 9, ok)), now_us); o += 9u;
-    app.air_temperature_c.set(ais_scaled_real(ais_get_s(payload, payload_len, o, 11, ok), 0.1f), now_us); o += 11u;
+    app.air_temperature_c.set(ais_scaled_real(ais_get_s(payload, payload_len, o, 11, ok), AIS_TENTHS_SCALE), now_us); o += 11u;
     app.relative_humidity_pct.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 7, ok)), now_us); o += 7u;
-    app.dew_point_c.set(ais_scaled_real(ais_get_s(payload, payload_len, o, 10, ok), 0.1f), now_us); o += 10u;
+    app.dew_point_c.set(ais_scaled_real(ais_get_s(payload, payload_len, o, 10, ok), AIS_TENTHS_SCALE), now_us); o += 10u;
     app.air_pressure_hpa.set(800 + static_cast<int32_t>(ais_get_u(payload, payload_len, o, 9, ok)), now_us); o += 9u;
-    app.air_pressure_tendency.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 2, ok)), now_us); o += 2u;
-    app.horizontal_visibility_nmi.set(ais_scaled_real(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 8, ok)), 0.1f), now_us); o += 8u;
-    app.water_level_m.set(ais_scaled_real(ais_get_s(payload, payload_len, o, 12, ok), 0.01f), now_us); o += 12u;
-    app.water_level_trend.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 2, ok)), now_us); o += 2u;
-    app.surface_current_speed_kn.set(ais_scaled_real(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 8, ok)), 0.1f), now_us); o += 8u;
+    const AisAirPressureTendency air_pressure_tendency = static_cast<AisAirPressureTendency>(ais_get_u(payload, payload_len, o, 2, ok)); o += 2u;
+    app.air_pressure_tendency.set(air_pressure_tendency, now_us);
+    app.horizontal_visibility_nmi.set(ais_scaled_real(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 8, ok)), AIS_TENTHS_SCALE), now_us); o += 8u;
+    app.water_level_m.set(ais_scaled_real(ais_get_s(payload, payload_len, o, 12, ok), AIS_CENTIMETERS_TO_METERS_SCALE), now_us); o += 12u;
+    const AisWaterLevelTrend water_level_trend = static_cast<AisWaterLevelTrend>(ais_get_u(payload, payload_len, o, 2, ok)); o += 2u;
+    app.water_level_trend.set(water_level_trend, now_us);
+    app.surface_current_speed_kn.set(ais_scaled_real(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 8, ok)), AIS_TENTHS_SCALE), now_us); o += 8u;
     app.surface_current_direction_deg.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 9, ok)), now_us); o += 9u;
-    app.wave_height_m.set(ais_scaled_real(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 8, ok)), 0.1f), now_us); o += 8u;
+    app.wave_height_m.set(ais_scaled_real(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 8, ok)), AIS_TENTHS_SCALE), now_us); o += 8u;
     app.wave_period_s.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 6, ok)), now_us); o += 6u;
     app.wave_direction_deg.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 9, ok)), now_us); o += 9u;
-    app.swell_height_m.set(ais_scaled_real(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 8, ok)), 0.1f), now_us); o += 8u;
+    app.swell_height_m.set(ais_scaled_real(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 8, ok)), AIS_TENTHS_SCALE), now_us); o += 8u;
     app.swell_period_s.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 6, ok)), now_us); o += 6u;
     app.swell_direction_deg.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 9, ok)), now_us); o += 9u;
-    app.sea_state.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 4, ok)), now_us); o += 4u;
-    app.water_temperature_c.set(ais_scaled_real(ais_get_s(payload, payload_len, o, 10, ok), 0.1f), now_us); o += 10u;
-    app.precipitation_type.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 3, ok)), now_us); o += 3u;
-    app.salinity_ppt.set(ais_scaled_real(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 9, ok)), 0.1f), now_us); o += 9u;
+    const AisSeaState sea_state = static_cast<AisSeaState>(ais_get_u(payload, payload_len, o, 4, ok)); o += 4u;
+    app.sea_state.set(sea_state, now_us);
+    app.water_temperature_c.set(ais_scaled_real(ais_get_s(payload, payload_len, o, 10, ok), AIS_TENTHS_SCALE), now_us); o += 10u;
+    const AisPrecipitationType precipitation_type = static_cast<AisPrecipitationType>(ais_get_u(payload, payload_len, o, 3, ok)); o += 3u;
+    app.precipitation_type.set(precipitation_type, now_us);
+    app.salinity_ppt.set(ais_scaled_real(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 9, ok)), AIS_TENTHS_SCALE), now_us); o += 9u;
     app.ice_mm.set(static_cast<int32_t>(ais_get_u(payload, payload_len, o, 10, ok)), now_us);
     if (ok) decoded += 25;
 }
@@ -156,22 +154,23 @@ void ais_decode_binary_application_fields(const char* payload,
 
     bool ok = true;
     int32_t decoded = 0;
+    const AisBinaryApplicationId application_id = ais_binary_application_id(dac, fi);
 
-    if (dac == 1 && fi == 12 && remaining_bits >= 30) {
+    if (application_id == AIS_BINARY_APP_IMO_DANGEROUS_CARGO && remaining_bits >= 30) {
         app.cargo_code.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start, 8, ok)), now_us);
         app.cargo_subcode.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 8u, 8, ok)), now_us);
         app.cargo_amount.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 16u, 10, ok)), now_us);
         app.cargo_unit.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 26u, 4, ok)), now_us);
         decoded = ok ? 4 : 0;
-    } else if (dac == 1 && fi == 16 && remaining_bits >= 13) {
+    } else if (application_id == AIS_BINARY_APP_IMO_PERSONS_ON_BOARD && remaining_bits >= 13) {
         app.quantity.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start, 13, ok)), now_us);
         decoded = ok ? 1 : 0;
-    } else if (dac == 1 && fi == 17 && remaining_bits >= 6) {
+    } else if (application_id == AIS_BINARY_APP_IMO_VTS_GENERATED_TEXT && remaining_bits >= 6) {
         uint8_t chars = static_cast<uint8_t>(remaining_bits / 6);
         if (chars > 90u) chars = 90u;
         ais_copy_text(app.text, sizeof(app.text), payload, payload_len, payload_start, chars);
         decoded = app.text[0] ? 1 : 0;
-    } else if (dac == 1 && fi == 22 && remaining_bits >= 55) {
+    } else if (application_id == AIS_BINARY_APP_IMO_AREA_NOTICE && remaining_bits >= 55) {
         app.link_id.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start, 10, ok)), now_us);
         app.notice_type.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 10u, 7, ok)), now_us);
         app.month.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 17u, 4, ok)), now_us);
@@ -181,7 +180,7 @@ void ais_decode_binary_application_fields(const char* payload,
         app.duration_min.set(static_cast<int32_t>(ais_get_u(payload, payload_len, payload_start + 37u, 18, ok)), now_us);
         decoded = ok ? 7 : 0;
         if (ok) ais_decode_area_notice_subareas(payload, payload_len, payload_start + 55u, remaining_bits - 55, now_us, app, ok, decoded);
-    } else if (dac == 1 && fi == 31) {
+    } else if (application_id == AIS_BINARY_APP_IMO_MET_HYDRO) {
         ais_decode_met_hydro_fields(payload, payload_len, payload_start, remaining_bits, now_us, app, ok, decoded);
     }
 
@@ -334,12 +333,12 @@ void ais_update_class_b_enhancements(const char* payload,
         pos.radio_status.set(static_cast<int32_t>(ais_get_u(payload, payload_len, 149, 19, ok)), now_us);
     } else if (header.message_type == AIS_MESSAGE_TYPE_EXTENDED_CLASS_B_POSITION_REPORT && ais_enough_bits(payload_len, fill_bits, 312)) {
         auto& stat = ais.class_b_static;
-        const int32_t ship_type = static_cast<int32_t>(ais_get_u(payload, payload_len, 263, 8, ok));
+        const AisShipType ship_type = static_cast<AisShipType>(ais_get_u(payload, payload_len, 263, 8, ok));
         const int32_t bow = static_cast<int32_t>(ais_get_u(payload, payload_len, 271, 9, ok));
         const int32_t stern = static_cast<int32_t>(ais_get_u(payload, payload_len, 280, 9, ok));
         const int32_t port = static_cast<int32_t>(ais_get_u(payload, payload_len, 289, 6, ok));
         const int32_t starboard = static_cast<int32_t>(ais_get_u(payload, payload_len, 295, 6, ok));
-        const int32_t epfd = static_cast<int32_t>(ais_get_u(payload, payload_len, 301, 4, ok));
+        const AisEpfdType epfd = ais_epfd_type_from_int(static_cast<int32_t>(ais_get_u(payload, payload_len, 301, 4, ok)));
         const bool dte_not_ready = ais_get_u(payload, payload_len, 305, 1, ok) != 0u;
         const bool assigned = ais_get_u(payload, payload_len, 306, 1, ok) != 0u;
         if (!ok) return;
@@ -371,14 +370,14 @@ void ais_update_type24_merge_state(const char* payload,
                                    ship_data_model::AisData<Real>& ais) {
     if (header.message_type != AIS_MESSAGE_TYPE_STATIC_DATA_REPORT || !ais_enough_bits(payload_len, fill_bits, 40)) return;
     bool ok = true;
-    const int32_t part = static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 2, ok));
+    const AisStaticDataPart part = ais_static_data_part_from_int(static_cast<int32_t>(ais_get_u(payload, payload_len, 38, 2, ok)));
     if (!ok) return;
     auto& stat = ais.class_b_static;
     if (!stat.merge_mmsi.valid) stat.merge_mmsi.set(header.mmsi, now_us);
-    if (part == 0) {
+    if (part == AIS_STATIC_DATA_PART_A) {
         stat.part_a_received = true;
         stat.part_a_update_us = now_us;
-    } else if (part == 1) {
+    } else if (part == AIS_STATIC_DATA_PART_B) {
         stat.part_b_received = true;
         stat.part_b_update_us = now_us;
     }
