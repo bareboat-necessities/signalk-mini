@@ -140,6 +140,9 @@ enum class InmarsatSentenceType : uint8_t {
     imk,
     imn,
     imr,
+    sm1,
+    sm2,
+    sm3,
     pinm,
     inm
 };
