@@ -2,9 +2,21 @@
 
 // Included inside Nmea0183RxConnector after nmea_ais.hpp.
 
-bool ais_control_message_type(int32_t type) const {
-    return type == 7 || type == 10 || type == 13 || type == 15 ||
-           type == 16 || type == 17 || type == 20 || type == 22 || type == 23;
+bool ais_control_message_type(AisMessageType type) const {
+    switch (type) {
+    case AIS_MESSAGE_TYPE_BINARY_ACKNOWLEDGE:
+    case AIS_MESSAGE_TYPE_UTC_DATE_INQUIRY:
+    case AIS_MESSAGE_TYPE_SAFETY_RELATED_ACKNOWLEDGEMENT:
+    case AIS_MESSAGE_TYPE_INTERROGATION:
+    case AIS_MESSAGE_TYPE_ASSIGNMENT_MODE_COMMAND:
+    case AIS_MESSAGE_TYPE_DGNSS_BINARY_BROADCAST_MESSAGE:
+    case AIS_MESSAGE_TYPE_DATA_LINK_MANAGEMENT:
+    case AIS_MESSAGE_TYPE_CHANNEL_MANAGEMENT:
+    case AIS_MESSAGE_TYPE_GROUP_ASSIGNMENT_COMMAND:
+        return true;
+    default:
+        return false;
+    }
 }
 
 bool ais_control_payload_from_sentence(const NmeaSentence& sentence,
@@ -303,29 +315,29 @@ bool apply_ais_control_vdm_vdo(const NmeaSentence& sentence,
 
     bool parsed = false;
     switch (header.message_type) {
-    case 7:
-    case 13:
+    case AIS_MESSAGE_TYPE_BINARY_ACKNOWLEDGE:
+    case AIS_MESSAGE_TYPE_SAFETY_RELATED_ACKNOWLEDGEMENT:
         parsed = ais_parse_acknowledgement(payload, payload_len, header, now_us, source, model.ais.acknowledgement, model.ais.targets);
         break;
-    case 10:
+    case AIS_MESSAGE_TYPE_UTC_DATE_INQUIRY:
         parsed = ais_parse_utc_inquiry(payload, payload_len, header, now_us, source, model.ais.utc_inquiry, model.ais.targets);
         break;
-    case 15:
+    case AIS_MESSAGE_TYPE_INTERROGATION:
         parsed = ais_parse_interrogation(payload, payload_len, header, now_us, source, model.ais.interrogation, model.ais.targets);
         break;
-    case 16:
+    case AIS_MESSAGE_TYPE_ASSIGNMENT_MODE_COMMAND:
         parsed = ais_parse_assignment_command(payload, payload_len, header, now_us, source, model.ais.assignment_command, model.ais.targets);
         break;
-    case 17:
+    case AIS_MESSAGE_TYPE_DGNSS_BINARY_BROADCAST_MESSAGE:
         parsed = ais_parse_dgnss_broadcast(payload, payload_len, header, now_us, source, model.ais.dgnss_broadcast, model.ais.targets);
         break;
-    case 20:
+    case AIS_MESSAGE_TYPE_DATA_LINK_MANAGEMENT:
         parsed = ais_parse_data_link_management(payload, payload_len, header, now_us, source, model.ais.data_link_management, model.ais.targets);
         break;
-    case 22:
+    case AIS_MESSAGE_TYPE_CHANNEL_MANAGEMENT:
         parsed = ais_parse_channel_management(payload, payload_len, header, now_us, source, model.ais.channel_management, model.ais.targets);
         break;
-    case 23:
+    case AIS_MESSAGE_TYPE_GROUP_ASSIGNMENT_COMMAND:
         parsed = ais_parse_group_assignment(payload, payload_len, header, now_us, source, model.ais.group_assignment, model.ais.targets);
         break;
     default:
