@@ -117,7 +117,7 @@ inline bool nmea_is_dsc_sentence(const NmeaSentence& s) {
 }
 
 inline bool nmea_is_inmarsat_sm_sentence(const NmeaSentence& s) {
-    return sentence_is_any(s, "SM1", "SM2", "SM3");
+    return sentence_is_any(s, "SM1", "SM2", "SM3") || sentence_is(s, "SM4") || sentence_is(s, "SMB");
 }
 
 inline bool nmea_is_inmarsat_sentence(const NmeaSentence& s) {
@@ -153,6 +153,8 @@ inline void nmea_detect_fragment_info(NmeaSentence& s) {
         nmea_set_fragment_info(s, 0, 1, 3, 5);
     } else if (sentence_is_any(s, "NRM", "NRX")) {
         nmea_set_fragment_info(s, 0, 1, 2, 3);
+    } else if (sentence_is(s, "SMB")) {
+        nmea_set_fragment_info(s, 0, 1, 3, 4);
     } else if (nmea_is_seatalk_sentence(s) || nmea_is_inmarsat_sentence(s)) {
         nmea_set_fragment_info(s, 0, 1, 2, 3);
     }
@@ -216,33 +218,42 @@ public:
 
     bool parse_line(const char* line, NmeaSentence& out, bool validate_checksum) {
         out.clear();
-        if (!line || (line[0] != '$' && line[0] != '!')) { last_error_ = "bad start"; return false; }
+        if (!line) { last_error_ = "bad start"; return false; }
 
-        const char* star = strchr(line, '*');
-        const char* body_end_in = star ? star : (line + strlen(line));
+        const char* sentence_line = line;
+        if (sentence_line[0] == '/') {
+            const char* tag_end = strchr(sentence_line + 1, '/');
+            if (!tag_end || (tag_end[1] != '$' && tag_end[1] != '!')) { last_error_ = "bad tag block"; return false; }
+            sentence_line = tag_end + 1;
+        }
+
+        if (sentence_line[0] != '$' && sentence_line[0] != '!') { last_error_ = "bad start"; return false; }
+
+        const char* star = strchr(sentence_line, '*');
+        const char* body_end_in = star ? star : (sentence_line + strlen(sentence_line));
 
         if (validate_checksum) {
             if (!star) { last_error_ = "missing checksum"; return false; }
             uint8_t supplied = 0;
             if (!parse_checksum_hex(star + 1, supplied)) { last_error_ = "bad checksum field"; return false; }
-            uint8_t computed = nmea_checksum_range(line + 1, star);
+            uint8_t computed = nmea_checksum_range(sentence_line + 1, star);
             if (computed != supplied) { last_error_ = "checksum mismatch"; return false; }
             out.valid_checksum = true;
         } else if (star) {
             uint8_t supplied = 0;
-            out.valid_checksum = parse_checksum_hex(star + 1, supplied) && nmea_checksum_range(line + 1, star) == supplied;
+            out.valid_checksum = parse_checksum_hex(star + 1, supplied) && nmea_checksum_range(sentence_line + 1, star) == supplied;
         }
 
-        size_t raw_len = strlen(line);
+        size_t raw_len = strlen(sentence_line);
         if (raw_len >= NMEA_MAX_SENTENCE_LEN) raw_len = NMEA_MAX_SENTENCE_LEN - 1;
-        memcpy(out.raw, line, raw_len);
+        memcpy(out.raw, sentence_line, raw_len);
         out.raw[raw_len] = '\0';
         out.raw_length = static_cast<uint8_t>(raw_len);
         out.start_char = out.raw[0];
 
         const char* raw_begin = out.raw;
         const size_t body_offset = 1;
-        const size_t body_len = static_cast<size_t>(body_end_in - (line + 1));
+        const size_t body_len = static_cast<size_t>(body_end_in - (sentence_line + 1));
         if (body_len < 5 || body_offset + body_len > raw_len) { last_error_ = "short body"; return false; }
         out.body = NmeaSpan(raw_begin + body_offset, body_len);
         out.talker = NmeaSpan(out.body.data, 2);
