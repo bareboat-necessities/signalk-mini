@@ -183,6 +183,7 @@ private:
 #include "nmea_rx_multipart.hpp"
 #include "nmea_dsc.hpp"
 #include "nmea_inmarsat.hpp"
+#include "nmea_ais_values.hpp"
 #include "nmea_ais.hpp"
 #include "nmea_ais_own_vessel.hpp"
 #include "nmea_A_E.hpp"
