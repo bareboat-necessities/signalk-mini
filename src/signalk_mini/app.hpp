@@ -14,6 +14,7 @@ public:
     void tick() { server_.tick(); }
     void run_forever() { server_.run_forever(); }
     ModelStore<Real>& store() { return server_.store(); }
+    const ModelStore<Real>& store() const { return server_.store(); }
     Nmea0183Input<Real>& nmea0183() { return server_.nmea0183(); }
 
 private:
