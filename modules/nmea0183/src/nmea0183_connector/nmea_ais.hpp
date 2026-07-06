@@ -243,7 +243,8 @@ bool ais_parse_channel_management(const char* payload,
     ais_set_control_header(out, header, now_us, source, target_table);
     out.channel_a.set(static_cast<int32_t>(ais_get_u(payload, payload_len, 40, 12, ok)), now_us);
     out.channel_b.set(static_cast<int32_t>(ais_get_u(payload, payload_len, 52, 12, ok)), now_us);
-    out.txrx_mode.set(static_cast<int32_t>(ais_get_u(payload, payload_len, 64, 4, ok)), now_us);
+    const AisTxRxMode txrx_mode = ais_txrx_mode_from_int(static_cast<int32_t>(ais_get_u(payload, payload_len, 64, 4, ok)));
+    out.txrx_mode.set(txrx_mode, now_us);
     out.high_power = ais_get_u(payload, payload_len, 68, 1, ok) != 0u;
     const bool addressed = ais_get_u(payload, payload_len, 139, 1, ok) != 0u;
     out.addressed = addressed;
@@ -286,10 +287,14 @@ bool ais_parse_group_assignment(const char* payload,
     if (ais_long_range_position_deg(ais_get_s(payload, payload_len, 58, 17, ok), false, ne_lat)) out.northeast_lat_deg.set(ne_lat, now_us);
     if (ais_long_range_position_deg(ais_get_s(payload, payload_len, 75, 18, ok), true, sw_lon)) out.southwest_lon_deg.set(sw_lon, now_us);
     if (ais_long_range_position_deg(ais_get_s(payload, payload_len, 93, 17, ok), false, sw_lat)) out.southwest_lat_deg.set(sw_lat, now_us);
-    out.station_type.set(static_cast<int32_t>(ais_get_u(payload, payload_len, 110, 4, ok)), now_us);
-    out.ship_type.set(static_cast<int32_t>(ais_get_u(payload, payload_len, 114, 8, ok)), now_us);
-    out.txrx_mode.set(static_cast<int32_t>(ais_get_u(payload, payload_len, 144, 2, ok)), now_us);
-    out.report_interval.set(static_cast<int32_t>(ais_get_u(payload, payload_len, 146, 4, ok)), now_us);
+    const AisStationType station_type = static_cast<AisStationType>(ais_get_u(payload, payload_len, 110, 4, ok));
+    const AisShipType ship_type = static_cast<AisShipType>(ais_get_u(payload, payload_len, 114, 8, ok));
+    const AisTxRxMode txrx_mode = ais_txrx_mode_from_int(static_cast<int32_t>(ais_get_u(payload, payload_len, 144, 2, ok)));
+    const AisReportInterval report_interval = static_cast<AisReportInterval>(ais_get_u(payload, payload_len, 146, 4, ok));
+    out.station_type.set(station_type, now_us);
+    out.ship_type.set(ship_type, now_us);
+    out.txrx_mode.set(txrx_mode, now_us);
+    out.report_interval.set(report_interval, now_us);
     out.quiet_time_min.set(static_cast<int32_t>(ais_get_u(payload, payload_len, 150, 4, ok)), now_us);
     if (!ok) return false;
     out.last_update_us = now_us;
