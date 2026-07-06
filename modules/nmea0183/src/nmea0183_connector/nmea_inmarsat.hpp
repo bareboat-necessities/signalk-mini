@@ -48,7 +48,8 @@ static NmeaSpan inmarsat_best_payload_field(const NmeaSentence& sentence) {
 }
 
 bool inmarsat_is_standard_message(const NmeaSentence& sentence) const {
-    return sentence_is(sentence, "IMK") || sentence_is(sentence, "IMN") || sentence_is(sentence, "IMR");
+    return sentence_is(sentence, "IMK") || sentence_is(sentence, "IMN") || sentence_is(sentence, "IMR") ||
+           sentence_is(sentence, "SM1") || sentence_is(sentence, "SM2") || sentence_is(sentence, "SM3");
 }
 
 bool inmarsat_is_proprietary_message(const NmeaSentence& sentence) const {
@@ -59,6 +60,9 @@ ship_data_model::InmarsatSentenceType inmarsat_sentence_type_from_sentence(const
     if (sentence_is(sentence, "IMK")) return ship_data_model::InmarsatSentenceType::imk;
     if (sentence_is(sentence, "IMN")) return ship_data_model::InmarsatSentenceType::imn;
     if (sentence_is(sentence, "IMR")) return ship_data_model::InmarsatSentenceType::imr;
+    if (sentence_is(sentence, "SM1")) return ship_data_model::InmarsatSentenceType::sm1;
+    if (sentence_is(sentence, "SM2")) return ship_data_model::InmarsatSentenceType::sm2;
+    if (sentence_is(sentence, "SM3")) return ship_data_model::InmarsatSentenceType::sm3;
     if (inmarsat_body_starts_with(sentence, "PINM")) return ship_data_model::InmarsatSentenceType::pinm;
     if (inmarsat_body_starts_with(sentence, "INM")) return ship_data_model::InmarsatSentenceType::inm;
     return ship_data_model::InmarsatSentenceType::unknown;
@@ -69,6 +73,9 @@ ship_data_model::InmarsatSentenceType inmarsat_sentence_type_from_id(const char*
     if (strcmp(sentence_id, "IMK") == 0) return ship_data_model::InmarsatSentenceType::imk;
     if (strcmp(sentence_id, "IMN") == 0) return ship_data_model::InmarsatSentenceType::imn;
     if (strcmp(sentence_id, "IMR") == 0) return ship_data_model::InmarsatSentenceType::imr;
+    if (strcmp(sentence_id, "SM1") == 0) return ship_data_model::InmarsatSentenceType::sm1;
+    if (strcmp(sentence_id, "SM2") == 0) return ship_data_model::InmarsatSentenceType::sm2;
+    if (strcmp(sentence_id, "SM3") == 0) return ship_data_model::InmarsatSentenceType::sm3;
     if (strcmp(sentence_id, "PINM") == 0) return ship_data_model::InmarsatSentenceType::pinm;
     if (strcmp(sentence_id, "INM") == 0) return ship_data_model::InmarsatSentenceType::inm;
     return ship_data_model::InmarsatSentenceType::unknown;
@@ -113,7 +120,10 @@ void set_inmarsat_sentence_decoding(Message& message, ship_data_model::InmarsatS
     message.sentence_type = sentence_type;
     message.standard_sentence = sentence_type == ship_data_model::InmarsatSentenceType::imk ||
                                 sentence_type == ship_data_model::InmarsatSentenceType::imn ||
-                                sentence_type == ship_data_model::InmarsatSentenceType::imr;
+                                sentence_type == ship_data_model::InmarsatSentenceType::imr ||
+                                sentence_type == ship_data_model::InmarsatSentenceType::sm1 ||
+                                sentence_type == ship_data_model::InmarsatSentenceType::sm2 ||
+                                sentence_type == ship_data_model::InmarsatSentenceType::sm3;
     message.proprietary_sentence = sentence_type == ship_data_model::InmarsatSentenceType::pinm ||
                                    sentence_type == ship_data_model::InmarsatSentenceType::inm;
 }
