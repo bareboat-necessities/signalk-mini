@@ -16,10 +16,10 @@ pkg_check_modules(LIBCONFIG REQUIRED libconfig)
 
 add_library(signalk_mini_core INTERFACE)
 target_include_directories(signalk_mini_core INTERFACE
-  ${CMAKE_CURRENT_SOURCE_DIR}/src
-  ${CMAKE_CURRENT_SOURCE_DIR}/modules/async-event-loop/src
-  ${CMAKE_CURRENT_SOURCE_DIR}/modules/data-model/src
-  ${CMAKE_CURRENT_SOURCE_DIR}/modules/nmea0183/src
+  src
+  modules/async-event-loop/src
+  modules/data-model/src
+  modules/nmea0183/src
   ${LIBEVENT_INCLUDE_DIRS}
 )
 target_compile_features(signalk_mini_core INTERFACE cxx_std_17)
@@ -54,6 +54,7 @@ if(BUILD_TESTING)
   add_signalk_mini_test(test_nmea_dsc_dse_payload tests/test_nmea_dsc_dse_payload.cpp)
   add_signalk_mini_test(test_nmea_inmarsat tests/test_nmea_inmarsat.cpp)
   add_signalk_mini_test(test_nmea_inmarsat_history tests/test_nmea_inmarsat_history.cpp)
+  add_signalk_mini_test(test_nmea_phase3_amendments tests/test_nmea_phase3_amendments.cpp)
   add_signalk_mini_test(test_nmea_ais tests/test_nmea_ais.cpp)
   add_signalk_mini_test(test_nmea_ais_interleaved tests/test_nmea_ais_interleaved.cpp)
   add_signalk_mini_test(test_nmea_ais_own_vessel tests/test_nmea_ais_own_vessel.cpp)
