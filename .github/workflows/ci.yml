@@ -33,6 +33,11 @@ jobs:
           arduino-cli lib update-index
           arduino-cli lib install M5Unified
           arduino-cli lib install ArduinoJson
+      - name: Prepare vendored module libraries
+        run: |
+          printf '%s\n' 'name=signalk-mini-async-event-loop' 'version=0.1.0' 'author=Bareboat Necessities' 'maintainer=Bareboat Necessities' 'sentence=Vendored async event loop module for signalk-mini.' 'paragraph=Source-only vendored module used by signalk-mini.' 'category=Communication' 'architectures=esp32' 'includes=async_event_loop.hpp' > modules/async-event-loop/library.properties
+          printf '%s\n' 'name=signalk-mini-data-model' 'version=0.1.0' 'author=Bareboat Necessities' 'maintainer=Bareboat Necessities' 'sentence=Vendored data model module for signalk-mini.' 'paragraph=Source-only vendored module used by signalk-mini.' 'category=Data Processing' 'architectures=esp32' 'includes=ship_data_model.hpp' > modules/data-model/library.properties
+          printf '%s\n' 'name=signalk-mini-nmea0183' 'version=0.1.0' 'author=Bareboat Necessities' 'maintainer=Bareboat Necessities' 'sentence=Vendored NMEA0183 module for signalk-mini.' 'paragraph=Source-only vendored module used by signalk-mini.' 'category=Communication' 'architectures=esp32' 'includes=nmea0183_connector.hpp' > modules/nmea0183/library.properties
       - name: Compile AtomS3R sketch
         run: |
           arduino-cli compile \
