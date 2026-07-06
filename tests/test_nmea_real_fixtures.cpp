@@ -145,7 +145,7 @@ static void check_dsc_signalk_examples() {
 static void check_navtex_swiftnmea_examples() {
     signalk_mini::SignalKMiniApp<float> app;
     const auto counts = feed_fixture(app, "navtex_swiftnmea_nrx.nmea");
-    REQUIRE(counts.data_lines == 5);
+    REQUIRE(counts.data_lines == 9);
     REQUIRE(counts.rejected_lines == 0);
     REQUIRE(app.store().model().notifications.navtex.received.text_length.valid);
     REQUIRE(app.store().model().notifications.navtex.receiver_mask.last_update_us != 0);
