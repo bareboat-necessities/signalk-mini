@@ -16,7 +16,18 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
       - name: Test
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          set +e
+          ctest --test-dir build --output-on-failure 2>&1 | tee build/ctest-output.log
+          status=${PIPESTATUS[0]}
+          tail -n 120 build/ctest-output.log
+          exit ${status}
+      - name: Upload ctest output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-output
+          path: build/ctest-output.log
 
   arduino-atoms3r:
     runs-on: ubuntu-latest
