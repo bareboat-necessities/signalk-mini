@@ -142,11 +142,13 @@ static void check_dsc_signalk_examples() {
     REQUIRE(app.store().model().comm.dsc.latest_call.sender_mmsi[0] != '\0');
 }
 
-static void check_navtex_swiftnmea_nrx() {
+static void check_navtex_swiftnmea_examples() {
     signalk_mini::SignalKMiniApp<float> app;
     const auto counts = feed_fixture(app, "navtex_swiftnmea_nrx.nmea");
-    REQUIRE(counts.data_lines == 3);
+    REQUIRE(counts.data_lines == 5);
     REQUIRE(counts.rejected_lines == 0);
+    REQUIRE(app.store().model().notifications.navtex.received.text_length.valid);
+    REQUIRE(app.store().model().notifications.navtex.receiver_mask.last_update_us != 0);
 }
 
 int main() {
@@ -156,6 +158,6 @@ int main() {
     check_gpsbabel_nmea_ms();
     check_gpsd_ais_18_27();
     check_dsc_signalk_examples();
-    check_navtex_swiftnmea_nrx();
+    check_navtex_swiftnmea_examples();
     return 0;
 }
