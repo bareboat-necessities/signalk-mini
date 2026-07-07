@@ -39,8 +39,6 @@ struct SeaData {
     char ground_speed_status = 0;
     Stamped<Real> speed_parallel_to_wind_kn;
     Stamped<Real> speed_parallel_to_wind_m_s;
-    Stamped<Real> total_distance_nmi;
-    Stamped<Real> trip_distance_nmi;
     Stamped<Real> leeway_deg;
     Stamped<Real> current_speed_kn;
     Stamped<Real> current_direction_deg;
@@ -50,18 +48,6 @@ struct SeaData {
     Stamped<Real> depth_below_surface_m;
     Stamped<Real> depth_offset_m;
     Stamped<Real> temperature_c;
-    Stamped<Real> trawl_headrope_to_footrope_m;
-    Stamped<Real> trawl_headrope_to_bottom_m;
-    Stamped<Real> trawl_door_centerline_offset_m;
-    Stamped<Real> trawl_door_along_centerline_m;
-    Stamped<Real> trawl_cartesian_centerline_offset_m;
-    Stamped<Real> trawl_cartesian_along_centerline_m;
-    Stamped<int32_t> trawl_catch_sensor_status[3];
-    Stamped<Real> trawl_depth_below_surface_m;
-    Stamped<Real> trawl_relative_range_m;
-    Stamped<Real> trawl_relative_bearing_deg;
-    Stamped<Real> trawl_true_range_m;
-    Stamped<Real> trawl_true_bearing_deg;
     uint64_t last_update_us = 0;
 };
 
