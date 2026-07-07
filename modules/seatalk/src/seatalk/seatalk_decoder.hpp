@@ -11,6 +11,7 @@ namespace seatalk {
 enum class SeaTalkDecodedKind : uint8_t {
     none,
     depth,
+    engine_rpm_pitch,
     apparent_wind_angle,
     apparent_wind_speed,
     speed_through_water,
@@ -30,14 +31,18 @@ enum class SeaTalkDecodedKind : uint8_t {
     time_utc,
     date_utc,
     satellite_info,
+    satellite_detail,
+    differential_detail,
     autopilot_state,
     autopilot_key,
     navigation_to_waypoint,
     compass_variation,
     waypoint_id,
     waypoint_name,
+    waypoint_definition,
     arrival_info,
-    device_status
+    device_status,
+    observed_unknown
 };
 
 enum class SeaTalkAutopilotMode : uint8_t {
@@ -152,6 +157,20 @@ bool decode_seatalk_frame(const SeaTalkFrame& frame, SeaTalkDecoded<Real>& out) 
         out.kind = SeaTalkDecodedKind::depth;
         out.value = static_cast<Real>((static_cast<float>(raw_feet_x10) / 10.0f) * 0.3048f);
         out.alarm = (dg[2] & 0x80) != 0;
+        return true;
+    }
+    case 0x05: {
+        if (frame.length < 6) return false;
+        const int16_t rpm = static_cast<int16_t>((static_cast<uint16_t>(dg[3]) << 8) | dg[4]);
+        const int8_t pitch = static_cast<int8_t>(dg[5]);
+        out.kind = SeaTalkDecodedKind::engine_rpm_pitch;
+        out.value = static_cast<Real>(rpm);
+        out.secondary_value = static_cast<Real>(pitch);
+        out.secondary_valid = true;
+        out.code = dg[2];
+        if (dg[2] == 1) seatalk_copy_label(out.label, sizeof(out.label), "starboard");
+        else if (dg[2] == 2) seatalk_copy_label(out.label, sizeof(out.label), "port");
+        else seatalk_copy_label(out.label, sizeof(out.label), "single");
         return true;
     }
     case 0x10: {
@@ -336,6 +355,18 @@ bool decode_seatalk_frame(const SeaTalkFrame& frame, SeaTalkDecoded<Real>& out) 
         out.secondary_valid = true;
         return true;
     }
+    case 0x59: {
+        out.kind = SeaTalkDecodedKind::observed_unknown;
+        out.code = 0x59;
+        seatalk_copy_label(out.label, sizeof(out.label), "observed_59");
+        return true;
+    }
+    case 0x61: {
+        out.kind = SeaTalkDecodedKind::observed_unknown;
+        out.code = 0x61;
+        seatalk_copy_label(out.label, sizeof(out.label), "e80_signature");
+        return true;
+    }
     case 0x82: {
         if (frame.length < 7) return false;
         const uint8_t xx = dg[2];
@@ -439,6 +470,11 @@ bool decode_seatalk_frame(const SeaTalkFrame& frame, SeaTalkDecoded<Real>& out) 
         out.secondary_valid = true;
         return true;
     }
+    case 0x9e: {
+        out.kind = SeaTalkDecodedKind::waypoint_definition;
+        seatalk_copy_label(out.label, sizeof(out.label), "waypoint_definition");
+        return true;
+    }
     case 0xa1: {
         if (frame.length < 9) return false;
         out.kind = SeaTalkDecodedKind::waypoint_name;
@@ -459,6 +495,59 @@ bool decode_seatalk_frame(const SeaTalkFrame& frame, SeaTalkDecoded<Real>& out) 
         out.kind = SeaTalkDecodedKind::device_status;
         out.code = 0xa4;
         seatalk_copy_label(out.label, sizeof(out.label), dg[1] == 0x12 ? "device_identity" : "device_query");
+        return true;
+    }
+    case 0xa5: {
+        if (frame.length < 4) return false;
+        out.kind = SeaTalkDecodedKind::satellite_detail;
+        out.code = dg[1];
+        if (dg[1] == 0x57 && frame.length >= 10) {
+            out.int_value = dg[2] & 0x0f;
+            out.int_secondary_value = static_cast<uint8_t>(((dg[2] & 0xe0) >> 4) + (dg[3] & 0x01));
+            out.value = static_cast<Real>((dg[3] & 0x7c) >> 2);
+            out.secondary_valid = true;
+            out.secondary_value = static_cast<Real>(static_cast<int16_t>(static_cast<uint16_t>(dg[6]) << 4));
+            out.int_third_value = static_cast<uint16_t>(((dg[8] & 0xc0) << 2) + dg[9]);
+            seatalk_copy_label(out.label, sizeof(out.label), "gps_fix_detail");
+        } else if (dg[1] == 0x74) {
+            out.int_value = dg[2] & 0x7f;
+            out.flags = dg[2] & 0x80;
+            seatalk_copy_label(out.label, sizeof(out.label), "satellites_used");
+        } else if (dg[1] == 0x98) {
+            seatalk_copy_label(out.label, sizeof(out.label), "satellites_done");
+        } else if (dg[1] == 0xb5) {
+            seatalk_copy_label(out.label, sizeof(out.label), "wgs84_datum");
+        } else if (frame.length >= 16) {
+            out.int_secondary_value = dg[1];
+            out.int_value = static_cast<uint8_t>((dg[2] & 0xfe) / 2);
+            out.value = static_cast<Real>(static_cast<uint16_t>(dg[3]) * 2u + (dg[4] & 0x01));
+            out.secondary_value = static_cast<Real>((dg[4] & 0xfe) / 2);
+            out.secondary_valid = true;
+            out.third_value = static_cast<Real>((dg[5] & 0xfe) / 2);
+            out.third_valid = true;
+            seatalk_copy_label(out.label, sizeof(out.label), "satellite_detail");
+        } else {
+            seatalk_copy_label(out.label, sizeof(out.label), "satellite_detail");
+        }
+        return true;
+    }
+    case 0xa7: {
+        if (frame.length < 12) return false;
+        out.kind = SeaTalkDecodedKind::differential_detail;
+        out.code = dg[1];
+        out.int_value = dg[2];
+        out.value = static_cast<Real>(static_cast<uint16_t>(dg[3]) * 2u + (dg[4] & 0x01));
+        out.secondary_value = static_cast<Real>((dg[4] & 0xfe) / 2);
+        out.secondary_valid = true;
+        out.third_value = static_cast<Real>((dg[5] & 0xfe) / 2);
+        out.third_valid = true;
+        seatalk_copy_label(out.label, sizeof(out.label), "differential_detail");
+        return true;
+    }
+    case 0xad: {
+        out.kind = SeaTalkDecodedKind::observed_unknown;
+        out.code = 0xad;
+        seatalk_copy_label(out.label, sizeof(out.label), "observed_ad");
         return true;
     }
     default:
