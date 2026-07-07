@@ -29,6 +29,7 @@ struct PublisherConfig {
 enum class ConnectorProtocol : uint8_t {
     None = 0,
     Nmea0183,
+    SeaTalk1,
     Nmea2000,
     SignalK,
     GenericSensor,
