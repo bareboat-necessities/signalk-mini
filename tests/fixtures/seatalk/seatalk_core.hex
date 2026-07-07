@@ -1,0 +1,13 @@
+# SeaTalk1 datagrams, one complete datagram per line.
+# command attribute data...
+00 02 00 D2 00
+10 01 00 B4
+11 01 0C 03
+20 01 41 00
+26 04 D2 04 00 00 10
+23 01 16 48
+27 01 37 01
+89 01 2D 00
+9C 01 2D FE
+21 02 34 12 00
+22 02 D2 04 00
