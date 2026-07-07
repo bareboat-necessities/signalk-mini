@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 project(signalk-mini VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(FetchContent)
@@ -20,6 +20,7 @@ target_include_directories(signalk_mini_core INTERFACE
   modules/async-event-loop/src
   modules/data-model/src
   modules/nmea0183/src
+  modules/seatalk/src
   ${LIBEVENT_INCLUDE_DIRS}
 )
 target_compile_features(signalk_mini_core INTERFACE cxx_std_17)
@@ -61,6 +62,9 @@ if(BUILD_TESTING)
   add_signalk_mini_test(test_nmea_ais_enhancements tests/test_nmea_ais_enhancements.cpp)
   add_signalk_mini_test(test_nmea_navtex tests/test_nmea_navtex.cpp)
   add_signalk_mini_test(test_nmea_navtex_interleaved tests/test_nmea_navtex_interleaved.cpp)
+  add_signalk_mini_test(test_seatalk_decoder tests/test_seatalk_decoder.cpp)
+  add_signalk_mini_test(test_seatalk_model_apply tests/test_seatalk_model_apply.cpp)
+  add_signalk_mini_test(test_seatalk_real_fixtures tests/test_seatalk_real_fixtures.cpp)
 
   add_executable(test_signalk_mini_tcp_integration tests/test_signalk_mini_tcp_integration.cpp)
   target_link_libraries(test_signalk_mini_tcp_integration PRIVATE signalk_mini_core Threads::Threads)
