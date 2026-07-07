@@ -70,4 +70,8 @@ if(BUILD_TESTING)
   add_executable(test_signalk_mini_tcp_integration tests/test_signalk_mini_tcp_integration.cpp)
   target_link_libraries(test_signalk_mini_tcp_integration PRIVATE signalk_mini_core Threads::Threads)
   add_test(NAME test_signalk_mini_tcp_integration COMMAND test_signalk_mini_tcp_integration)
+
+  add_executable(test_seatalk_native_routing tests/test_seatalk_native_routing.cpp)
+  target_link_libraries(test_seatalk_native_routing PRIVATE signalk_mini_core Threads::Threads)
+  add_test(NAME test_seatalk_native_routing COMMAND test_seatalk_native_routing)
 endif()
