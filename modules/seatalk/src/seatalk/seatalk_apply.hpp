@@ -69,6 +69,16 @@ bool apply_seatalk_decoded(const SeaTalkDecoded<Real>& decoded,
         model.sea.last_update_us = now_us;
         return true;
 
+    case SeaTalkDecodedKind::engine_rpm_pitch:
+        model.propulsion.revolutions.speed_rpm.set(decoded.value, now_us);
+        if (decoded.secondary_valid) model.propulsion.revolutions.propeller_pitch_percent.set(decoded.secondary_value, now_us);
+        model.propulsion.revolutions.number.set(decoded.code, now_us);
+        model.propulsion.revolutions.source_type = 'S';
+        model.propulsion.revolutions.status = 'A';
+        model.propulsion.revolutions.source.value = source;
+        model.propulsion.revolutions.last_update_us = now_us;
+        return true;
+
     case SeaTalkDecodedKind::apparent_wind_angle:
         model.wind.apparent.direction_deg.set(decoded.value, now_us);
         model.wind.apparent.source.value = source;
@@ -197,6 +207,36 @@ bool apply_seatalk_decoded(const SeaTalkDecoded<Real>& decoded,
         model.gnss.satellites_in_view.last_update_us = now_us;
         return true;
 
+    case SeaTalkDecodedKind::satellite_detail:
+        if (decoded.code == 0x57) {
+            model.gnss.fix.fix_quality.set(decoded.int_value, now_us);
+            model.gnss.fix.satellites_used.set(decoded.int_secondary_value, now_us);
+            if (decoded.secondary_valid) model.gnss.fix.hdop.set(decoded.value, now_us);
+            if (decoded.int_third_value != 0) model.gnss.fix.dgps_station_id.set(decoded.int_third_value, now_us);
+            model.gnss.fix.source.value = source;
+            model.gnss.fix.last_update_us = now_us;
+        } else if (decoded.int_value != 0) {
+            model.gnss.satellites_in_view.satellite_prn[0].set(decoded.int_value, now_us);
+            model.gnss.satellites_in_view.azimuth_true_deg[0].set(decoded.value, now_us);
+            if (decoded.secondary_valid) model.gnss.satellites_in_view.elevation_deg[0].set(decoded.secondary_value, now_us);
+            if (decoded.third_valid) model.gnss.satellites_in_view.snr_db[0].set(decoded.third_value, now_us);
+            model.gnss.satellites_in_view.source.value = source;
+            model.gnss.satellites_in_view.last_update_us = now_us;
+        } else {
+            seatalk_apply_message_text(model, "seatalk_satellite", "detail", decoded.label, now_us, source);
+        }
+        return true;
+
+    case SeaTalkDecodedKind::differential_detail:
+        model.gnss.satellites_in_view.satellite_prn[0].set(decoded.int_value, now_us);
+        model.gnss.satellites_in_view.azimuth_true_deg[0].set(decoded.value, now_us);
+        if (decoded.secondary_valid) model.gnss.satellites_in_view.elevation_deg[0].set(decoded.secondary_value, now_us);
+        if (decoded.third_valid) model.gnss.satellites_in_view.snr_db[0].set(decoded.third_value, now_us);
+        model.gnss.satellites_in_view.source.value = source;
+        model.gnss.satellites_in_view.last_update_us = now_us;
+        seatalk_apply_message_text(model, "seatalk_differential", "detail", decoded.label, now_us, source);
+        return true;
+
     case SeaTalkDecodedKind::autopilot_state: {
         auto& ap = model.autopilot.controller;
         ap.mode.value = seatalk_model_autopilot_mode(decoded.autopilot_mode);
@@ -262,6 +302,10 @@ bool apply_seatalk_decoded(const SeaTalkDecoded<Real>& decoded,
         seatalk_apply_waypoint_id(model, decoded.label, now_us, source);
         return true;
 
+    case SeaTalkDecodedKind::waypoint_definition:
+        seatalk_apply_message_text(model, "seatalk_waypoint_definition", "definition", decoded.label, now_us, source);
+        return true;
+
     case SeaTalkDecodedKind::arrival_info:
         seatalk_copy_text(model.route.waypoint_arrival.waypoint_id, sizeof(model.route.waypoint_arrival.waypoint_id), decoded.label);
         seatalk_copy_text(model.route.apb.destination_id, sizeof(model.route.apb.destination_id), decoded.label);
@@ -280,6 +324,10 @@ bool apply_seatalk_decoded(const SeaTalkDecoded<Real>& decoded,
 
     case SeaTalkDecodedKind::device_status:
         seatalk_apply_message_text(model, "seatalk_device", "status", decoded.label, now_us, source);
+        return true;
+
+    case SeaTalkDecodedKind::observed_unknown:
+        seatalk_apply_message_text(model, "seatalk_observed", "unknown", decoded.label, now_us, source);
         return true;
 
     case SeaTalkDecodedKind::none:
