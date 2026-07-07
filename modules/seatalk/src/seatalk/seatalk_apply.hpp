@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdio.h>
 #include <string.h>
 #include <ship_data_model.hpp>
 
@@ -23,6 +24,36 @@ inline void seatalk_copy_text(char* dst, size_t dst_len, const char* src) {
     if (!src) return;
     strncpy(dst, src, dst_len - 1);
     dst[dst_len - 1] = '\0';
+}
+
+template<typename Model>
+void seatalk_apply_message_text(Model& model,
+                                const char* id,
+                                const char* code,
+                                const char* text,
+                                uint64_t now_us,
+                                ship_data_model::SensorSource source) {
+    auto& msg = model.notifications.messages.text;
+    seatalk_copy_text(msg.id, sizeof(msg.id), id);
+    seatalk_copy_text(msg.code, sizeof(msg.code), code);
+    seatalk_copy_text(msg.text, sizeof(msg.text), text);
+    msg.field_count.set(1, now_us);
+    msg.source.value = source;
+    msg.last_update_us = now_us;
+}
+
+template<typename Model>
+void seatalk_apply_waypoint_id(Model& model, const char* waypoint_id, uint64_t now_us, ship_data_model::SensorSource source) {
+    if (!waypoint_id || waypoint_id[0] == '\0') return;
+    seatalk_copy_text(model.route.waypoint.to_waypoint_id, sizeof(model.route.waypoint.to_waypoint_id), waypoint_id);
+    seatalk_copy_text(model.route.apb.destination_id, sizeof(model.route.apb.destination_id), waypoint_id);
+    seatalk_copy_text(model.route.rmb.destination_id, sizeof(model.route.rmb.destination_id), waypoint_id);
+    model.route.waypoint.source.value = source;
+    model.route.waypoint.last_update_us = now_us;
+    model.route.apb.source.value = source;
+    model.route.apb.last_update_us = now_us;
+    model.route.rmb.source.value = source;
+    model.route.rmb.last_update_us = now_us;
 }
 
 template<typename Real>
@@ -78,6 +109,92 @@ bool apply_seatalk_decoded(const SeaTalkDecoded<Real>& decoded,
             model.ins.imu.heading_deg.set(decoded.secondary_value, now_us);
             model.ins.imu.heading_magnetic_deg.set(decoded.secondary_value, now_us);
         }
+        return true;
+
+    case SeaTalkDecodedKind::trip_distance:
+        model.sea.trip_distance_nmi.set(decoded.value, now_us);
+        model.sea.source.value = source;
+        model.sea.last_update_us = now_us;
+        return true;
+
+    case SeaTalkDecodedKind::total_distance:
+        model.sea.total_distance_nmi.set(decoded.value, now_us);
+        model.sea.source.value = source;
+        model.sea.last_update_us = now_us;
+        return true;
+
+    case SeaTalkDecodedKind::trip_total:
+        model.sea.total_distance_nmi.set(decoded.value, now_us);
+        if (decoded.secondary_valid) model.sea.trip_distance_nmi.set(decoded.secondary_value, now_us);
+        model.sea.source.value = source;
+        model.sea.last_update_us = now_us;
+        return true;
+
+    case SeaTalkDecodedKind::display_units:
+        seatalk_apply_message_text(model, "seatalk_display_units", "units", decoded.label, now_us, source);
+        return true;
+
+    case SeaTalkDecodedKind::lamp_intensity:
+        seatalk_apply_message_text(model, "seatalk_lamp", "intensity", decoded.label, now_us, source);
+        return true;
+
+    case SeaTalkDecodedKind::position_latitude:
+        model.gnss.fix.fix_lat_deg.set(decoded.value, now_us);
+        model.gnss.fix.source.value = source;
+        model.gnss.fix.last_update_us = now_us;
+        return true;
+
+    case SeaTalkDecodedKind::position_longitude:
+        model.gnss.fix.fix_lon_deg.set(decoded.value, now_us);
+        model.gnss.fix.source.value = source;
+        model.gnss.fix.last_update_us = now_us;
+        return true;
+
+    case SeaTalkDecodedKind::position_lat_lon:
+        model.gnss.fix.fix_lat_deg.set(decoded.value, now_us);
+        if (decoded.secondary_valid) model.gnss.fix.fix_lon_deg.set(decoded.secondary_value, now_us);
+        model.gnss.fix.source.value = source;
+        model.gnss.fix.last_update_us = now_us;
+        return true;
+
+    case SeaTalkDecodedKind::speed_over_ground:
+        model.gnss.fix.speed_kn.set(decoded.value, now_us);
+        model.sea.longitudinal_ground_speed_kn.set(decoded.value, now_us);
+        model.sea.ground_speed_status = 'A';
+        model.gnss.fix.source.value = source;
+        model.gnss.fix.last_update_us = now_us;
+        model.sea.source.value = source;
+        model.sea.last_update_us = now_us;
+        return true;
+
+    case SeaTalkDecodedKind::course_over_ground:
+        model.gnss.fix.track_deg.set(decoded.value, now_us);
+        model.gnss.fix.source.value = source;
+        model.gnss.fix.last_update_us = now_us;
+        return true;
+
+    case SeaTalkDecodedKind::time_utc:
+        model.gnss.fix.timestamp_s.set(decoded.value, now_us);
+        model.gnss.fix.source.value = source;
+        model.gnss.fix.last_update_us = now_us;
+        return true;
+
+    case SeaTalkDecodedKind::date_utc:
+        model.gnss.fix.date_day.set(decoded.int_value, now_us);
+        model.gnss.fix.date_month.set(decoded.int_secondary_value, now_us);
+        model.gnss.fix.date_year.set(decoded.int_third_value, now_us);
+        model.gnss.fix.source.value = source;
+        model.gnss.fix.last_update_us = now_us;
+        return true;
+
+    case SeaTalkDecodedKind::satellite_info:
+        model.gnss.fix.satellites_used.set(decoded.int_value, now_us);
+        model.gnss.satellites_in_view.satellites_in_view.set(decoded.int_value, now_us);
+        if (decoded.secondary_valid) model.gnss.fix.hdop.set(decoded.secondary_value, now_us);
+        model.gnss.fix.source.value = source;
+        model.gnss.fix.last_update_us = now_us;
+        model.gnss.satellites_in_view.source.value = source;
+        model.gnss.satellites_in_view.last_update_us = now_us;
         return true;
 
     case SeaTalkDecodedKind::autopilot_state: {
@@ -140,16 +257,29 @@ bool apply_seatalk_decoded(const SeaTalkDecoded<Real>& decoded,
         model.gnss.fix.declination_deg.set(decoded.value, now_us);
         return true;
 
-    case SeaTalkDecodedKind::trip_distance:
-        model.sea.trip_distance_nmi.set(decoded.value, now_us);
-        model.sea.source.value = source;
-        model.sea.last_update_us = now_us;
+    case SeaTalkDecodedKind::waypoint_id:
+    case SeaTalkDecodedKind::waypoint_name:
+        seatalk_apply_waypoint_id(model, decoded.label, now_us, source);
         return true;
 
-    case SeaTalkDecodedKind::total_distance:
-        model.sea.total_distance_nmi.set(decoded.value, now_us);
-        model.sea.source.value = source;
-        model.sea.last_update_us = now_us;
+    case SeaTalkDecodedKind::arrival_info:
+        seatalk_copy_text(model.route.waypoint_arrival.waypoint_id, sizeof(model.route.waypoint_arrival.waypoint_id), decoded.label);
+        seatalk_copy_text(model.route.apb.destination_id, sizeof(model.route.apb.destination_id), decoded.label);
+        model.route.waypoint_arrival.perpendicular_passed.value = decoded.secondary_valid;
+        model.route.waypoint_arrival.arrival_circle_entered.value = decoded.third_valid;
+        model.route.apb.perpendicular_passed.value = decoded.secondary_valid;
+        model.route.apb.arrival_circle_entered.value = decoded.third_valid;
+        model.route.rmb.arrived.value = decoded.secondary_valid || decoded.third_valid;
+        model.route.waypoint_arrival.source.value = source;
+        model.route.waypoint_arrival.last_update_us = now_us;
+        model.route.apb.source.value = source;
+        model.route.apb.last_update_us = now_us;
+        model.route.rmb.source.value = source;
+        model.route.rmb.last_update_us = now_us;
+        return true;
+
+    case SeaTalkDecodedKind::device_status:
+        seatalk_apply_message_text(model, "seatalk_device", "status", decoded.label, now_us, source);
         return true;
 
     case SeaTalkDecodedKind::none:
