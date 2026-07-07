@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdint.h>
 #include <ship_data_model.hpp>
 #include "model_store.hpp"
 #include "units.hpp"
