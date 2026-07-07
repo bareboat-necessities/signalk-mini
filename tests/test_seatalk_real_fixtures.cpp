@@ -89,6 +89,8 @@ int main() {
         REQUIRE(receiver.decoded_count() > 0);
         REQUIRE(receiver.unsupported_count() == 0);
         REQUIRE(model.sea.depth_m.valid);
+        REQUIRE(model.propulsion.revolutions.speed_rpm.valid);
+        REQUIRE(model.propulsion.revolutions.propeller_pitch_percent.valid);
         REQUIRE(model.wind.apparent.direction_deg.valid);
         REQUIRE(model.wind.apparent.speed_kn.valid);
         REQUIRE(model.sea.speed_kn.valid);
@@ -104,6 +106,8 @@ int main() {
         REQUIRE(model.gnss.fix.timestamp_s.valid);
         REQUIRE(model.gnss.fix.date_year.valid);
         REQUIRE(model.gnss.fix.satellites_used.valid);
+        REQUIRE(model.gnss.fix.fix_quality.valid);
+        REQUIRE(model.gnss.satellites_in_view.satellite_prn[0].valid);
         REQUIRE(model.autopilot.controller.heading_deg.valid);
         REQUIRE(model.autopilot.controller.heading_command_deg.valid);
         REQUIRE(model.autopilot.controller.enabled.value);
