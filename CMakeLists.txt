@@ -67,6 +67,7 @@ if(BUILD_TESTING)
   add_signalk_mini_test(test_seatalk_model_apply tests/test_seatalk_model_apply.cpp)
   add_signalk_mini_test(test_seatalk_real_fixtures tests/test_seatalk_real_fixtures.cpp)
   add_signalk_mini_test(test_seatalk_mapping tests/test_seatalk_signalk_mapping.cpp)
+  add_signalk_mini_test(test_seatalk_tx tests/test_seatalk_tx.cpp)
 
   add_executable(test_signalk_mini_tcp_integration tests/test_signalk_mini_tcp_integration.cpp)
   target_link_libraries(test_signalk_mini_tcp_integration PRIVATE signalk_mini_core Threads::Threads)
