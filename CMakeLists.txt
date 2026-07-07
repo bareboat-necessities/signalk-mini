@@ -76,4 +76,8 @@ if(BUILD_TESTING)
   add_executable(test_seatalk_native_routing tests/test_seatalk_native_routing.cpp)
   target_link_libraries(test_seatalk_native_routing PRIVATE signalk_mini_core Threads::Threads)
   add_test(NAME test_seatalk_native_routing COMMAND test_seatalk_native_routing)
+
+  add_executable(test_seatalk_runtime_tx tests/test_seatalk_runtime_tx.cpp)
+  target_link_libraries(test_seatalk_runtime_tx PRIVATE signalk_mini_core Threads::Threads)
+  add_test(NAME test_seatalk_runtime_tx COMMAND test_seatalk_runtime_tx)
 endif()
