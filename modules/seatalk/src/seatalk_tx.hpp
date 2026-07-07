@@ -29,10 +29,6 @@ enum class SeaTalkPilotKey : uint8_t {
     standby_minus_1 = 0x30,
 };
 
-inline float seatalk_tx_abs(float value) {
-    return value < 0.0f ? -value : value;
-}
-
 inline float seatalk_tx_wrap_360(float deg) {
     while (deg < 0.0f) deg += 360.0f;
     while (deg >= 360.0f) deg -= 360.0f;
@@ -57,6 +53,14 @@ inline bool seatalk_tx_set(SeaTalkFrame& frame, const uint8_t* bytes, uint8_t le
     frame = SeaTalkFrame{};
     for (uint8_t i = 0; i < length; ++i) frame.bytes[i] = bytes[i];
     frame.length = length;
+    return true;
+}
+
+inline bool seatalk_tx_copy_bytes(const SeaTalkFrame& frame, uint8_t* out, size_t out_size, size_t& written) {
+    written = 0;
+    if (!out || frame.length == 0 || frame.length > out_size) return false;
+    for (uint8_t i = 0; i < frame.length; ++i) out[i] = frame.bytes[i];
+    written = frame.length;
     return true;
 }
 
@@ -100,6 +104,17 @@ inline bool make_speed_through_water_kn(SeaTalkFrame& frame, float speed_kn) {
     const uint16_t raw_kn_x10 = seatalk_tx_round_u16(speed_kn * 10.0f);
     const uint8_t bytes[] = {
         0x20,
+        0x01,
+        static_cast<uint8_t>(raw_kn_x10 & 0xff),
+        static_cast<uint8_t>((raw_kn_x10 >> 8) & 0xff),
+    };
+    return seatalk_tx_set(frame, bytes, sizeof(bytes));
+}
+
+inline bool make_speed_over_ground_kn(SeaTalkFrame& frame, float speed_kn) {
+    const uint16_t raw_kn_x10 = seatalk_tx_round_u16(speed_kn * 10.0f);
+    const uint8_t bytes[] = {
+        0x52,
         0x01,
         static_cast<uint8_t>(raw_kn_x10 & 0xff),
         static_cast<uint8_t>((raw_kn_x10 >> 8) & 0xff),
