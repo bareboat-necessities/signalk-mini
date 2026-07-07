@@ -97,8 +97,8 @@ int main() {
         REQUIRE(model.sea.temperature_c.valid);
         REQUIRE(model.ins.imu.heading_magnetic_deg.valid);
         REQUIRE(model.steering.rudder.angle_deg.valid);
-        REQUIRE(model.sea.total_distance_nmi.valid);
-        REQUIRE(model.sea.trip_distance_nmi.valid);
+        REQUIRE(model.route.log.total_distance_nmi.valid);
+        REQUIRE(model.route.log.trip_distance_nmi.valid);
         REQUIRE(model.gnss.fix.fix_lat_deg.valid);
         REQUIRE(model.gnss.fix.fix_lon_deg.valid);
         REQUIRE(model.gnss.fix.speed_kn.valid);
