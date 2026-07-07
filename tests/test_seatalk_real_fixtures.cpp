@@ -95,11 +95,22 @@ int main() {
         REQUIRE(model.sea.temperature_c.valid);
         REQUIRE(model.ins.imu.heading_magnetic_deg.valid);
         REQUIRE(model.steering.rudder.angle_deg.valid);
+        REQUIRE(model.sea.total_distance_nmi.valid);
+        REQUIRE(model.sea.trip_distance_nmi.valid);
+        REQUIRE(model.gnss.fix.fix_lat_deg.valid);
+        REQUIRE(model.gnss.fix.fix_lon_deg.valid);
+        REQUIRE(model.gnss.fix.speed_kn.valid);
+        REQUIRE(model.gnss.fix.track_deg.valid);
+        REQUIRE(model.gnss.fix.timestamp_s.valid);
+        REQUIRE(model.gnss.fix.date_year.valid);
+        REQUIRE(model.gnss.fix.satellites_used.valid);
         REQUIRE(model.autopilot.controller.heading_deg.valid);
         REQUIRE(model.autopilot.controller.heading_command_deg.valid);
         REQUIRE(model.autopilot.controller.enabled.value);
         REQUIRE(model.route.apb.xte_nmi.valid);
         REQUIRE(model.route.waypoint.distance_nmi.valid);
+        REQUIRE(model.route.waypoint_arrival.arrival_circle_entered.value);
+        REQUIRE(std::strcmp(model.route.waypoint_arrival.waypoint_id, "WP01") == 0);
         REQUIRE(std::strcmp(model.notifications.messages.event.event_id, "seatalk_ap_key") == 0);
     }
     REQUIRE(fixture_count > 0);
