@@ -19,6 +19,8 @@
 #endif
 
 #include <async_event_loop.hpp>
+#include <nmea0183_connector.hpp>
+#include <seatalk.hpp>
 #include "config.hpp"
 #include "connection_registry.hpp"
 #include "nmea0183_input.hpp"
@@ -41,7 +43,7 @@ public:
         (void)config;
         return false;
 #else
-        if (config.listen_port == 0) return false;
+        if (config.listen_port == 0 && (!config.remote_host || config.remote_port == 0)) return false;
         const int fd = ::socket(AF_INET, SOCK_DGRAM, 0);
         if (fd < 0) return false;
 
@@ -57,19 +59,34 @@ public:
             return false;
         }
 
-        sockaddr_in addr{};
-        addr.sin_family = AF_INET;
-        addr.sin_port = htons(config.listen_port);
-        if (!config.listen_host || strcmp(config.listen_host, "0.0.0.0") == 0) {
-            addr.sin_addr.s_addr = htonl(INADDR_ANY);
-        } else if (::inet_pton(AF_INET, config.listen_host, &addr.sin_addr) != 1) {
-            ::close(fd);
-            return false;
+        if (config.listen_port != 0) {
+            sockaddr_in addr{};
+            addr.sin_family = AF_INET;
+            addr.sin_port = htons(config.listen_port);
+            if (!config.listen_host || strcmp(config.listen_host, "0.0.0.0") == 0) {
+                addr.sin_addr.s_addr = htonl(INADDR_ANY);
+            } else if (::inet_pton(AF_INET, config.listen_host, &addr.sin_addr) != 1) {
+                ::close(fd);
+                return false;
+            }
+
+            if (::bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
+                ::close(fd);
+                return false;
+            }
         }
 
-        if (::bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
-            ::close(fd);
-            return false;
+        if (config.remote_host && config.remote_port != 0) {
+            remote_addr_ = sockaddr_in{};
+            remote_addr_.sin_family = AF_INET;
+            remote_addr_.sin_port = htons(config.remote_port);
+            if (strcmp(config.remote_host, "255.255.255.255") == 0) {
+                remote_addr_.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+            } else if (::inet_pton(AF_INET, config.remote_host, &remote_addr_.sin_addr) != 1) {
+                ::close(fd);
+                return false;
+            }
+            remote_addr_ready_ = true;
         }
 
         fd_ = fd;
@@ -83,6 +100,8 @@ public:
             ::close(fd_);
             fd_ = -1;
         }
+        remote_addr_ = sockaddr_in{};
+        remote_addr_ready_ = false;
 #endif
     }
 
@@ -103,9 +122,19 @@ public:
     }
 
     int write(const uint8_t* src, size_t len) override {
+#if defined(ARDUINO)
         (void)src;
         (void)len;
         return 0;
+#else
+        if (fd_ < 0 || !remote_addr_ready_ || !src || len == 0) return 0;
+        const ssize_t n = ::sendto(fd_, src, len, 0, reinterpret_cast<const sockaddr*>(&remote_addr_), sizeof(remote_addr_));
+        if (n < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) return 0;
+            return -1;
+        }
+        return static_cast<int>(n);
+#endif
     }
 
     bool readable() const override {
@@ -118,7 +147,13 @@ public:
 #endif
     }
 
-    bool writable() const override { return false; }
+    bool writable() const override {
+#if defined(ARDUINO)
+        return false;
+#else
+        return fd_ >= 0 && remote_addr_ready_;
+#endif
+    }
 
     bool valid() const override {
 #if defined(ARDUINO)
@@ -141,6 +176,8 @@ public:
 private:
 #if !defined(ARDUINO)
     int fd_ = -1;
+    sockaddr_in remote_addr_{};
+    bool remote_addr_ready_ = false;
 #endif
 };
 
@@ -168,6 +205,47 @@ public:
     const ModelStore<Real>& store() const { return store_; }
     Nmea0183Input<Real>& nmea0183() { return nmea_; }
     SeaTalkInput<Real>& seatalk() { return seatalk_; }
+
+    bool transmit_seatalk_frame(const seatalk::SeaTalkFrame& frame) {
+        if (frame.length == 0) return false;
+        bool any = false;
+        for (auto& ptr : connector_slots_) {
+            if (!ptr) continue;
+            ConnectorRuntimeSlot& slot = *ptr;
+            if (!slot.started || !slot.connection_flags.allow_tx) continue;
+            if (slot.config.protocol.kind == ConnectorProtocol::SeaTalk1) {
+                if (transmit_seatalk_binary(slot, frame)) any = true;
+            } else if (slot.config.protocol.kind == ConnectorProtocol::Nmea0183) {
+                if (transmit_seatalk_over_nmea(slot, frame)) any = true;
+            }
+        }
+        return any;
+    }
+
+    bool transmit_seatalk_pilot_key(seatalk::SeaTalkPilotKey key, bool long_press = false) {
+        seatalk::SeaTalkFrame frame;
+        return seatalk::make_pilot_key(frame, key, long_press) && transmit_seatalk_frame(frame);
+    }
+
+    bool transmit_seatalk_depth_m(float depth_m, bool alarm = false) {
+        seatalk::SeaTalkFrame frame;
+        return seatalk::make_depth_m(frame, depth_m, alarm) && transmit_seatalk_frame(frame);
+    }
+
+    bool transmit_seatalk_apparent_wind_angle_deg(float angle_deg) {
+        seatalk::SeaTalkFrame frame;
+        return seatalk::make_apparent_wind_angle_deg(frame, angle_deg) && transmit_seatalk_frame(frame);
+    }
+
+    bool transmit_seatalk_apparent_wind_speed_kn(float speed_kn) {
+        seatalk::SeaTalkFrame frame;
+        return seatalk::make_apparent_wind_speed_kn(frame, speed_kn) && transmit_seatalk_frame(frame);
+    }
+
+    bool transmit_seatalk_speed_through_water_kn(float speed_kn) {
+        seatalk::SeaTalkFrame frame;
+        return seatalk::make_speed_through_water_kn(frame, speed_kn) && transmit_seatalk_frame(frame);
+    }
 
 private:
     static async_event_loop::TcpLineServerOptions signalk_options() {
@@ -490,6 +568,51 @@ private:
         const ConnectorRuntimeSlot& slot = connector_slot(index);
         const SourceId source_id = static_cast<SourceId>(10 + index);
         if (nmea_.feed_line(text, source_id, loop_.clock().micros(), slot.nmea0183_validate_checksum)) publish();
+    }
+
+    bool write_all(async_event_loop::IByteStream& stream, const uint8_t* data, size_t length) {
+        if (!data || length == 0 || !stream.valid() || !stream.writable()) return false;
+        const int n = stream.write(data, length);
+        return n == static_cast<int>(length);
+    }
+
+    bool transmit_to_tcp_server_connections(ConnectionRegistry<MaxConnectionsPerConnector>& connections,
+                                            const uint8_t* data,
+                                            size_t length) {
+        bool any = false;
+        connections.for_each_tx([&](async_event_loop::ITcpConnection& connection) {
+            if (write_all(connection, data, length)) any = true;
+        });
+        return any;
+    }
+
+    bool transmit_bytes_to_slot(ConnectorRuntimeSlot& slot, const uint8_t* data, size_t length) {
+        switch (slot.config.transport.kind) {
+        case ConnectorTransport::Serial:
+            return write_all(slot.serial_stream, data, length);
+        case ConnectorTransport::TcpClient:
+            return slot.tcp_client.connected() && write_all(slot.tcp_client.connection(), data, length);
+        case ConnectorTransport::TcpServer:
+            if (slot.config.protocol.kind == ConnectorProtocol::SeaTalk1) {
+                return transmit_to_tcp_server_connections(slot.tcp_raw_server_handler.connections, data, length);
+            }
+            return transmit_to_tcp_server_connections(slot.tcp_server_handler.connections, data, length);
+        case ConnectorTransport::Udp:
+            return write_all(slot.udp_listener, data, length);
+        default:
+            return false;
+        }
+    }
+
+    bool transmit_seatalk_binary(ConnectorRuntimeSlot& slot, const seatalk::SeaTalkFrame& frame) {
+        return transmit_bytes_to_slot(slot, frame.bytes, frame.length);
+    }
+
+    bool transmit_seatalk_over_nmea(ConnectorRuntimeSlot& slot, const seatalk::SeaTalkFrame& frame) {
+        char sentence[96];
+        const size_t n = nmea0183_connector::make_seatalk_frame(sentence, sizeof(sentence), frame);
+        if (n == 0) return false;
+        return transmit_bytes_to_slot(slot, reinterpret_cast<const uint8_t*>(sentence), n);
     }
 
     void publish() { publisher_.publish_pending(signalk_connections_.connections); }
