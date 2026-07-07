@@ -95,6 +95,12 @@ int main() {
         REQUIRE(model.sea.temperature_c.valid);
         REQUIRE(model.ins.imu.heading_magnetic_deg.valid);
         REQUIRE(model.steering.rudder.angle_deg.valid);
+        REQUIRE(model.autopilot.controller.heading_deg.valid);
+        REQUIRE(model.autopilot.controller.heading_command_deg.valid);
+        REQUIRE(model.autopilot.controller.enabled.value);
+        REQUIRE(model.route.apb.xte_nmi.valid);
+        REQUIRE(model.route.waypoint.distance_nmi.valid);
+        REQUIRE(std::strcmp(model.notifications.messages.event.event_id, "seatalk_ap_key") == 0);
     }
     REQUIRE(fixture_count > 0);
     REQUIRE(record_count > 0);
