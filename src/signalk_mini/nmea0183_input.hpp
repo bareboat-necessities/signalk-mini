@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <nmea0183_connector.hpp>
+#include <seatalk.hpp>
 #include <ship_data_model.hpp>
 #include "model_store.hpp"
 #include "types.hpp"
@@ -23,17 +24,42 @@ public:
 
         nmea0183_connector::NmeaSentence sentence;
         if (!parser_.parse_line(sentence_text, sentence, validate_checksum)) return false;
+
+        const uint32_t decoded_before = rx_.seatalk_receiver().decoded_count();
         const bool applied = rx_.apply_sentence(sentence, store_.model(), now_us, ship_data_model::SensorSource::serial);
         if (!applied) return false;
-        mark_changed_from_sentence(sentence, source_id, now_us);
+        if (rx_.seatalk_receiver().decoded_count() != decoded_before) mark_changed_from_st(rx_.seatalk_receiver().last_decoded(), source_id, now_us);
+        else mark_changed_from_sentence(sentence, source_id, now_us);
         return true;
     }
 
     const char* last_error() const { return rx_.last_error(); }
     const nmea0183_connector::NmeaMessageState& message_state() const { return rx_.message_state(); }
     const nmea0183_connector::NmeaDscMessageState& dsc_state() const { return rx_.dsc_state(); }
+    const seatalk::SeaTalkReceiver<Real>& seatalk_receiver() const { return rx_.seatalk_receiver(); }
 
 private:
+    void mark_changed_from_st(const seatalk::SeaTalkDecoded<Real>& decoded, SourceId source_id, uint64_t now_us) {
+        using Kind = seatalk::SeaTalkDecodedKind;
+        switch (decoded.kind) {
+        case Kind::depth: store_.mark_changed(ModelField::SeaDepthM, source_id, now_us); break;
+        case Kind::apparent_wind_angle: store_.mark_changed(ModelField::WindApparentDirectionDeg, source_id, now_us); break;
+        case Kind::apparent_wind_speed: store_.mark_changed(ModelField::WindApparentSpeedKn, source_id, now_us); break;
+        case Kind::heading_magnetic:
+        case Kind::rudder_angle:
+        case Kind::autopilot_state: store_.mark_changed(ModelField::ImuHeadingDeg, source_id, now_us); break;
+        case Kind::position_latitude: store_.mark_changed(ModelField::GnssFixLatDeg, source_id, now_us); break;
+        case Kind::position_longitude: store_.mark_changed(ModelField::GnssFixLonDeg, source_id, now_us); break;
+        case Kind::position_lat_lon:
+            store_.mark_changed(ModelField::GnssFixLatDeg, source_id, now_us);
+            store_.mark_changed(ModelField::GnssFixLonDeg, source_id, now_us);
+            break;
+        case Kind::speed_over_ground: store_.mark_changed(ModelField::GnssSpeedKn, source_id, now_us); break;
+        case Kind::course_over_ground: store_.mark_changed(ModelField::GnssTrackDeg, source_id, now_us); break;
+        default: break;
+        }
+    }
+
     void mark_changed_from_sentence(const nmea0183_connector::NmeaSentence& sentence, SourceId source_id, uint64_t now_us) {
         if (nmea0183_connector::sentence_is(sentence, "RMC") || nmea0183_connector::sentence_is(sentence, "GGA") || nmea0183_connector::sentence_is(sentence, "GLL")) {
             store_.mark_changed(ModelField::GnssFixLatDeg, source_id, now_us);
@@ -43,22 +69,14 @@ private:
             store_.mark_changed(ModelField::GnssSpeedKn, source_id, now_us);
             store_.mark_changed(ModelField::GnssTrackDeg, source_id, now_us);
         }
-        if (nmea0183_connector::sentence_is(sentence, "HDT") || nmea0183_connector::sentence_is(sentence, "HDM") || nmea0183_connector::sentence_is(sentence, "HDG")) {
-            store_.mark_changed(ModelField::ImuHeadingDeg, source_id, now_us);
-        }
+        if (nmea0183_connector::sentence_is(sentence, "HDT") || nmea0183_connector::sentence_is(sentence, "HDM") || nmea0183_connector::sentence_is(sentence, "HDG")) store_.mark_changed(ModelField::ImuHeadingDeg, source_id, now_us);
         if (nmea0183_connector::sentence_is(sentence, "MWV") || nmea0183_connector::sentence_is(sentence, "MWD") || nmea0183_connector::sentence_is(sentence, "VWR")) {
             store_.mark_changed(ModelField::WindApparentDirectionDeg, source_id, now_us);
             store_.mark_changed(ModelField::WindApparentSpeedKn, source_id, now_us);
         }
-        if (nmea0183_connector::sentence_is(sentence, "DBT") || nmea0183_connector::sentence_is(sentence, "DPT")) {
-            store_.mark_changed(ModelField::SeaDepthM, source_id, now_us);
-        }
-        if (nmea0183_connector::sentence_is(sentence, "DBK")) {
-            store_.mark_changed(ModelField::SeaDepthBelowKeelM, source_id, now_us);
-        }
-        if (nmea0183_connector::sentence_is(sentence, "DBS")) {
-            store_.mark_changed(ModelField::SeaDepthBelowSurfaceM, source_id, now_us);
-        }
+        if (nmea0183_connector::sentence_is(sentence, "DBT") || nmea0183_connector::sentence_is(sentence, "DPT")) store_.mark_changed(ModelField::SeaDepthM, source_id, now_us);
+        if (nmea0183_connector::sentence_is(sentence, "DBK")) store_.mark_changed(ModelField::SeaDepthBelowKeelM, source_id, now_us);
+        if (nmea0183_connector::sentence_is(sentence, "DBS")) store_.mark_changed(ModelField::SeaDepthBelowSurfaceM, source_id, now_us);
     }
 
     ModelStore<Real>& store_;
