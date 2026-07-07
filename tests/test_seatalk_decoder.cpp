@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 #include <seatalk.hpp>
 
@@ -77,8 +78,42 @@ static void require_basic_decodes() {
     NEAR(decoded.secondary_value, 90.0f, 0.001f);
 }
 
+static void require_autopilot_decodes() {
+    seatalk::SeaTalkDecoded<float> decoded;
+
+    const uint8_t autopilot[] = {0x84, 0x16, 0x40, 0x00, 0x42, 0x00, 0xfe, 0x01, 0x08};
+    REQUIRE(seatalk::decode_seatalk_frame(frame(autopilot, sizeof(autopilot)), decoded));
+    REQUIRE(decoded.kind == seatalk::SeaTalkDecodedKind::autopilot_state);
+    REQUIRE(decoded.autopilot_mode == seatalk::SeaTalkAutopilotMode::auto_heading);
+    REQUIRE(!decoded.alarm);
+    NEAR(decoded.value, 90.0f, 0.001f);
+    NEAR(decoded.secondary_value, 90.0f, 0.001f);
+    NEAR(decoded.third_value, -2.0f, 0.001f);
+    REQUIRE(std::strcmp(decoded.label, "auto") == 0);
+
+    const uint8_t nav_to_wp[] = {0x85, 0xb5, 0x07, 0x01, 0x00, 0x05, 0x07, 0x00};
+    REQUIRE(seatalk::decode_seatalk_frame(frame(nav_to_wp, sizeof(nav_to_wp)), decoded));
+    REQUIRE(decoded.kind == seatalk::SeaTalkDecodedKind::navigation_to_waypoint);
+    NEAR(decoded.value, 1.23f, 0.001f);
+    NEAR(decoded.secondary_value, 90.0f, 0.001f);
+    NEAR(decoded.third_value, 8.0f, 0.001f);
+
+    const uint8_t key[] = {0x86, 0x01, 0x41, 0xbe};
+    REQUIRE(seatalk::decode_seatalk_frame(frame(key, sizeof(key)), decoded));
+    REQUIRE(decoded.kind == seatalk::SeaTalkDecodedKind::autopilot_key);
+    REQUIRE(decoded.code == 0x01);
+    REQUIRE(decoded.long_press);
+    REQUIRE(std::strcmp(decoded.label, "auto") == 0);
+
+    const uint8_t variation[] = {0x99, 0x00, 0xfe};
+    REQUIRE(seatalk::decode_seatalk_frame(frame(variation, sizeof(variation)), decoded));
+    REQUIRE(decoded.kind == seatalk::SeaTalkDecodedKind::compass_variation);
+    NEAR(decoded.value, -2.0f, 0.001f);
+}
+
 int main() {
     require_frame_parser();
     require_basic_decodes();
+    require_autopilot_decodes();
     return 0;
 }
