@@ -28,6 +28,13 @@ int main() {
     REQUIRE(model.sea.depth_below_surface_m.valid);
     NEAR(model.sea.depth_m.value, 6.4008f, 0.0005f);
 
+    const uint8_t engine[] = {0x05, 0x03, 0x00, 0x09, 0xc4, 0x0a};
+    accept(receiver, model, engine, sizeof(engine), now_us);
+    REQUIRE(model.propulsion.revolutions.speed_rpm.valid);
+    REQUIRE(model.propulsion.revolutions.propeller_pitch_percent.valid);
+    NEAR(model.propulsion.revolutions.speed_rpm.value, 2500.0f, 0.001f);
+    NEAR(model.propulsion.revolutions.propeller_pitch_percent.value, 10.0f, 0.001f);
+
     const uint8_t wind_angle[] = {0x10, 0x01, 0x00, 0xb4};
     accept(receiver, model, wind_angle, sizeof(wind_angle), now_us);
     REQUIRE(model.wind.apparent.direction_deg.valid);
@@ -110,6 +117,11 @@ int main() {
     NEAR(model.gnss.fix.fix_lat_deg.value, 57.64615f, 0.0005f);
     NEAR(model.gnss.fix.fix_lon_deg.value, 11.709533f, 0.0005f);
 
+    const uint8_t observed59[] = {0x59, 0x11, 0xce, 0xff};
+    accept(receiver, model, observed59, sizeof(observed59), now_us);
+    const uint8_t e80_sig[] = {0x61, 0x03, 0x03, 0x00, 0x00, 0x00};
+    accept(receiver, model, e80_sig, sizeof(e80_sig), now_us);
+
     const uint8_t rudder[] = {0x9c, 0x01, 0x2d, 0xfe};
     accept(receiver, model, rudder, sizeof(rudder), now_us);
     REQUIRE(model.steering.rudder.angle_deg.valid);
@@ -156,13 +168,36 @@ int main() {
     REQUIRE(model.ins.imu.magnetic_variation_deg.valid);
     NEAR(model.ins.imu.magnetic_variation_deg.value, -2.0f, 0.001f);
 
+    const uint8_t waypoint_def[] = {0x9e, 0x0c, 0x00, 'W', 'P', 'D', 'E', 'F', 0, 0, 0, 0, 0, 0, 0};
+    accept(receiver, model, waypoint_def, sizeof(waypoint_def), now_us);
+
+    const uint8_t sat_fix[] = {0xa5, 0x57, 0x22, 0x84, 0x00, 0x12, 0x03, 0x00, 0x10, 0x2a};
+    accept(receiver, model, sat_fix, sizeof(sat_fix), now_us);
+    REQUIRE(model.gnss.fix.fix_quality.valid);
+    REQUIRE(model.gnss.fix.fix_quality.value == 2);
+
+    const uint8_t sat_detail[] = {0xa5, 0x0d, 0x2c, 0x43, 0x77, 0x52, 0x2b, 0x5d, 0x7d, 0x11, 0x6d, 0x4e, 0x0f, 0x27, 0x56, 0x02};
+    accept(receiver, model, sat_detail, sizeof(sat_detail), now_us);
+    REQUIRE(model.gnss.satellites_in_view.satellite_prn[0].valid);
+
+    const uint8_t sat_used[] = {0xa5, 0x74, 0x96, 0x00, 0x00, 0x00, 0x80};
+    accept(receiver, model, sat_used, sizeof(sat_used), now_us);
+    const uint8_t sat_done[] = {0xa5, 0x98, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    accept(receiver, model, sat_done, sizeof(sat_done), now_us);
+    const uint8_t wgs84[] = {0xa5, 0xb5, 0x00, 0x04, 0x80, 0x00, 0x00, 0x00};
+    accept(receiver, model, wgs84, sizeof(wgs84), now_us);
+    const uint8_t diff[] = {0xa7, 0x09, 0x85, 0x82, 0x47, 0x42, 0x8b, 0x00, 0x00, 0x00, 0x00, 0x76};
+    accept(receiver, model, diff, sizeof(diff), now_us);
+    const uint8_t observed_ad[] = {0xad, 0x00, 0x00};
+    accept(receiver, model, observed_ad, sizeof(observed_ad), now_us);
+
     const uint8_t key[] = {0x86, 0x01, 0x41, 0xbe};
     accept(receiver, model, key, sizeof(key), now_us);
     REQUIRE(std::strcmp(model.notifications.messages.event.event_id, "seatalk_ap_key") == 0);
     REQUIRE(model.notifications.messages.event.event_state == 'L');
     REQUIRE(std::strcmp(model.notifications.messages.event.event_text, "auto") == 0);
 
-    REQUIRE(receiver.decoded_count() == 23);
+    REQUIRE(receiver.decoded_count() == 34);
     REQUIRE(receiver.unsupported_count() == 0);
     return 0;
 }
