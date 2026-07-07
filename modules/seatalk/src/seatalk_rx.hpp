@@ -19,6 +19,8 @@ public:
     uint32_t unsupported_count() const { return unsupported_count_; }
     uint32_t bad_frame_count() const { return state_.bad_frame_count; }
 
+    void reset_stream() { state_.reset(); }
+
     bool accept_datagram(const uint8_t* bytes,
                          size_t length,
                          ship_data_model::DataModel<Real>& model,
