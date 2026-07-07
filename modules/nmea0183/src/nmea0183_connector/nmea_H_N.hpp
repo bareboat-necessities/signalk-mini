@@ -52,10 +52,10 @@ template<typename Model>
 bool apply_hfb(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 4) { last_error_ = "short HFB"; return false; }
     float value = 0.0f;
-    if (parse_real(sentence.field(0), value)) model.sea.trawl_headrope_to_footrope_m.set(static_cast<Real>(value), now_us);
-    if (parse_real(sentence.field(2), value)) model.sea.trawl_headrope_to_bottom_m.set(static_cast<Real>(value), now_us);
-    set_source(model.sea.source, source);
-    model.sea.last_update_us = now_us;
+    if (parse_real(sentence.field(0), value)) model.trawl.headrope_to_footrope_m.set(static_cast<Real>(value), now_us);
+    if (parse_real(sentence.field(2), value)) model.trawl.headrope_to_bottom_m.set(static_cast<Real>(value), now_us);
+    set_source(model.trawl.source, source);
+    model.trawl.last_update_us = now_us;
     return true;
 }
 

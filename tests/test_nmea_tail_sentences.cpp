@@ -41,9 +41,9 @@ int main() {
     NEAR(app.store().model().wind.surface.speed_kn.value, 7.8f, 0.001f);
 
     feed(app, "IITFI,0,1,2", now_us);
-    REQUIRE(app.store().model().sea.trawl_catch_sensor_status[0].value == 0);
-    REQUIRE(app.store().model().sea.trawl_catch_sensor_status[1].value == 1);
-    REQUIRE(app.store().model().sea.trawl_catch_sensor_status[2].value == 2);
+    REQUIRE(app.store().model().trawl.catch_sensor_status[0].value == 0);
+    REQUIRE(app.store().model().trawl.catch_sensor_status[1].value == 1);
+    REQUIRE(app.store().model().trawl.catch_sensor_status[2].value == 2);
 
     feed(app, "RATLL,7,4917.24,N,12309.57,W,TARGET7,123520,T,R", now_us);
     REQUIRE(app.store().model().ais.tracked_target.target_number.value == 7);

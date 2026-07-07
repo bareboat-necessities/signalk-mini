@@ -55,10 +55,10 @@ int main() {
 
     const uint8_t trip_total[] = {0x25, 0x04, 0x39, 0x30, 0x85, 0x1a, 0x00};
     accept(receiver, model, trip_total, sizeof(trip_total), now_us);
-    REQUIRE(model.sea.total_distance_nmi.valid);
-    REQUIRE(model.sea.trip_distance_nmi.valid);
-    NEAR(model.sea.total_distance_nmi.value, 1234.5f, 0.001f);
-    NEAR(model.sea.trip_distance_nmi.value, 67.89f, 0.001f);
+    REQUIRE(model.route.log.total_distance_nmi.valid);
+    REQUIRE(model.route.log.trip_distance_nmi.valid);
+    NEAR(model.route.log.total_distance_nmi.value, 1234.5f, 0.001f);
+    NEAR(model.route.log.trip_distance_nmi.value, 67.89f, 0.001f);
 
     const uint8_t temperature[] = {0x27, 0x01, 0x37, 0x01};
     accept(receiver, model, temperature, sizeof(temperature), now_us);

@@ -170,19 +170,19 @@ template<typename Model>
 bool apply_tds(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 6) { last_error_ = "short TDS"; return false; }
     float v = 0.0f;
-    if (sentence.field(1)[0] == 'M' && parse_real(sentence.field(0), v)) model.sea.trawl_door_centerline_offset_m.set(static_cast<Real>(v), now_us);
-    if (sentence.field(3)[0] == 'M' && parse_real(sentence.field(2), v)) model.sea.trawl_door_along_centerline_m.set(static_cast<Real>(v), now_us);
-    if (sentence.field(5)[0] == 'M' && parse_real(sentence.field(4), v)) model.sea.trawl_depth_below_surface_m.set(static_cast<Real>(v), now_us);
-    set_source(model.sea.source, source);
-    model.sea.last_update_us = now_us;
+    if (sentence.field(1)[0] == 'M' && parse_real(sentence.field(0), v)) model.trawl.door_centerline_offset_m.set(static_cast<Real>(v), now_us);
+    if (sentence.field(3)[0] == 'M' && parse_real(sentence.field(2), v)) model.trawl.door_along_centerline_m.set(static_cast<Real>(v), now_us);
+    if (sentence.field(5)[0] == 'M' && parse_real(sentence.field(4), v)) model.trawl.depth_below_surface_m.set(static_cast<Real>(v), now_us);
+    set_source(model.trawl.source, source);
+    model.trawl.last_update_us = now_us;
     return true;
 }
 
 template<typename Model>
 bool apply_tfi(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 3) { last_error_ = "short TFI"; return false; }
-    int32_t n = 0; for (uint8_t i = 0; i < 3; ++i) if (parse_int32(sentence.field(i), n)) model.sea.trawl_catch_sensor_status[i].set(n, now_us);
-    set_source(model.sea.source, source); model.sea.last_update_us = now_us; return true;
+    int32_t n = 0; for (uint8_t i = 0; i < 3; ++i) if (parse_int32(sentence.field(i), n)) model.trawl.catch_sensor_status[i].set(n, now_us);
+    set_source(model.trawl.source, source); model.trawl.last_update_us = now_us; return true;
 }
 
 template<typename Model>
@@ -207,13 +207,13 @@ bool apply_tll(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
 }
 
 template<typename Model>
-bool apply_tpc(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) { if (sentence.field_count < 6) { last_error_ = "short TPC"; return false; } float v = 0.0f; if (sentence.field(1)[0] == 'M' && parse_real(sentence.field(0), v)) model.sea.trawl_cartesian_centerline_offset_m.set(static_cast<Real>(v), now_us); if (sentence.field(3)[0] == 'M' && parse_real(sentence.field(2), v)) model.sea.trawl_cartesian_along_centerline_m.set(static_cast<Real>(v), now_us); if (sentence.field(5)[0] == 'M' && parse_real(sentence.field(4), v)) model.sea.trawl_depth_below_surface_m.set(static_cast<Real>(v), now_us); set_source(model.sea.source, source); model.sea.last_update_us = now_us; return true; }
+bool apply_tpc(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) { if (sentence.field_count < 6) { last_error_ = "short TPC"; return false; } float v = 0.0f; if (sentence.field(1)[0] == 'M' && parse_real(sentence.field(0), v)) model.trawl.cartesian_centerline_offset_m.set(static_cast<Real>(v), now_us); if (sentence.field(3)[0] == 'M' && parse_real(sentence.field(2), v)) model.trawl.cartesian_along_centerline_m.set(static_cast<Real>(v), now_us); if (sentence.field(5)[0] == 'M' && parse_real(sentence.field(4), v)) model.trawl.depth_below_surface_m.set(static_cast<Real>(v), now_us); set_source(model.trawl.source, source); model.trawl.last_update_us = now_us; return true; }
 
 template<typename Model>
-bool apply_tpr(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) { if (sentence.field_count < 6) { last_error_ = "short TPR"; return false; } float v = 0.0f; if (sentence.field(1)[0] == 'M' && parse_real(sentence.field(0), v)) model.sea.trawl_relative_range_m.set(static_cast<Real>(v), now_us); if (parse_real(sentence.field(2), v)) model.sea.trawl_relative_bearing_deg.set(static_cast<Real>(wrap_360_deg(v)), now_us); if (sentence.field(5)[0] == 'M' && parse_real(sentence.field(4), v)) model.sea.trawl_depth_below_surface_m.set(static_cast<Real>(v), now_us); set_source(model.sea.source, source); model.sea.last_update_us = now_us; return true; }
+bool apply_tpr(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) { if (sentence.field_count < 6) { last_error_ = "short TPR"; return false; } float v = 0.0f; if (sentence.field(1)[0] == 'M' && parse_real(sentence.field(0), v)) model.trawl.relative_range_m.set(static_cast<Real>(v), now_us); if (parse_real(sentence.field(2), v)) model.trawl.relative_bearing_deg.set(static_cast<Real>(wrap_360_deg(v)), now_us); if (sentence.field(5)[0] == 'M' && parse_real(sentence.field(4), v)) model.trawl.depth_below_surface_m.set(static_cast<Real>(v), now_us); set_source(model.trawl.source, source); model.trawl.last_update_us = now_us; return true; }
 
 template<typename Model>
-bool apply_tpt(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) { if (sentence.field_count < 6) { last_error_ = "short TPT"; return false; } float v = 0.0f; if (sentence.field(1)[0] == 'M' && parse_real(sentence.field(0), v)) model.sea.trawl_true_range_m.set(static_cast<Real>(v), now_us); if (parse_real(sentence.field(2), v)) model.sea.trawl_true_bearing_deg.set(static_cast<Real>(wrap_360_deg(v)), now_us); if (sentence.field(5)[0] == 'M' && parse_real(sentence.field(4), v)) model.sea.trawl_depth_below_surface_m.set(static_cast<Real>(v), now_us); set_source(model.sea.source, source); model.sea.last_update_us = now_us; return true; }
+bool apply_tpt(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) { if (sentence.field_count < 6) { last_error_ = "short TPT"; return false; } float v = 0.0f; if (sentence.field(1)[0] == 'M' && parse_real(sentence.field(0), v)) model.trawl.true_range_m.set(static_cast<Real>(v), now_us); if (parse_real(sentence.field(2), v)) model.trawl.true_bearing_deg.set(static_cast<Real>(wrap_360_deg(v)), now_us); if (sentence.field(5)[0] == 'M' && parse_real(sentence.field(4), v)) model.trawl.depth_below_surface_m.set(static_cast<Real>(v), now_us); set_source(model.trawl.source, source); model.trawl.last_update_us = now_us; return true; }
 
 template<typename Model>
 bool apply_trf(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
@@ -259,7 +259,7 @@ template<typename Model>
 bool apply_vhw(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) { float v = 0.0f; if (!parse_knots(sentence.field(4), sentence.field(5), v)) { last_error_ = "bad VHW"; return false; } model.sea.speed_kn.set(static_cast<Real>(v), now_us); set_source(model.sea.source, source); model.sea.last_update_us = now_us; return true; }
 
 template<typename Model>
-bool apply_vlw(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) { if (sentence.field_count < 4) { last_error_ = "short VLW"; return false; } float v = 0.0f; if (parse_distance_nmi(sentence.field(0), sentence.field(1), v)) model.sea.total_distance_nmi.set(static_cast<Real>(v), now_us); if (parse_distance_nmi(sentence.field(2), sentence.field(3), v)) model.sea.trip_distance_nmi.set(static_cast<Real>(v), now_us); set_source(model.sea.source, source); model.sea.last_update_us = now_us; return true; }
+bool apply_vlw(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) { if (sentence.field_count < 4) { last_error_ = "short VLW"; return false; } float v = 0.0f; if (parse_distance_nmi(sentence.field(0), sentence.field(1), v)) model.route.log.total_distance_nmi.set(static_cast<Real>(v), now_us); if (parse_distance_nmi(sentence.field(2), sentence.field(3), v)) model.route.log.trip_distance_nmi.set(static_cast<Real>(v), now_us); set_source(model.route.log.source, source); model.route.log.last_update_us = now_us; return true; }
 
 template<typename Model>
 bool apply_vpw(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) { if (sentence.field_count < 4) { last_error_ = "short VPW"; return false; } float v = 0.0f; if (parse_knots(sentence.field(0), sentence.field(1), v)) model.sea.speed_parallel_to_wind_kn.set(static_cast<Real>(v), now_us); if (sentence.field(3)[0] == 'M' && parse_real(sentence.field(2), v)) model.sea.speed_parallel_to_wind_m_s.set(static_cast<Real>(v), now_us); set_source(model.sea.source, source); model.sea.last_update_us = now_us; return true; }
