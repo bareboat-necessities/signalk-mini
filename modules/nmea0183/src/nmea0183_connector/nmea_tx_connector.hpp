@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ship_data_model.hpp>
+#include <seatalk.hpp>
 #ifdef ARDUINO
 #include <Arduino.h>
 #endif
@@ -172,6 +173,51 @@ inline size_t make_ap_mwv(char* out, size_t out_size, float direction_deg, float
 
 inline size_t make_ap_rsa(char* out, size_t out_size, float rudder_deg) {
     return make_rsa(out, out_size, -rudder_deg, "AP");
+}
+
+inline size_t format_seatalk_frame_hex(char* out, size_t out_size, const seatalk::SeaTalkFrame& frame) {
+    if (!out || out_size == 0 || frame.length == 0) return 0;
+    size_t pos = 0;
+    for (uint8_t i = 0; i < frame.length; ++i) {
+        if (pos + 2 >= out_size) return 0;
+        out[pos++] = to_hex(frame.bytes[i] >> 4);
+        out[pos++] = to_hex(frame.bytes[i]);
+    }
+    out[pos] = '\0';
+    return pos;
+}
+
+inline size_t make_seatalk_frame(char* out, size_t out_size, const seatalk::SeaTalkFrame& frame) {
+    char hex[48];
+    char body[64];
+    if (format_seatalk_frame_hex(hex, sizeof(hex), frame) == 0) return 0;
+    snprintf(body, sizeof(body), "STALK,%s", hex);
+    return make_sentence(out, out_size, body);
+}
+
+inline size_t make_seatalk_depth_m(char* out, size_t out_size, float depth_m, bool alarm = false) {
+    seatalk::SeaTalkFrame frame;
+    return seatalk::make_depth_m(frame, depth_m, alarm) ? make_seatalk_frame(out, out_size, frame) : 0;
+}
+
+inline size_t make_seatalk_apparent_wind_angle_deg(char* out, size_t out_size, float angle_deg) {
+    seatalk::SeaTalkFrame frame;
+    return seatalk::make_apparent_wind_angle_deg(frame, angle_deg) ? make_seatalk_frame(out, out_size, frame) : 0;
+}
+
+inline size_t make_seatalk_apparent_wind_speed_kn(char* out, size_t out_size, float speed_kn) {
+    seatalk::SeaTalkFrame frame;
+    return seatalk::make_apparent_wind_speed_kn(frame, speed_kn) ? make_seatalk_frame(out, out_size, frame) : 0;
+}
+
+inline size_t make_seatalk_speed_through_water_kn(char* out, size_t out_size, float speed_kn) {
+    seatalk::SeaTalkFrame frame;
+    return seatalk::make_speed_through_water_kn(frame, speed_kn) ? make_seatalk_frame(out, out_size, frame) : 0;
+}
+
+inline size_t make_seatalk_pilot_key(char* out, size_t out_size, seatalk::SeaTalkPilotKey key, bool long_press = false) {
+    seatalk::SeaTalkFrame frame;
+    return seatalk::make_pilot_key(frame, key, long_press) ? make_seatalk_frame(out, out_size, frame) : 0;
 }
 
 } // namespace nmea0183_connector

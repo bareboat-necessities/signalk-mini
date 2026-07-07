@@ -11,4 +11,13 @@ constexpr Real deg_to_rad(Real deg) { return deg * pi_v<Real>() / static_cast<Re
 template<typename Real>
 constexpr Real knots_to_mps(Real knots) { return knots * static_cast<Real>(0.51444444444444444444L); }
 
+template<typename Real>
+constexpr Real nmi_to_m(Real nmi) { return nmi * static_cast<Real>(1852); }
+
+template<typename Real>
+constexpr Real celsius_to_kelvin(Real celsius) { return celsius + static_cast<Real>(273.15); }
+
+template<typename Real>
+constexpr Real rpm_to_hz(Real rpm) { return rpm / static_cast<Real>(60); }
+
 } // namespace signalk_mini
