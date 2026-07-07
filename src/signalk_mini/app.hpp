@@ -16,7 +16,6 @@ public:
     ModelStore<Real>& store() { return server_.store(); }
     const ModelStore<Real>& store() const { return server_.store(); }
     Nmea0183Input<Real>& nmea0183() { return server_.nmea0183(); }
-    SeaTalkInput<Real>& seatalk() { return server_.seatalk(); }
 
 private:
     MiniSignalKServer<Real> server_;
