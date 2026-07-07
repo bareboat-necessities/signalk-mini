@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <string.h>
 
 #include "seatalk_frame.hpp"
 
@@ -16,7 +17,18 @@ enum class SeaTalkDecodedKind : uint8_t {
     heading_magnetic,
     rudder_angle,
     trip_distance,
-    total_distance
+    total_distance,
+    autopilot_state,
+    autopilot_key,
+    navigation_to_waypoint,
+    compass_variation
+};
+
+enum class SeaTalkAutopilotMode : uint8_t {
+    standby,
+    auto_heading,
+    vane,
+    track
 };
 
 template<typename Real = float>
@@ -24,9 +36,16 @@ struct SeaTalkDecoded {
     SeaTalkDecodedKind kind = SeaTalkDecodedKind::none;
     Real value = Real{};
     Real secondary_value = Real{};
+    Real third_value = Real{};
     bool secondary_valid = false;
+    bool third_valid = false;
     bool alarm = false;
     uint8_t command = 0;
+    uint8_t flags = 0;
+    uint8_t code = 0;
+    bool long_press = false;
+    SeaTalkAutopilotMode autopilot_mode = SeaTalkAutopilotMode::standby;
+    char label[32] = {0};
 };
 
 inline float seatalk_kn_to_ms(float kn) {
@@ -37,6 +56,56 @@ inline float seatalk_wrap_360(float deg) {
     while (deg < 0.0f) deg += 360.0f;
     while (deg >= 360.0f) deg -= 360.0f;
     return deg;
+}
+
+inline void seatalk_copy_label(char* dst, size_t dst_len, const char* text) {
+    if (!dst || dst_len == 0) return;
+    dst[0] = '\0';
+    if (!text) return;
+    strncpy(dst, text, dst_len - 1);
+    dst[dst_len - 1] = '\0';
+}
+
+inline const char* seatalk_autopilot_mode_label(SeaTalkAutopilotMode mode) {
+    switch (mode) {
+    case SeaTalkAutopilotMode::standby: return "standby";
+    case SeaTalkAutopilotMode::auto_heading: return "auto";
+    case SeaTalkAutopilotMode::vane: return "vane";
+    case SeaTalkAutopilotMode::track: return "track";
+    }
+    return "standby";
+}
+
+inline const char* seatalk_autopilot_key_label(uint8_t code, bool long_press) {
+    switch (code) {
+    case 0x01: return "auto";
+    case 0x02: return "standby";
+    case 0x03: return "track";
+    case 0x04: return "display";
+    case 0x05: return "minus_1";
+    case 0x06: return "minus_10";
+    case 0x07: return "plus_1";
+    case 0x08: return "plus_10";
+    case 0x09: return "minus_response";
+    case 0x0a: return "plus_response";
+    case 0x20: return "minus_1_plus_1";
+    case 0x21: return "minus_1_plus_10";
+    case 0x22: return "plus_1_plus_10";
+    case 0x23: return "standby_auto";
+    case 0x24: return long_press ? "minus_10_plus_10" : "display_track";
+    case 0x25: return "standby_minus_10";
+    case 0x28: return long_press ? "display_track" : "minus_10_plus_10";
+    case 0x2e: return "minus_response_plus_response";
+    case 0x30: return "standby_minus_1";
+    default: return "unknown";
+    }
+}
+
+inline float seatalk_heading_from_u_vw(uint8_t u, uint8_t vw) {
+    float heading = static_cast<float>(u & 0x03) * 90.0f;
+    heading += static_cast<float>(vw & 0x3f) * 2.0f;
+    heading += static_cast<float>((u >> 2) & 0x03) * 0.5f;
+    return seatalk_wrap_360(heading);
 }
 
 template<typename Real = float>
@@ -106,15 +175,80 @@ bool decode_seatalk_frame(const SeaTalkFrame& frame, SeaTalkDecoded<Real>& out) 
         out.value = static_cast<Real>((static_cast<float>(raw_c) - 100.0f) / 10.0f);
         return true;
     }
+    case 0x84: { // Autopilot CPU state: heading, commanded course, mode, alarm, rudder.
+        if (frame.length < 9) return false;
+        const uint8_t u = dg[1] >> 4;
+        const uint8_t vw = dg[2];
+        const uint8_t xy = dg[3];
+        const uint8_t z = dg[4];
+        const uint8_t alarm_flags = dg[5];
+        const int8_t rudder = static_cast<int8_t>(dg[6]);
+        const uint8_t status_flags = dg[7];
+        const uint8_t v = vw >> 4;
+        const float heading = seatalk_heading_from_u_vw(u, vw);
+        const float course = static_cast<float>(v >> 2) * 90.0f + static_cast<float>(xy) / 2.0f;
+        out.kind = SeaTalkDecodedKind::autopilot_state;
+        out.value = static_cast<Real>(heading);
+        out.secondary_value = static_cast<Real>(seatalk_wrap_360(course));
+        out.secondary_valid = true;
+        out.third_value = static_cast<Real>(rudder);
+        out.third_valid = true;
+        out.flags = status_flags;
+        out.code = alarm_flags;
+        out.alarm = alarm_flags != 0;
+        if (z & 0x08) out.autopilot_mode = SeaTalkAutopilotMode::track;
+        else if (z & 0x04) out.autopilot_mode = SeaTalkAutopilotMode::vane;
+        else if (z & 0x02) out.autopilot_mode = SeaTalkAutopilotMode::auto_heading;
+        else out.autopilot_mode = SeaTalkAutopilotMode::standby;
+        seatalk_copy_label(out.label, sizeof(out.label), seatalk_autopilot_mode_label(out.autopilot_mode));
+        return true;
+    }
+    case 0x85: { // Navigation to waypoint: XTE, bearing, range.
+        if (frame.length < 8) return false;
+        const uint16_t xte_raw = (static_cast<uint16_t>(dg[2]) << 4) | (dg[1] >> 4);
+        const uint8_t vu = dg[3];
+        const uint8_t zw = dg[4];
+        const uint8_t zz = dg[5];
+        const uint8_t yf = dg[6];
+        const uint8_t wv = static_cast<uint8_t>((zw << 4) | (vu >> 4));
+        const float bearing = seatalk_wrap_360(static_cast<float>(vu & 0x03) * 90.0f + static_cast<float>(wv) / 2.0f);
+        const uint8_t y = yf >> 4;
+        const uint16_t range_raw = (static_cast<uint16_t>(zz) << 4) | (zw >> 4);
+        const float range_nmi = static_cast<float>(range_raw) / ((y & 0x01) ? 100.0f : 10.0f);
+        out.kind = SeaTalkDecodedKind::navigation_to_waypoint;
+        out.value = static_cast<Real>(static_cast<float>(xte_raw) / 100.0f);
+        out.secondary_value = static_cast<Real>(bearing);
+        out.secondary_valid = true;
+        out.third_value = static_cast<Real>(range_nmi);
+        out.third_valid = true;
+        out.flags = yf;
+        return true;
+    }
+    case 0x86: { // Autopilot keystroke.
+        if (frame.length < 4) return false;
+        const uint8_t key = dg[2];
+        const uint8_t expected = static_cast<uint8_t>(0xffu - key);
+        out.kind = SeaTalkDecodedKind::autopilot_key;
+        out.code = key & 0x3f;
+        out.long_press = (key & 0x40) != 0;
+        out.alarm = dg[3] != expected;
+        out.value = static_cast<Real>(out.code);
+        out.flags = key;
+        seatalk_copy_label(out.label, sizeof(out.label), seatalk_autopilot_key_label(out.code, out.long_press));
+        return true;
+    }
     case 0x89: { // Compass heading magnetic. Attribute high nibble carries U.
         if (frame.length < 3) return false;
         const uint8_t u = dg[1] >> 4;
         const uint8_t vw = dg[2];
-        float heading = static_cast<float>(u & 0x03) * 90.0f;
-        heading += static_cast<float>(vw & 0x3f) * 2.0f;
-        heading += static_cast<float>((u >> 2) & 0x03) * 0.5f;
         out.kind = SeaTalkDecodedKind::heading_magnetic;
-        out.value = static_cast<Real>(seatalk_wrap_360(heading));
+        out.value = static_cast<Real>(seatalk_heading_from_u_vw(u, vw));
+        return true;
+    }
+    case 0x99: { // Magnetic variation, signed degrees. Negative values indicate easterly in observed references.
+        if (frame.length < 3) return false;
+        out.kind = SeaTalkDecodedKind::compass_variation;
+        out.value = static_cast<Real>(static_cast<int8_t>(dg[2]));
         return true;
     }
     case 0x9c: { // Rudder datagram: heading plus signed rudder angle.
@@ -122,12 +256,9 @@ bool decode_seatalk_frame(const SeaTalkFrame& frame, SeaTalkDecoded<Real>& out) 
         const uint8_t u = dg[1] >> 4;
         const uint8_t vw = dg[2];
         const int8_t rudder = static_cast<int8_t>(dg[3]);
-        float heading = static_cast<float>(u & 0x03) * 90.0f;
-        heading += static_cast<float>(vw & 0x3f) * 2.0f;
-        heading += static_cast<float>((u >> 2) & 0x03) * 0.5f;
         out.kind = SeaTalkDecodedKind::rudder_angle;
         out.value = static_cast<Real>(rudder);
-        out.secondary_value = static_cast<Real>(seatalk_wrap_360(heading));
+        out.secondary_value = static_cast<Real>(seatalk_heading_from_u_vw(u, vw));
         out.secondary_valid = true;
         return true;
     }
