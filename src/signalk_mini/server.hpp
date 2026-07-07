@@ -23,6 +23,7 @@
 #include "connection_registry.hpp"
 #include "nmea0183_input.hpp"
 #include "publisher.hpp"
+#include "seatalk_input.hpp"
 
 namespace signalk_mini {
 
@@ -166,6 +167,7 @@ public:
     ModelStore<Real>& store() { return store_; }
     const ModelStore<Real>& store() const { return store_; }
     Nmea0183Input<Real>& nmea0183() { return nmea_; }
+    SeaTalkInput<Real>& seatalk() { return seatalk_; }
 
 private:
     static async_event_loop::TcpLineServerOptions signalk_options() {
@@ -178,7 +180,10 @@ private:
         return options;
     }
 
-    bool listen(async_event_loop::NativeTcpServer& server, async_event_loop::ITcpServerHandler& handler, const char* host, uint16_t port) {
+    bool listen(async_event_loop::NativeTcpServer& server,
+                async_event_loop::ITcpServerHandler& handler,
+                const char* host,
+                uint16_t port) {
         async_event_loop::TcpListenOptions options;
         options.host = host;
         options.port = port;
@@ -190,59 +195,113 @@ private:
         explicit SignalKConnectionHandler(MiniSignalKServer& owner_ref) : owner(owner_ref) {}
         MiniSignalKServer& owner;
         ConnectionRegistry<MaxSignalKConnections> connections;
+
         void on_accept(async_event_loop::ITcpConnection& connection, const async_event_loop::TcpPeerInfo&) override {
             ConnectionFlags flags{owner.config_.signalk.allow_rx, owner.config_.signalk.allow_tx};
             if (!connections.add(connection, flags)) connection.close();
         }
-        void on_line(async_event_loop::ITcpConnection& connection, async_event_loop::LineView) override { if (!connections.allow_rx(connection)) return; }
-        void on_backpressure(async_event_loop::ITcpConnection& connection, const async_event_loop::TcpBackpressureInfo&) override { connections.remove(connection); connection.close(); }
+
+        void on_line(async_event_loop::ITcpConnection& connection, async_event_loop::LineView) override {
+            if (!connections.allow_rx(connection)) return;
+        }
+
+        void on_backpressure(async_event_loop::ITcpConnection& connection, const async_event_loop::TcpBackpressureInfo&) override {
+            connections.remove(connection);
+            connection.close();
+        }
+
         void on_close(async_event_loop::ITcpConnection& connection) override { connections.remove(connection); }
         void on_error(async_event_loop::ITcpConnection& connection, int) override { connections.remove(connection); }
         void on_too_many_connections(async_event_loop::ITcpConnection& connection) override { connection.close(); }
     };
 
     struct ConnectorTcpServerHandler : async_event_loop::ITcpLineServerHandler {
-        ConnectorTcpServerHandler(MiniSignalKServer& owner_ref, size_t connector_index) : owner(owner_ref), index(connector_index) {}
+        ConnectorTcpServerHandler(MiniSignalKServer& owner_ref, size_t connector_index)
+            : owner(owner_ref), index(connector_index) {}
+
         MiniSignalKServer& owner;
         size_t index;
         ConnectionRegistry<MaxConnectionsPerConnector> connections;
+
         void on_accept(async_event_loop::ITcpConnection& connection, const async_event_loop::TcpPeerInfo&) override {
             if (!connections.add(connection, owner.connector_connection_flags(index))) connection.close();
         }
+
         void on_line(async_event_loop::ITcpConnection& connection, async_event_loop::LineView line) override {
             if (!connections.allow_rx(connection)) return;
             char text[160];
             async_event_loop::line_to_cstr(line, text);
             owner.handle_connector_nmea_line(index, text);
         }
+
         void on_close(async_event_loop::ITcpConnection& connection) override { connections.remove(connection); }
         void on_error(async_event_loop::ITcpConnection& connection, int) override { connections.remove(connection); }
         void on_too_many_connections(async_event_loop::ITcpConnection& connection) override { connection.close(); }
     };
 
-    struct ConnectorTcpClientHandler : async_event_loop::ITcpClientHandler {
-        ConnectorTcpClientHandler(MiniSignalKServer& owner_ref, size_t connector_index) : owner(owner_ref), index(connector_index) {}
+    struct ConnectorTcpRawServerHandler : async_event_loop::ITcpServerHandler {
+        ConnectorTcpRawServerHandler(MiniSignalKServer& owner_ref, size_t connector_index)
+            : owner(owner_ref), index(connector_index) {}
+
         MiniSignalKServer& owner;
         size_t index;
+        ConnectionRegistry<MaxConnectionsPerConnector> connections;
+
+        void on_accept(async_event_loop::ITcpConnection& connection, const async_event_loop::TcpPeerInfo&) override {
+            if (!connections.add(connection, owner.connector_connection_flags(index))) connection.close();
+        }
+
+        void on_data(async_event_loop::ITcpConnection& connection) override {
+            if (!connections.allow_rx(connection)) return;
+            owner.handle_connector_stream_bytes(index, connection);
+        }
+
+        void on_close(async_event_loop::ITcpConnection& connection) override { connections.remove(connection); }
+        void on_error(async_event_loop::ITcpConnection& connection, int) override { connections.remove(connection); }
+    };
+
+    struct ConnectorTcpClientHandler : async_event_loop::ITcpClientHandler {
+        ConnectorTcpClientHandler(MiniSignalKServer& owner_ref, size_t connector_index)
+            : owner(owner_ref), index(connector_index) {}
+
+        MiniSignalKServer& owner;
+        size_t index;
+
         void on_data(async_event_loop::ITcpConnection& connection) override {
             if (!owner.connector_allow_rx(index)) return;
+            if (owner.connector_protocol(index) == ConnectorProtocol::SeaTalk1) {
+                owner.handle_connector_stream_bytes(index, connection);
+                return;
+            }
+
             char text[160];
             while (connection.read_line(text, sizeof(text))) owner.handle_connector_nmea_line(index, text);
         }
+
         void on_close(async_event_loop::ITcpConnection&) override {}
         void on_error(int) override {}
     };
 
     struct ConnectorRuntimeSlot {
         ConnectorRuntimeSlot(MiniSignalKServer& owner_ref, size_t connector_index)
-            : owner(owner_ref), index(connector_index), tcp_server(owner_ref.loop_.scheduler()), tcp_client(owner_ref.loop_.scheduler()),
+            : owner(owner_ref),
+              index(connector_index),
+              tcp_server(owner_ref.loop_.scheduler()),
+              tcp_client(owner_ref.loop_.scheduler()),
 #if defined(ARDUINO)
               serial_stream(Serial),
 #else
               serial_stream(),
 #endif
-              serial_reader(serial_stream, async_event_loop::LineProtocolOptions{}, [this](async_event_loop::LineView line) { owner.handle_connector_serial_line(index, line); }),
-              tcp_server_handler(owner_ref, connector_index), tcp_client_handler(owner_ref, connector_index), tcp_line_handler(tcp_server_handler) {}
+              serial_reader(serial_stream, async_event_loop::LineProtocolOptions{}, [this](async_event_loop::LineView line) {
+                  owner.handle_connector_serial_line(index, line);
+              }),
+              seatalk_input(owner_ref.store_),
+              tcp_server_handler(owner_ref, connector_index),
+              tcp_raw_server_handler(owner_ref, connector_index),
+              tcp_client_handler(owner_ref, connector_index),
+              tcp_line_handler(tcp_server_handler) {}
+
         MiniSignalKServer& owner;
         size_t index = 0;
         ConnectorConfig config;
@@ -254,7 +313,9 @@ private:
         async_event_loop::NativeSerialStream serial_stream;
         async_event_loop::LineProtocolReader<192> serial_reader;
         UdpListenerStream udp_listener;
+        SeaTalkInput<Real> seatalk_input;
         ConnectorTcpServerHandler tcp_server_handler;
+        ConnectorTcpRawServerHandler tcp_raw_server_handler;
         ConnectorTcpClientHandler tcp_client_handler;
         async_event_loop::TcpLineServerHandler<192, MaxConnectionsPerConnector> tcp_line_handler;
         async_event_loop::EventHandle serial_event{};
@@ -265,11 +326,13 @@ private:
     const ConnectorRuntimeSlot& connector_slot(size_t index) const { return *connector_slots_[index]; }
     const ConnectionFlags& connector_connection_flags(size_t index) const { return connector_slot(index).connection_flags; }
     bool connector_allow_rx(size_t index) const { return connector_slot(index).connection_flags.allow_rx; }
+    ConnectorProtocol connector_protocol(size_t index) const { return connector_slot(index).config.protocol.kind; }
 
     void start_configured_connectors() {
         connector_slots_.clear();
         if (!config_.connectors || config_.connector_count == 0) return;
         connector_slots_.reserve(config_.connector_count);
+
         for (size_t i = 0; i < config_.connector_count; ++i) {
             const ConnectorConfig& connector = config_.connectors[i];
             std::unique_ptr<ConnectorRuntimeSlot> slot(new ConnectorRuntimeSlot(*this, i));
@@ -279,9 +342,11 @@ private:
                 ? effective_nmea0183_validate_checksum(connector.protocol.nmea0183, connector.transport.kind)
                 : false;
             connector_slots_.push_back(std::move(slot));
+
             ConnectorRuntimeSlot& runtime = *connector_slots_.back();
             if (!connector.enabled) continue;
             if (connector.protocol.kind == ConnectorProtocol::Nmea0183) runtime.started = start_nmea0183_connector(runtime);
+            else if (connector.protocol.kind == ConnectorProtocol::SeaTalk1) runtime.started = start_seatalk_connector(runtime);
         }
     }
 
@@ -298,7 +363,26 @@ private:
         case ConnectorTransport::Serial:
             return start_nmea0183_serial_connector(slot);
         case ConnectorTransport::Udp:
-            return start_nmea0183_udp_listener(slot);
+            return start_udp_listener(slot);
+        default:
+            return false;
+        }
+    }
+
+    bool start_seatalk_connector(ConnectorRuntimeSlot& slot) {
+        switch (slot.config.transport.kind) {
+        case ConnectorTransport::TcpClient: {
+            async_event_loop::TcpConnectOptions options;
+            options.host = slot.config.transport.tcp_client.host;
+            options.port = slot.config.transport.tcp_client.port;
+            return slot.tcp_client.connect(options, slot.tcp_client_handler);
+        }
+        case ConnectorTransport::TcpServer:
+            return listen(slot.tcp_server, slot.tcp_raw_server_handler, slot.config.transport.tcp_server.host, slot.config.transport.tcp_server.port);
+        case ConnectorTransport::Serial:
+            return start_seatalk_serial_connector(slot);
+        case ConnectorTransport::Udp:
+            return start_udp_listener(slot);
         default:
             return false;
         }
@@ -318,7 +402,21 @@ private:
         return static_cast<bool>(slot.serial_event);
     }
 
-    bool start_nmea0183_udp_listener(ConnectorRuntimeSlot& slot) {
+    bool start_seatalk_serial_connector(ConnectorRuntimeSlot& slot) {
+#if defined(ARDUINO)
+        Serial.begin(slot.config.transport.serial.baud);
+#else
+        if (!slot.serial_stream.open(slot.config.transport.serial.device, slot.config.transport.serial.baud)) return false;
+#endif
+        if (!slot.connection_flags.allow_rx) return true;
+        const size_t connector_index = slot.index;
+        slot.serial_event = loop_.on_bytes_ready(slot.serial_stream, [this, connector_index]() {
+            handle_connector_serial_bytes(connector_index);
+        });
+        return static_cast<bool>(slot.serial_event);
+    }
+
+    bool start_udp_listener(ConnectorRuntimeSlot& slot) {
         if (!slot.udp_listener.open(slot.config.transport.udp)) return false;
         if (!slot.connection_flags.allow_rx) return true;
         const size_t connector_index = slot.index;
@@ -336,13 +434,45 @@ private:
         handle_connector_nmea_line(index, text);
     }
 
+    void handle_connector_serial_bytes(size_t index) {
+        ConnectorRuntimeSlot& slot = connector_slot(index);
+        if (!slot.connection_flags.allow_rx) return;
+        handle_connector_stream_bytes(index, slot.serial_stream);
+    }
+
+    void handle_connector_stream_bytes(size_t index, async_event_loop::IByteStream& stream) {
+        ConnectorRuntimeSlot& slot = connector_slot(index);
+        const SourceId source_id = static_cast<SourceId>(10 + index);
+        uint8_t buf[128];
+        bool changed = false;
+
+        while (stream.readable()) {
+            const int n = stream.read(buf, sizeof(buf));
+            if (n <= 0) break;
+            if (slot.seatalk_input.feed_octets(buf, static_cast<size_t>(n), source_id, loop_.clock().micros())) {
+                changed = true;
+            }
+        }
+
+        if (changed) publish();
+    }
+
     void handle_connector_udp_datagrams(size_t index) {
         ConnectorRuntimeSlot& slot = connector_slot(index);
         if (!slot.connection_flags.allow_rx) return;
         uint8_t buf[512];
+
         while (slot.udp_listener.readable()) {
             const int n = slot.udp_listener.read(buf, sizeof(buf) - 1);
             if (n <= 0) break;
+
+            if (slot.config.protocol.kind == ConnectorProtocol::SeaTalk1) {
+                if (slot.seatalk_input.feed_datagram(buf, static_cast<size_t>(n), static_cast<SourceId>(10 + index), loop_.clock().micros())) {
+                    publish();
+                }
+                continue;
+            }
+
             buf[n] = 0;
             char* begin = reinterpret_cast<char*>(buf);
             char* line = begin;
@@ -361,6 +491,7 @@ private:
         const SourceId source_id = static_cast<SourceId>(10 + index);
         if (nmea_.feed_line(text, source_id, loop_.clock().micros(), slot.nmea0183_validate_checksum)) publish();
     }
+
     void publish() { publisher_.publish_pending(signalk_connections_.connections); }
 
     SignalKMiniConfig config_;
@@ -368,6 +499,7 @@ private:
     async_event_loop::NativeTcpServer signalk_tcp_server_;
     ModelStore<Real> store_{};
     Nmea0183Input<Real> nmea_{store_};
+    SeaTalkInput<Real> seatalk_{store_};
     SignalKPublisher<Real> publisher_;
     SignalKConnectionHandler signalk_connections_;
     async_event_loop::TcpLineServerHandler<256, MaxSignalKConnections> signalk_line_handler_;
