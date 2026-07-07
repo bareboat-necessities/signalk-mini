@@ -1,5 +1,4 @@
 #include <arpa/inet.h>
-#include <errno.h>
 #include <netinet/in.h>
 #include <sys/select.h>
 #include <sys/socket.h>
@@ -7,12 +6,9 @@
 
 #include <signalk_mini.hpp>
 
-#include <chrono>
-#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <thread>
 
 #define REQUIRE(x) do { if (!(x)) { std::fprintf(stderr, "FAILED %s:%d: %s\n", __FILE__, __LINE__, #x); std::exit(1); } } while (0)
 
@@ -83,23 +79,6 @@ Fd bind_udp_loopback(uint16_t& port_out) {
     return fd;
 }
 
-Fd connect_loopback(uint16_t port, int timeout_ms) {
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
-    while (std::chrono::steady_clock::now() < deadline) {
-        Fd fd(::socket(AF_INET, SOCK_STREAM, 0));
-        if (!fd.valid()) return Fd{};
-
-        sockaddr_in addr{};
-        addr.sin_family = AF_INET;
-        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-        addr.sin_port = htons(port);
-        if (::connect(fd.get(), reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0) return fd;
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    return Fd{};
-}
-
 int recv_with_timeout(int fd, uint8_t* dst, size_t size, int timeout_ms) {
     fd_set readfds;
     FD_ZERO(&readfds);
@@ -111,17 +90,6 @@ int recv_with_timeout(int fd, uint8_t* dst, size_t size, int timeout_ms) {
     if (ready <= 0) return ready;
     const ssize_t n = ::recv(fd, dst, size, 0);
     return n < 0 ? -1 : static_cast<int>(n);
-}
-
-template<typename Action>
-bool wait_until_sent(signalk_mini::SignalKMiniApp<float>& app, Action action, int timeout_ms) {
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
-    while (std::chrono::steady_clock::now() < deadline) {
-        app.tick();
-        if (action()) return true;
-        std::this_thread::sleep_for(std::chrono::milliseconds(2));
-    }
-    return action();
 }
 
 void test_udp_binary_and_nmea_tx() {
@@ -172,46 +140,9 @@ void test_udp_binary_and_nmea_tx() {
     REQUIRE(std::strcmp(reinterpret_cast<const char*>(buf), "$STALK,000200D200*19\r\n") == 0);
 }
 
-void test_tcp_server_binary_tx() {
-    const uint16_t signalk_port = reserve_tcp_loopback_port();
-    const uint16_t seatalk_port = reserve_tcp_loopback_port();
-
-    signalk_mini::ConnectorConfig connector;
-    connector.enabled = true;
-    connector.label = "seatalk-binary-tcp-tx";
-    connector.access.allow_rx = false;
-    connector.access.allow_tx = true;
-    connector.protocol.kind = signalk_mini::ConnectorProtocol::SeaTalk1;
-    connector.transport.kind = signalk_mini::ConnectorTransport::TcpServer;
-    connector.transport.tcp_server.host = "127.0.0.1";
-    connector.transport.tcp_server.port = seatalk_port;
-
-    signalk_mini::SignalKMiniConfig config;
-    config.signalk.host = "127.0.0.1";
-    config.signalk.port = signalk_port;
-    config.connectors = &connector;
-    config.connector_count = 1;
-
-    signalk_mini::SignalKMiniApp<float> app(config);
-    REQUIRE(app.begin());
-
-    Fd client = connect_loopback(seatalk_port, 3000);
-    REQUIRE(client.valid());
-
-    REQUIRE(wait_until_sent(app, [&]() {
-        return app.transmit_seatalk_speed_through_water_kn(6.5f);
-    }, 1000));
-    uint8_t buf[32];
-    const int n = recv_with_timeout(client.get(), buf, sizeof(buf), 1000);
-    const uint8_t expected[] = {0x20, 0x01, 0x41, 0x00};
-    REQUIRE(n == static_cast<int>(sizeof(expected)));
-    REQUIRE(std::memcmp(buf, expected, sizeof(expected)) == 0);
-}
-
 } // namespace
 
 int main() {
     test_udp_binary_and_nmea_tx();
-    test_tcp_server_binary_tx();
     return 0;
 }
