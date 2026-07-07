@@ -35,6 +35,13 @@ static void require_basic_decodes() {
     REQUIRE(decoded.kind == seatalk::SeaTalkDecodedKind::depth);
     NEAR(decoded.value, 6.4008f, 0.0005f);
 
+    const uint8_t engine[] = {0x05, 0x03, 0x00, 0x09, 0xc4, 0x0a};
+    REQUIRE(seatalk::decode_seatalk_frame(frame(engine, sizeof(engine)), decoded));
+    REQUIRE(decoded.kind == seatalk::SeaTalkDecodedKind::engine_rpm_pitch);
+    REQUIRE(decoded.code == 0x00);
+    NEAR(decoded.value, 2500.0f, 0.001f);
+    NEAR(decoded.secondary_value, 10.0f, 0.001f);
+
     const uint8_t wind_angle[] = {0x10, 0x01, 0x00, 0xb4};
     REQUIRE(seatalk::decode_seatalk_frame(frame(wind_angle, sizeof(wind_angle)), decoded));
     REQUIRE(decoded.kind == seatalk::SeaTalkDecodedKind::apparent_wind_angle);
@@ -71,6 +78,14 @@ static void require_basic_decodes() {
     REQUIRE(seatalk::decode_seatalk_frame(frame(temp_precise, sizeof(temp_precise)), decoded));
     REQUIRE(decoded.kind == seatalk::SeaTalkDecodedKind::water_temperature);
     NEAR(decoded.value, 21.1f, 0.001f);
+
+    const uint8_t observed59[] = {0x59, 0x11, 0xce, 0xff};
+    REQUIRE(seatalk::decode_seatalk_frame(frame(observed59, sizeof(observed59)), decoded));
+    REQUIRE(decoded.kind == seatalk::SeaTalkDecodedKind::observed_unknown);
+
+    const uint8_t e80_sig[] = {0x61, 0x03, 0x03, 0x00, 0x00, 0x00};
+    REQUIRE(seatalk::decode_seatalk_frame(frame(e80_sig, sizeof(e80_sig)), decoded));
+    REQUIRE(decoded.kind == seatalk::SeaTalkDecodedKind::observed_unknown);
 
     const uint8_t heading[] = {0x89, 0x01, 0x2d, 0x00};
     REQUIRE(seatalk::decode_seatalk_frame(frame(heading, sizeof(heading)), decoded));
@@ -150,6 +165,10 @@ static void require_navigation_decodes() {
     REQUIRE(decoded.secondary_valid);
     REQUIRE(decoded.third_valid);
     REQUIRE(std::strcmp(decoded.label, "WP01") == 0);
+
+    const uint8_t waypoint_def[] = {0x9e, 0x0c, 0x00, 'W', 'P', 'D', 'E', 'F', 0, 0, 0, 0, 0, 0, 0};
+    REQUIRE(seatalk::decode_seatalk_frame(frame(waypoint_def, sizeof(waypoint_def)), decoded));
+    REQUIRE(decoded.kind == seatalk::SeaTalkDecodedKind::waypoint_definition);
 }
 
 static void require_autopilot_decodes() {
@@ -185,10 +204,35 @@ static void require_autopilot_decodes() {
     NEAR(decoded.value, -2.0f, 0.001f);
 }
 
+static void require_satellite_detail_decodes() {
+    seatalk::SeaTalkDecoded<float> decoded;
+
+    const uint8_t sat_fix[] = {0xa5, 0x57, 0x22, 0x84, 0x00, 0x12, 0x03, 0x00, 0x10, 0x2a};
+    REQUIRE(seatalk::decode_seatalk_frame(frame(sat_fix, sizeof(sat_fix)), decoded));
+    REQUIRE(decoded.kind == seatalk::SeaTalkDecodedKind::satellite_detail);
+    REQUIRE(decoded.code == 0x57);
+    REQUIRE(decoded.int_value == 2);
+
+    const uint8_t sat_detail[] = {0xa5, 0x0d, 0x2c, 0x43, 0x77, 0x52, 0x2b, 0x5d, 0x7d, 0x11, 0x6d, 0x4e, 0x0f, 0x27, 0x56, 0x02};
+    REQUIRE(seatalk::decode_seatalk_frame(frame(sat_detail, sizeof(sat_detail)), decoded));
+    REQUIRE(decoded.kind == seatalk::SeaTalkDecodedKind::satellite_detail);
+    REQUIRE(decoded.int_value != 0);
+
+    const uint8_t diff[] = {0xa7, 0x09, 0x85, 0x82, 0x47, 0x42, 0x8b, 0x00, 0x00, 0x00, 0x00, 0x76};
+    REQUIRE(seatalk::decode_seatalk_frame(frame(diff, sizeof(diff)), decoded));
+    REQUIRE(decoded.kind == seatalk::SeaTalkDecodedKind::differential_detail);
+    REQUIRE(decoded.int_value == 0x85);
+
+    const uint8_t observed_ad[] = {0xad, 0x00, 0x00};
+    REQUIRE(seatalk::decode_seatalk_frame(frame(observed_ad, sizeof(observed_ad)), decoded));
+    REQUIRE(decoded.kind == seatalk::SeaTalkDecodedKind::observed_unknown);
+}
+
 int main() {
     require_frame_parser();
     require_basic_decodes();
     require_navigation_decodes();
     require_autopilot_decodes();
+    require_satellite_detail_decodes();
     return 0;
 }
