@@ -16,12 +16,7 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
       - name: Test
-        run: |
-          set +e
-          ctest --test-dir build --output-on-failure 2>&1 | tee build/ctest-output.log
-          status=${PIPESTATUS[0]}
-          tail -n 160 build/ctest-output.log
-          exit ${status}
+        run: ctest --test-dir build --output-on-failure
 
   arduino-atoms3r:
     runs-on: ubuntu-latest
@@ -44,4 +39,11 @@ jobs:
           printf '%s\n' 'name=signalk-mini-data-model' 'version=0.1.0' 'author=Bareboat Necessities' 'maintainer=Bareboat Necessities' 'sentence=Vendored data model module for signalk-mini.' 'paragraph=Source-only vendored module used by signalk-mini.' 'category=Data Processing' 'architectures=esp32' 'includes=ship_data_model.hpp' > modules/data-model/library.properties
           printf '%s\n' 'name=signalk-mini-nmea0183' 'version=0.1.0' 'author=Bareboat Necessities' 'maintainer=Bareboat Necessities' 'sentence=Vendored NMEA0183 module for signalk-mini.' 'paragraph=Source-only vendored module used by signalk-mini.' 'category=Communication' 'architectures=esp32' 'includes=nmea0183_connector.hpp' > modules/nmea0183/library.properties
       - name: Compile AtomS3R sketch
-        run: arduino-cli compile --fqbn esp32:esp32:esp32s3 --library . --library modules/async-event-loop --library modules/data-model --library modules/nmea0183 mcu/signalk-atoms3r
+        run: |
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32s3 \
+            --library . \
+            --library modules/async-event-loop \
+            --library modules/data-model \
+            --library modules/nmea0183 \
+            mcu/signalk-atoms3r
