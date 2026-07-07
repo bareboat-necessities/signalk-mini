@@ -164,6 +164,7 @@ public:
     void tick() { loop_.tick(); }
     void run_forever() { loop_.run_forever(); }
     ModelStore<Real>& store() { return store_; }
+    const ModelStore<Real>& store() const { return store_; }
     Nmea0183Input<Real>& nmea0183() { return nmea_; }
 
 private:
