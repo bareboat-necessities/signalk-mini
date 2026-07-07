@@ -113,12 +113,15 @@ int recv_with_timeout(int fd, uint8_t* dst, size_t size, int timeout_ms) {
     return n < 0 ? -1 : static_cast<int>(n);
 }
 
-void tick_for(signalk_mini::SignalKMiniApp<float>& app, int ms) {
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+template<typename Action>
+bool wait_until_sent(signalk_mini::SignalKMiniApp<float>& app, Action action, int timeout_ms) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
     while (std::chrono::steady_clock::now() < deadline) {
         app.tick();
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        if (action()) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
+    return action();
 }
 
 void test_udp_binary_and_nmea_tx() {
@@ -194,12 +197,13 @@ void test_tcp_server_binary_tx() {
 
     Fd client = connect_loopback(seatalk_port, 3000);
     REQUIRE(client.valid());
-    tick_for(app, 100);
 
-    REQUIRE(app.transmit_seatalk_pilot_key(seatalk::SeaTalkPilotKey::plus_1));
+    REQUIRE(wait_until_sent(app, [&]() {
+        return app.transmit_seatalk_speed_through_water_kn(6.5f);
+    }, 1000));
     uint8_t buf[32];
     const int n = recv_with_timeout(client.get(), buf, sizeof(buf), 1000);
-    const uint8_t expected[] = {0x86, 0x01, 0x07, 0xf8};
+    const uint8_t expected[] = {0x20, 0x01, 0x41, 0x00};
     REQUIRE(n == static_cast<int>(sizeof(expected)));
     REQUIRE(std::memcmp(buf, expected, sizeof(expected)) == 0);
 }
