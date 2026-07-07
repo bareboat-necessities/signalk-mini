@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 #include <seatalk.hpp>
 
@@ -60,7 +61,38 @@ int main() {
     REQUIRE(model.steering.rudder.angle_deg.valid);
     NEAR(model.steering.rudder.angle_deg.value, -2.0f, 0.001f);
 
-    REQUIRE(receiver.decoded_count() == 7);
+    const uint8_t autopilot[] = {0x84, 0x16, 0x40, 0x00, 0x42, 0x00, 0xfe, 0x01, 0x08};
+    accept(receiver, model, autopilot, sizeof(autopilot), now_us);
+    REQUIRE(model.autopilot.controller.enabled.value);
+    REQUIRE(model.autopilot.controller.mode.value == ship_data_model::AutopilotMode::compass);
+    REQUIRE(model.autopilot.controller.heading_deg.valid);
+    REQUIRE(model.autopilot.controller.heading_command_deg.valid);
+    NEAR(model.autopilot.controller.heading_deg.value, 90.0f, 0.001f);
+    NEAR(model.autopilot.controller.heading_command_deg.value, 90.0f, 0.001f);
+    NEAR(model.steering.rudder.angle_deg.value, -2.0f, 0.001f);
+
+    const uint8_t nav_to_wp[] = {0x85, 0xb5, 0x07, 0x01, 0x00, 0x05, 0x07, 0x00};
+    accept(receiver, model, nav_to_wp, sizeof(nav_to_wp), now_us);
+    REQUIRE(model.route.apb.xte_nmi.valid);
+    REQUIRE(model.route.apb.heading_to_steer_deg.valid);
+    REQUIRE(model.route.waypoint.distance_nmi.valid);
+    REQUIRE(model.route.apb.mode_hint.value == ship_data_model::AutopilotMode::nav);
+    NEAR(model.route.apb.xte_nmi.value, 1.23f, 0.001f);
+    NEAR(model.route.apb.heading_to_steer_deg.value, 90.0f, 0.001f);
+    NEAR(model.route.waypoint.distance_nmi.value, 8.0f, 0.001f);
+
+    const uint8_t key[] = {0x86, 0x01, 0x41, 0xbe};
+    accept(receiver, model, key, sizeof(key), now_us);
+    REQUIRE(std::strcmp(model.notifications.messages.event.event_id, "seatalk_ap_key") == 0);
+    REQUIRE(model.notifications.messages.event.event_state == 'L');
+    REQUIRE(std::strcmp(model.notifications.messages.event.event_text, "auto") == 0);
+
+    const uint8_t variation[] = {0x99, 0x00, 0xfe};
+    accept(receiver, model, variation, sizeof(variation), now_us);
+    REQUIRE(model.ins.imu.magnetic_variation_deg.valid);
+    NEAR(model.ins.imu.magnetic_variation_deg.value, -2.0f, 0.001f);
+
+    REQUIRE(receiver.decoded_count() == 11);
     REQUIRE(receiver.unsupported_count() == 0);
     return 0;
 }
