@@ -25,6 +25,14 @@ struct ActiveRouteData {
 };
 
 template<typename Real = float>
+struct RouteLogData {
+    Setting<SensorSource> source;
+    Stamped<Real> total_distance_nmi;
+    Stamped<Real> trip_distance_nmi;
+    uint64_t last_update_us = 0;
+};
+
+template<typename Real = float>
 struct WaypointArrivalData {
     Setting<SensorSource> source;
     Setting<bool> arrival_circle_entered;
@@ -87,6 +95,7 @@ struct RmbData {
 template<typename Real = float>
 struct RouteData {
     ActiveRouteData<Real> active;
+    RouteLogData<Real> log;
     WaypointArrivalData<Real> waypoint_arrival;
     WaypointNavigationData<Real> waypoint;
     ApbData<Real> apb;
