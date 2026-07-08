@@ -1,0 +1,10 @@
+# Capture-style SeaTalk1 instrument traffic: depth, wind, speed, temperature, heading, log.
+# Hex records are complete SeaTalk1 datagrams, one datagram per line.
+00 02 00 D2 00
+10 01 00 B4
+11 01 0C 03
+20 01 41 00
+23 01 16 48
+25 04 39 30 85 1A 00
+89 01 2D 00
+9C 01 2D FE

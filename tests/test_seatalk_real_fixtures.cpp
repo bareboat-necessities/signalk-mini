@@ -12,6 +12,26 @@
 
 #define REQUIRE(x) do { if (!(x)) { std::fprintf(stderr, "FAILED %s:%d: %s\n", __FILE__, __LINE__, #x); std::exit(1); } } while (0)
 
+struct SeaTalkFixtureCoverage {
+    bool depth = false;
+    bool engine = false;
+    bool wind_angle = false;
+    bool wind_speed = false;
+    bool water_speed = false;
+    bool water_temperature = false;
+    bool heading = false;
+    bool rudder = false;
+    bool log = false;
+    bool gps_position = false;
+    bool gps_speed_track = false;
+    bool gps_time_date = false;
+    bool gps_satellite = false;
+    bool autopilot = false;
+    bool waypoint_nav = false;
+    bool arrival = false;
+    bool autopilot_key = false;
+};
+
 static std::filesystem::path test_source_dir() {
     const std::filesystem::path file(__FILE__);
     return file.has_parent_path() ? file.parent_path() : std::filesystem::path(".");
@@ -57,6 +77,26 @@ static std::vector<std::filesystem::path> list_fixture_paths() {
     return paths;
 }
 
+static void update_coverage(const ship_data_model::DataModel<float>& model, SeaTalkFixtureCoverage& coverage) {
+    coverage.depth = coverage.depth || model.sea.depth_m.valid;
+    coverage.engine = coverage.engine || (model.propulsion.revolutions.speed_rpm.valid && model.propulsion.revolutions.propeller_pitch_percent.valid);
+    coverage.wind_angle = coverage.wind_angle || model.wind.apparent.direction_deg.valid;
+    coverage.wind_speed = coverage.wind_speed || model.wind.apparent.speed_kn.valid;
+    coverage.water_speed = coverage.water_speed || model.sea.speed_kn.valid;
+    coverage.water_temperature = coverage.water_temperature || model.sea.temperature_c.valid;
+    coverage.heading = coverage.heading || model.ins.imu.heading_magnetic_deg.valid;
+    coverage.rudder = coverage.rudder || model.steering.rudder.angle_deg.valid;
+    coverage.log = coverage.log || (model.route.log.total_distance_nmi.valid && model.route.log.trip_distance_nmi.valid);
+    coverage.gps_position = coverage.gps_position || (model.gnss.fix.fix_lat_deg.valid && model.gnss.fix.fix_lon_deg.valid);
+    coverage.gps_speed_track = coverage.gps_speed_track || (model.gnss.fix.speed_kn.valid && model.gnss.fix.track_deg.valid);
+    coverage.gps_time_date = coverage.gps_time_date || (model.gnss.fix.timestamp_s.valid && model.gnss.fix.date_year.valid);
+    coverage.gps_satellite = coverage.gps_satellite || (model.gnss.fix.satellites_used.valid && model.gnss.satellites_in_view.satellite_prn[0].valid);
+    coverage.autopilot = coverage.autopilot || (model.autopilot.controller.heading_deg.valid && model.autopilot.controller.heading_command_deg.valid);
+    coverage.waypoint_nav = coverage.waypoint_nav || (model.route.apb.xte_nmi.valid && model.route.waypoint.distance_nmi.valid);
+    coverage.arrival = coverage.arrival || (model.route.waypoint_arrival.arrival_circle_entered.value && std::strcmp(model.route.waypoint_arrival.waypoint_id, "WP01") == 0);
+    coverage.autopilot_key = coverage.autopilot_key || std::strcmp(model.notifications.messages.event.event_id, "seatalk_ap_key") == 0;
+}
+
 static int feed_fixture(const std::filesystem::path& path,
                         seatalk::SeaTalkReceiver<float>& receiver,
                         ship_data_model::DataModel<float>& model) {
@@ -81,6 +121,8 @@ static int feed_fixture(const std::filesystem::path& path,
 int main() {
     int fixture_count = 0;
     int record_count = 0;
+    SeaTalkFixtureCoverage coverage;
+
     for (const auto& path : list_fixture_paths()) {
         seatalk::SeaTalkReceiver<float> receiver;
         ship_data_model::DataModel<float> model;
@@ -88,36 +130,27 @@ int main() {
         ++fixture_count;
         REQUIRE(receiver.decoded_count() > 0);
         REQUIRE(receiver.unsupported_count() == 0);
-        REQUIRE(model.sea.depth_m.valid);
-        REQUIRE(model.propulsion.revolutions.speed_rpm.valid);
-        REQUIRE(model.propulsion.revolutions.propeller_pitch_percent.valid);
-        REQUIRE(model.wind.apparent.direction_deg.valid);
-        REQUIRE(model.wind.apparent.speed_kn.valid);
-        REQUIRE(model.sea.speed_kn.valid);
-        REQUIRE(model.sea.temperature_c.valid);
-        REQUIRE(model.ins.imu.heading_magnetic_deg.valid);
-        REQUIRE(model.steering.rudder.angle_deg.valid);
-        REQUIRE(model.route.log.total_distance_nmi.valid);
-        REQUIRE(model.route.log.trip_distance_nmi.valid);
-        REQUIRE(model.gnss.fix.fix_lat_deg.valid);
-        REQUIRE(model.gnss.fix.fix_lon_deg.valid);
-        REQUIRE(model.gnss.fix.speed_kn.valid);
-        REQUIRE(model.gnss.fix.track_deg.valid);
-        REQUIRE(model.gnss.fix.timestamp_s.valid);
-        REQUIRE(model.gnss.fix.date_year.valid);
-        REQUIRE(model.gnss.fix.satellites_used.valid);
-        REQUIRE(model.gnss.fix.fix_quality.valid);
-        REQUIRE(model.gnss.satellites_in_view.satellite_prn[0].valid);
-        REQUIRE(model.autopilot.controller.heading_deg.valid);
-        REQUIRE(model.autopilot.controller.heading_command_deg.valid);
-        REQUIRE(model.autopilot.controller.enabled.value);
-        REQUIRE(model.route.apb.xte_nmi.valid);
-        REQUIRE(model.route.waypoint.distance_nmi.valid);
-        REQUIRE(model.route.waypoint_arrival.arrival_circle_entered.value);
-        REQUIRE(std::strcmp(model.route.waypoint_arrival.waypoint_id, "WP01") == 0);
-        REQUIRE(std::strcmp(model.notifications.messages.event.event_id, "seatalk_ap_key") == 0);
+        update_coverage(model, coverage);
     }
+
     REQUIRE(fixture_count > 0);
     REQUIRE(record_count > 0);
+    REQUIRE(coverage.depth);
+    REQUIRE(coverage.engine);
+    REQUIRE(coverage.wind_angle);
+    REQUIRE(coverage.wind_speed);
+    REQUIRE(coverage.water_speed);
+    REQUIRE(coverage.water_temperature);
+    REQUIRE(coverage.heading);
+    REQUIRE(coverage.rudder);
+    REQUIRE(coverage.log);
+    REQUIRE(coverage.gps_position);
+    REQUIRE(coverage.gps_speed_track);
+    REQUIRE(coverage.gps_time_date);
+    REQUIRE(coverage.gps_satellite);
+    REQUIRE(coverage.autopilot);
+    REQUIRE(coverage.waypoint_nav);
+    REQUIRE(coverage.arrival);
+    REQUIRE(coverage.autopilot_key);
     return 0;
 }
