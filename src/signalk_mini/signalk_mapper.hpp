@@ -184,6 +184,7 @@ public:
         case ModelField::LegacyCommObject: return map_object("communication.legacy", SignalKObjectKind::LegacyComm, out);
         case ModelField::NotificationText: return map_text(model.notifications.messages.text.text[0] ? model.notifications.messages.text.text : model.notifications.messages.text.value, "notifications.message.text", out);
         case ModelField::NotificationEvent: return map_text(model.notifications.messages.event.event_text, "notifications.message.event", out);
+        case ModelField::NotificationEventLog: return map_text(model.notifications.messages.event_log.event_text, "notifications.message.eventLog", out);
         default: return false;
         }
     }

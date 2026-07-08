@@ -111,6 +111,19 @@ private:
         mark(ModelField::RouteWaypointFromId, source_id, now_us);
     }
 
+    void mark_waypoint_arrival(SourceId source_id, uint64_t now_us) {
+        mark(ModelField::RouteWaypointArrivalCircleEntered, source_id, now_us);
+        mark(ModelField::RouteWaypointPerpendicularPassed, source_id, now_us);
+        mark(ModelField::RouteWaypointArrivalRadiusNmi, source_id, now_us);
+        mark(ModelField::RouteWaypointArrivalId, source_id, now_us);
+    }
+
+    void mark_current(SourceId source_id, uint64_t now_us) {
+        mark(ModelField::SeaCurrentDirectionDeg, source_id, now_us);
+        mark(ModelField::SeaCurrentDirectionMagneticDeg, source_id, now_us);
+        mark(ModelField::SeaCurrentSpeedKn, source_id, now_us);
+    }
+
     void mark_trawl(SourceId source_id, uint64_t now_us) {
         mark(ModelField::TrawlHeadropeToFootropeM, source_id, now_us);
         mark(ModelField::TrawlHeadropeToBottomM, source_id, now_us);
@@ -251,10 +264,8 @@ private:
         if (is(sentence, "LWY")) {
             mark(ModelField::SeaLeewayDeg, source_id, now_us);
         }
-        if (is(sentence, "VDR")) {
-            mark(ModelField::SeaCurrentDirectionDeg, source_id, now_us);
-            mark(ModelField::SeaCurrentDirectionMagneticDeg, source_id, now_us);
-            mark(ModelField::SeaCurrentSpeedKn, source_id, now_us);
+        if (is(sentence, "VDR") || is(sentence, "CUR")) {
+            mark_current(source_id, now_us);
         }
 
         if (is(sentence, "RPM")) {
@@ -270,6 +281,9 @@ private:
             mark(ModelField::RouteLogTotalDistanceNmi, source_id, now_us);
             mark(ModelField::RouteLogTripDistanceNmi, source_id, now_us);
         }
+        if (is(sentence, "AAM")) {
+            mark_waypoint_arrival(source_id, now_us);
+        }
         if (is(sentence, "APB") || is(sentence, "APA")) {
             mark_route_course(source_id, now_us);
         }
@@ -284,7 +298,7 @@ private:
             mark(ModelField::RouteWaypointToId, source_id, now_us);
             mark(ModelField::RouteWaypointFromId, source_id, now_us);
         }
-        if (is(sentence, "BWC") || is(sentence, "BWR")) {
+        if (is(sentence, "BEC") || is(sentence, "BWC") || is(sentence, "BWR")) {
             mark_waypoint(source_id, now_us);
         }
         if (is(sentence, "WPL")) {
@@ -339,8 +353,11 @@ private:
             mark(ModelField::AisOwnVesselObject, source_id, now_us);
             mark(ModelField::AisSafetyObject, source_id, now_us);
         }
-        if (is(sentence, "ABK") || is(sentence, "AGA") || is(sentence, "BCL")) {
+        if (is(sentence, "ABK") || is(sentence, "ADS") || is(sentence, "AGA") || is(sentence, "BCL")) {
             mark(ModelField::AisDataLinkStatusObject, source_id, now_us);
+        }
+        if (is(sentence, "ASD")) {
+            mark(ModelField::AisSafetyObject, source_id, now_us);
         }
         if (is(sentence, "DSC") || is(sentence, "DSE")) {
             mark(ModelField::DscStructuredNotification, source_id, now_us);
@@ -353,14 +370,14 @@ private:
             mark(ModelField::InmarsatSafetyNetStructuredNotification, source_id, now_us);
         }
         if (is(sentence, "ACK") || is(sentence, "AKD") || is(sentence, "ALA") || is(sentence, "ALC") ||
-            is(sentence, "ALF") || is(sentence, "ALR") || is(sentence, "HBT") || is(sentence, "FIR")) {
+            is(sentence, "ALF") || is(sentence, "ALR") || is(sentence, "ARC") || is(sentence, "HBT") || is(sentence, "FIR")) {
             mark(ModelField::AlertStructuredNotification, source_id, now_us);
         }
         if (is(sentence, "MOB") || is(sentence, "SMV")) {
             mark(ModelField::MobStructuredNotification, source_id, now_us);
         }
         if (is(sentence, "FSI") || is(sentence, "MSK") || is(sentence, "MSS") || is(sentence, "RLM") ||
-            is(sentence, "CEK") || is(sentence, "COP") || is(sentence, "DDC") || is(sentence, "DOR")) {
+            is(sentence, "CEK") || is(sentence, "COP") || is(sentence, "DCR") || is(sentence, "DDC") || is(sentence, "DOR")) {
             mark(ModelField::LegacyCommObject, source_id, now_us);
         }
         if (is(sentence, "TXT") || is(sentence, "ALR") || is(sentence, "ACK") || is(sentence, "HBT") || is(sentence, "FIR") ||
@@ -368,6 +385,12 @@ private:
             is(sentence, "SM4") || is(sentence, "SMB") || is(sentence, "MOB")) {
             mark(ModelField::NotificationText, source_id, now_us);
             mark(ModelField::NotificationEvent, source_id, now_us);
+        }
+        if (is(sentence, "EVE")) {
+            mark(ModelField::NotificationEvent, source_id, now_us);
+        }
+        if (is(sentence, "ETL")) {
+            mark(ModelField::NotificationEventLog, source_id, now_us);
         }
     }
 
