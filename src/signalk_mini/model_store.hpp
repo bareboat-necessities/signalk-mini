@@ -21,6 +21,7 @@ public:
         if (count_ == Capacity) {
             tail_ = (tail_ + 1) % Capacity;
             --count_;
+            ++dropped_count_;
         }
         items_[head_] = change;
         head_ = (head_ + 1) % Capacity;
@@ -38,12 +39,14 @@ public:
 
     size_t size() const { return count_; }
     bool empty() const { return count_ == 0; }
+    uint64_t dropped_count() const { return dropped_count_; }
 
 private:
     ModelChange items_[Capacity]{};
     size_t head_ = 0;
     size_t tail_ = 0;
     size_t count_ = 0;
+    uint64_t dropped_count_ = 0;
 };
 
 template<typename Real, size_t QueueCapacity = 512>
@@ -54,7 +57,9 @@ public:
     Model& model() { return model_; }
     const Model& model() const { return model_; }
     ModelChangeQueue<QueueCapacity>& changes() { return changes_; }
+    const ModelChangeQueue<QueueCapacity>& changes() const { return changes_; }
     uint64_t sequence() const { return sequence_; }
+    uint64_t dropped_change_count() const { return changes_.dropped_count(); }
 
     void mark_changed(ModelField field, SourceId source_id, uint64_t now_us) {
         ModelChange change{field, source_id, now_us, ++sequence_};
