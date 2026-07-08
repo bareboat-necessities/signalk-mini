@@ -333,6 +333,36 @@ private:
         if (is(sentence, "HFB") || is(sentence, "TDS") || is(sentence, "TPC") || is(sentence, "TPR") || is(sentence, "TPT")) {
             mark_trawl(source_id, now_us);
         }
+
+        if (is(sentence, "VDM") || is(sentence, "VDO")) {
+            mark(ModelField::AisTargetsObject, source_id, now_us);
+            mark(ModelField::AisOwnVesselObject, source_id, now_us);
+            mark(ModelField::AisSafetyObject, source_id, now_us);
+        }
+        if (is(sentence, "ABK") || is(sentence, "AGA") || is(sentence, "BCL")) {
+            mark(ModelField::AisDataLinkStatusObject, source_id, now_us);
+        }
+        if (is(sentence, "DSC") || is(sentence, "DSE")) {
+            mark(ModelField::DscStructuredNotification, source_id, now_us);
+        }
+        if (is(sentence, "NRX") || is(sentence, "NRM")) {
+            mark(ModelField::NavtexStructuredNotification, source_id, now_us);
+        }
+        if (is(sentence, "SM1") || is(sentence, "SM2") || is(sentence, "SM3") || is(sentence, "SM4") ||
+            is(sentence, "SMB") || is(sentence, "CAN") || is(sentence, "CRQ") || is(sentence, "DSM") || is(sentence, "TMD")) {
+            mark(ModelField::InmarsatSafetyNetStructuredNotification, source_id, now_us);
+        }
+        if (is(sentence, "ACK") || is(sentence, "AKD") || is(sentence, "ALA") || is(sentence, "ALC") ||
+            is(sentence, "ALF") || is(sentence, "ALR") || is(sentence, "HBT") || is(sentence, "FIR")) {
+            mark(ModelField::AlertStructuredNotification, source_id, now_us);
+        }
+        if (is(sentence, "MOB") || is(sentence, "SMV")) {
+            mark(ModelField::MobStructuredNotification, source_id, now_us);
+        }
+        if (is(sentence, "FSI") || is(sentence, "MSK") || is(sentence, "MSS") || is(sentence, "RLM") ||
+            is(sentence, "CEK") || is(sentence, "COP") || is(sentence, "DDC") || is(sentence, "DOR")) {
+            mark(ModelField::LegacyCommObject, source_id, now_us);
+        }
         if (is(sentence, "TXT") || is(sentence, "ALR") || is(sentence, "ACK") || is(sentence, "HBT") || is(sentence, "FIR") ||
             is(sentence, "NRX") || is(sentence, "NRM") || is(sentence, "SM1") || is(sentence, "SM2") || is(sentence, "SM3") ||
             is(sentence, "SM4") || is(sentence, "SMB") || is(sentence, "MOB")) {
