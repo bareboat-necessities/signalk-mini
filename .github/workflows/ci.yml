@@ -16,13 +16,7 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
       - name: Test
-        run: ctest --test-dir build --output-on-failure 2>&1 | tee ctest-output.log
-      - name: Upload ctest output
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ctest-output
-          path: ctest-output.log
+        run: ctest --test-dir build --output-on-failure
 
   arduino-atoms3r:
     runs-on: ubuntu-latest
