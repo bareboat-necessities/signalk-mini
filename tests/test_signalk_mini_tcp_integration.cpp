@@ -159,6 +159,29 @@ bool line_has_valid_hello(const std::string& line) {
     return true;
 }
 
+bool line_has_valid_clock_delta(const std::string& line) {
+    JsonDocument doc;
+    const DeserializationError err = deserializeJson(doc, line);
+    REQUIRE(!err);
+
+    JsonArray updates = doc["updates"].as<JsonArray>();
+    if (updates.isNull()) return false;
+    for (JsonObject update : updates) {
+        JsonArray values = update["values"].as<JsonArray>();
+        if (values.isNull()) continue;
+        for (JsonObject value : values) {
+            const char* path = value["path"] | "";
+            if (std::strcmp(path, "communication.server.clock") == 0) {
+                REQUIRE(value["value"].is<double>() || value["value"].is<float>() || value["value"].is<int>());
+                const double clock_s = value["value"] | 0.0;
+                REQUIRE(clock_s > 0.0);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 bool line_has_valid_wind_speed_delta(const std::string& line) {
     JsonDocument doc;
     const DeserializationError err = deserializeJson(doc, line);
@@ -229,6 +252,10 @@ bool wait_for_signal_k_hello(int fd, int timeout_ms) {
     return wait_for_signal_k_line(fd, timeout_ms, line_has_valid_hello);
 }
 
+bool wait_for_signal_k_clock_delta(int fd, int timeout_ms) {
+    return wait_for_signal_k_line(fd, timeout_ms, line_has_valid_clock_delta);
+}
+
 bool wait_for_signal_k_wind_delta(int fd, int timeout_ms) {
     return wait_for_signal_k_line(fd, timeout_ms, line_has_valid_wind_speed_delta);
 }
@@ -282,6 +309,8 @@ int main() {
     Fd signalk_client = connect_loopback(signalk_port, 3000);
     REQUIRE(signalk_client.valid());
     REQUIRE(wait_for_signal_k_hello(signalk_client.get(), 3000));
+    REQUIRE(send_all(signalk_client.get(), "{\"subscribe\":\"all\"}\r\n"));
+    REQUIRE(wait_for_signal_k_clock_delta(signalk_client.get(), 3000));
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
