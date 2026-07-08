@@ -44,13 +44,11 @@ void mark_seatalk_changes(ModelStore<Real, QueueCapacity>& store,
         break;
 
     case Kind::heading_magnetic:
-        store.mark_changed(ModelField::ImuHeadingDeg, source_id, now_us);
         store.mark_changed(ModelField::ImuHeadingMagneticDeg, source_id, now_us);
         break;
 
     case Kind::rudder_angle:
         store.mark_changed(ModelField::SteeringRudderAngleDeg, source_id, now_us);
-        store.mark_changed(ModelField::ImuHeadingDeg, source_id, now_us);
         store.mark_changed(ModelField::ImuHeadingMagneticDeg, source_id, now_us);
         break;
 
@@ -138,7 +136,6 @@ void mark_seatalk_changes(ModelStore<Real, QueueCapacity>& store,
         store.mark_changed(ModelField::AutopilotEnabled, source_id, now_us);
         store.mark_changed(ModelField::AutopilotHeadingDeg, source_id, now_us);
         store.mark_changed(ModelField::AutopilotHeadingCommandDeg, source_id, now_us);
-        store.mark_changed(ModelField::ImuHeadingDeg, source_id, now_us);
         store.mark_changed(ModelField::ImuHeadingMagneticDeg, source_id, now_us);
         store.mark_changed(ModelField::SteeringRudderAngleDeg, source_id, now_us);
         store.mark_changed(ModelField::AutopilotWarnings, source_id, now_us);
@@ -178,11 +175,6 @@ void mark_seatalk_changes(ModelStore<Real, QueueCapacity>& store,
         store.mark_changed(ModelField::RouteApbDestinationId, source_id, now_us);
         store.mark_changed(ModelField::RouteApbArrivalCircleEntered, source_id, now_us);
         store.mark_changed(ModelField::RouteApbPerpendicularPassed, source_id, now_us);
-        store.mark_changed(ModelField::RouteRmbArrived, source_id, now_us);
-        break;
-
-    case Kind::none:
-    default:
         break;
     }
 }
