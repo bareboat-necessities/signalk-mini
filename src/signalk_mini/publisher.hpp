@@ -28,7 +28,8 @@ public:
         while (emitted < config_.publisher.max_changes_per_tick && store_.changes().pop(change)) {
             SignalKMappedValue<Real> mapped;
             if (!mapper.map_change(store_.model(), change, mapped) || !mapped.path) continue;
-            const int len = writer.write_mapped(json_, json_capacity, config_.publisher.source_label, store_.model(), mapped);
+            const char* source_label = label_for_source(change.source_id);
+            const int len = writer.write_mapped(json_, json_capacity, source_label, store_.model(), mapped);
             if (len <= 0 || static_cast<size_t>(len) >= json_capacity) continue;
             connections.for_each_tx([&](async_event_loop::ITcpConnection& connection) {
                 connection.write(reinterpret_cast<const uint8_t*>(json_), static_cast<size_t>(len));
@@ -42,6 +43,17 @@ private:
         const size_t configured = static_cast<size_t>(config_.publisher.json_buffer_size);
         if (configured == 0) return 0;
         return configured < MaxJsonBufferSize ? configured : MaxJsonBufferSize;
+    }
+
+    const char* label_for_source(SourceId source_id) const {
+        if (source_id >= 10 && config_.connectors) {
+            const size_t index = static_cast<size_t>(source_id - 10);
+            if (index < config_.connector_count) {
+                const char* label = config_.connectors[index].label;
+                if (label && label[0]) return label;
+            }
+        }
+        return config_.publisher.source_label ? config_.publisher.source_label : config_.identity.server_name;
     }
 
     ModelStore<Real>& store_;
