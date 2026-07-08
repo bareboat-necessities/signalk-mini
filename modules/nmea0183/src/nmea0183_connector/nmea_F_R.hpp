@@ -214,98 +214,277 @@ bool apply_mwv(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     return set_wind(model.wind.apparent, angle_deg, speed_kn, now_us, source);
 }
 
-bool navtex_text_has_eom(const char* text) const { return text && strstr(text, "NNNN") != nullptr; }
-bool navtex_is_id_char(char c) const { return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'); }
+bool navtex_text_has_eom(const char* text) const {
+    return text && strstr(text, "NNNN") != nullptr;
+}
+
+bool navtex_is_id_char(char c) const {
+    return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+}
 
 int32_t navtex_subject_category(char subject) const {
     switch (subject) {
-    case 'A': return 1; case 'B': return 2; case 'C': return 3; case 'D': return 4; case 'E': return 5; case 'F': return 6; case 'G': return 7; case 'H': return 8; case 'J': return 9; case 'K': return 10; case 'L': return 11; case 'V': case 'W': case 'X': case 'Y': return 20; case 'Z': return 30; default: return 0;
+    case 'A': return 1;
+    case 'B': return 2;
+    case 'C': return 3;
+    case 'D': return 4;
+    case 'E': return 5;
+    case 'F': return 6;
+    case 'G': return 7;
+    case 'H': return 8;
+    case 'J': return 9;
+    case 'K': return 10;
+    case 'L': return 11;
+    case 'V':
+    case 'W':
+    case 'X':
+    case 'Y': return 20;
+    case 'Z': return 30;
+    default: return 0;
     }
 }
 
 const char* navtex_subject_label(char subject) const {
     switch (subject) {
-    case 'A': return "navigation"; case 'B': return "meteorology"; case 'C': return "ice"; case 'D': return "search_rescue"; case 'E': return "forecast"; case 'F': return "pilot_service"; case 'G': return "ais"; case 'H': return "loran"; case 'J': return "satnav"; case 'K': return "other_enav"; case 'L': return "navigation_extra"; case 'V': case 'W': case 'X': case 'Y': return "special_service"; case 'Z': return "no_messages"; default: return "unknown";
+    case 'A': return "navigation";
+    case 'B': return "meteorology";
+    case 'C': return "ice";
+    case 'D': return "search_rescue";
+    case 'E': return "forecast";
+    case 'F': return "pilot_service";
+    case 'G': return "ais";
+    case 'H': return "loran";
+    case 'J': return "satnav";
+    case 'K': return "other_enav";
+    case 'L': return "navigation_extra";
+    case 'V':
+    case 'W':
+    case 'X':
+    case 'Y': return "special_service";
+    case 'Z': return "no_messages";
+    default: return "unknown";
     }
 }
 
 uint32_t navtex_letter_mask_bits(const char* text, int32_t& count) const {
-    uint32_t bits = 0; count = 0; if (!text) return bits;
-    for (const char* p = text; *p; ++p) { char c = *p; if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A'); if (c < 'A' || c > 'Z') continue; const uint32_t bit = static_cast<uint32_t>(1u << (c - 'A')); if ((bits & bit) == 0u) { bits |= bit; ++count; } }
+    uint32_t bits = 0;
+    count = 0;
+    if (!text) return bits;
+
+    for (const char* p = text; *p; ++p) {
+        char c = *p;
+        if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+        if (c < 'A' || c > 'Z') continue;
+
+        const uint32_t bit = static_cast<uint32_t>(1u << (c - 'A'));
+        if ((bits & bit) == 0u) {
+            bits |= bit;
+            ++count;
+        }
+    }
     return bits;
 }
 
-void parse_navtex_message_id(const char* text, char out[8], char& transmitter_id, char& subject_indicator, int32_t& serial_number, bool& has_serial) const {
-    out[0] = '\0'; transmitter_id = 0; subject_indicator = 0; serial_number = 0; has_serial = false; if (!text) return;
-    const char* p = strstr(text, "ZCZC"); if (p) p += 4; else p = text; while (*p == ' ') ++p;
-    if (!navtex_is_id_char(p[0]) || !navtex_is_id_char(p[1]) || p[2] < '0' || p[2] > '9' || p[3] < '0' || p[3] > '9') return;
-    out[0] = p[0]; out[1] = p[1]; out[2] = p[2]; out[3] = p[3]; out[4] = '\0'; transmitter_id = p[0]; subject_indicator = p[1]; serial_number = static_cast<int32_t>((p[2] - '0') * 10 + (p[3] - '0')); has_serial = true;
+void parse_navtex_message_id(const char* text,
+                             char out[8],
+                             char& transmitter_id,
+                             char& subject_indicator,
+                             int32_t& serial_number,
+                             bool& has_serial) const {
+    out[0] = '\0';
+    transmitter_id = 0;
+    subject_indicator = 0;
+    serial_number = 0;
+    has_serial = false;
+    if (!text) return;
+
+    const char* p = strstr(text, "ZCZC");
+    if (p) p += 4;
+    else p = text;
+    while (*p == ' ') ++p;
+
+    if (!navtex_is_id_char(p[0]) ||
+        !navtex_is_id_char(p[1]) ||
+        p[2] < '0' || p[2] > '9' ||
+        p[3] < '0' || p[3] > '9') {
+        return;
+    }
+
+    out[0] = p[0];
+    out[1] = p[1];
+    out[2] = p[2];
+    out[3] = p[3];
+    out[4] = '\0';
+    transmitter_id = p[0];
+    subject_indicator = p[1];
+    serial_number = static_cast<int32_t>((p[2] - '0') * 10 + (p[3] - '0'));
+    has_serial = true;
 }
 
 void navtex_copy_body_text(char* out, size_t out_size, const char* text) const {
-    if (!out || out_size == 0u) return; out[0] = '\0'; if (!text) return;
+    if (!out || out_size == 0u) return;
+    out[0] = '\0';
+    if (!text) return;
+
     const char* begin = strstr(text, "ZCZC");
-    if (begin) { begin += 4; while (*begin == ' ') ++begin; if (navtex_is_id_char(begin[0]) && navtex_is_id_char(begin[1]) && begin[2] >= '0' && begin[2] <= '9' && begin[3] >= '0' && begin[3] <= '9') begin += 4; } else begin = text;
+    if (begin) {
+        begin += 4;
+        while (*begin == ' ') ++begin;
+        if (navtex_is_id_char(begin[0]) &&
+            navtex_is_id_char(begin[1]) &&
+            begin[2] >= '0' && begin[2] <= '9' &&
+            begin[3] >= '0' && begin[3] <= '9') {
+            begin += 4;
+        }
+    } else {
+        begin = text;
+    }
+
     while (*begin == ' ') ++begin;
-    const char* end = strstr(begin, "NNNN"); if (!end) end = begin + strlen(begin); while (end > begin && (end[-1] == ' ' || end[-1] == '\r' || end[-1] == '\n')) --end;
+
+    const char* end = strstr(begin, "NNNN");
+    if (!end) end = begin + strlen(begin);
+    while (end > begin && (end[-1] == ' ' || end[-1] == '\r' || end[-1] == '\n')) --end;
     nmea_copy_span(out, out_size, NmeaSpan(begin, static_cast<size_t>(end - begin)));
 }
 
 template<typename Message>
 bool navtex_same_message_id(const Message& a, const Message& b) const {
-    if (a.navtex_message_id[0] && b.navtex_message_id[0]) return strcmp(a.navtex_message_id, b.navtex_message_id) == 0;
-    if (a.transmitter_id && b.transmitter_id && a.subject_indicator && b.subject_indicator && a.serial_number.valid && b.serial_number.valid) return a.transmitter_id == b.transmitter_id && a.subject_indicator == b.subject_indicator && a.serial_number.value == b.serial_number.value;
+    if (a.navtex_message_id[0] && b.navtex_message_id[0]) {
+        return strcmp(a.navtex_message_id, b.navtex_message_id) == 0;
+    }
+    if (a.transmitter_id &&
+        b.transmitter_id &&
+        a.subject_indicator &&
+        b.subject_indicator &&
+        a.serial_number.valid &&
+        b.serial_number.valid) {
+        return a.transmitter_id == b.transmitter_id &&
+               a.subject_indicator == b.subject_indicator &&
+               a.serial_number.value == b.serial_number.value;
+    }
     return false;
 }
 
 template<typename NavtexData, typename ReceivedMessage>
 void navtex_store_received_message(NavtexData& navtex, ReceivedMessage& received, uint64_t now_us) {
-    auto& history = navtex.history; const uint8_t capacity = ship_data_model::NAVTEX_MESSAGE_HISTORY_CAPACITY;
+    auto& history = navtex.history;
+    const uint8_t capacity = ship_data_model::NAVTEX_MESSAGE_HISTORY_CAPACITY;
+
     for (uint8_t i = 0; i < capacity; ++i) {
         auto& slot = history.messages[i];
         if (slot.first_seen_us != 0 && navtex_same_message_id(slot, received)) {
-            const int32_t repeat = slot.repeat_count.valid ? slot.repeat_count.value + 1 : 2; const uint64_t first_seen = slot.first_seen_us; slot = received; slot.first_seen_us = first_seen; slot.repeat_count.set(repeat, now_us); slot.duplicate = true; slot.last_update_us = now_us; received = slot; const int32_t duplicate_count = history.duplicate_count.valid ? history.duplicate_count.value : 0; history.duplicate_count.set(duplicate_count + 1, now_us); return;
+            const int32_t repeat = slot.repeat_count.valid ? slot.repeat_count.value + 1 : 2;
+            const uint64_t first_seen = slot.first_seen_us;
+            slot = received;
+            slot.first_seen_us = first_seen;
+            slot.repeat_count.set(repeat, now_us);
+            slot.duplicate = true;
+            slot.last_update_us = now_us;
+            received = slot;
+            const int32_t duplicate_count = history.duplicate_count.valid ? history.duplicate_count.value : 0;
+            history.duplicate_count.set(duplicate_count + 1, now_us);
+            return;
         }
     }
-    int32_t next = history.next_index.valid ? history.next_index.value : 0; if (next < 0 || next >= static_cast<int32_t>(capacity)) next = 0; auto& slot = history.messages[static_cast<uint8_t>(next)]; const bool overwriting = slot.first_seen_us != 0; received.first_seen_us = now_us; received.repeat_count.set(1, now_us); received.duplicate = false; slot = received; const int32_t count = history.count.valid ? history.count.value : 0; if (count < static_cast<int32_t>(capacity)) history.count.set(count + 1, now_us); if (overwriting) { const int32_t overwrite_count = history.overwrite_count.valid ? history.overwrite_count.value : 0; history.overwrite_count.set(overwrite_count + 1, now_us); } history.next_index.set((next + 1) % static_cast<int32_t>(capacity), now_us);
+
+    int32_t next = history.next_index.valid ? history.next_index.value : 0;
+    if (next < 0 || next >= static_cast<int32_t>(capacity)) next = 0;
+
+    auto& slot = history.messages[static_cast<uint8_t>(next)];
+    const bool overwriting = slot.first_seen_us != 0;
+    received.first_seen_us = now_us;
+    received.repeat_count.set(1, now_us);
+    received.duplicate = false;
+    slot = received;
+
+    const int32_t count = history.count.valid ? history.count.value : 0;
+    if (count < static_cast<int32_t>(capacity)) history.count.set(count + 1, now_us);
+    if (overwriting) {
+        const int32_t overwrite_count = history.overwrite_count.valid ? history.overwrite_count.value : 0;
+        history.overwrite_count.set(overwrite_count + 1, now_us);
+    }
+    history.next_index.set((next + 1) % static_cast<int32_t>(capacity), now_us);
 }
 
 template<typename Model>
 bool apply_nrx(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 4) { last_error_ = "short NRX"; return false; }
-    auto& received = model.notifications.navtex.received; int32_t value = 0;
+    auto& received = model.notifications.navtex.received;
+    int32_t value = 0;
     if (parse_int32(sentence.field(0), value)) received.total_fragments.set(value, now_us);
     if (parse_int32(sentence.field(1), value)) received.fragment_number.set(value, now_us);
     nmea_copy_span(received.sentence_message_id, sizeof(received.sentence_message_id), sentence.field(2));
-    const char* text = nullptr; size_t text_len = 0;
-    if (sentence.fragment.is_fragmented) { if (!state_.navtex_message.complete) return true; text = state_.navtex_message.text; text_len = strlen(state_.navtex_message.text); received.complete = state_.navtex_message.complete; received.overflow = state_.navtex_message.overflow; } else { text = sentence.field(3).data; text_len = sentence.field(3).length; received.complete = true; received.overflow = false; }
+
+    const char* text = nullptr;
+    size_t text_len = 0;
+    if (sentence.fragment.is_fragmented) {
+        if (!state_.navtex_message.complete) return true;
+        text = state_.navtex_message.text;
+        text_len = strlen(state_.navtex_message.text);
+        received.complete = state_.navtex_message.complete;
+        received.overflow = state_.navtex_message.overflow;
+    } else {
+        text = sentence.field(3).data;
+        text_len = sentence.field(3).length;
+        received.complete = true;
+        received.overflow = false;
+    }
+
     nmea_copy_span(received.message_text, sizeof(received.message_text), NmeaSpan(text, text_len));
     received.text_length.set(static_cast<int32_t>(strlen(received.message_text)), now_us);
     received.end_of_message = navtex_text_has_eom(received.message_text);
     received.framing_valid = strstr(received.message_text, "ZCZC") != nullptr && received.end_of_message;
     navtex_copy_body_text(received.body_text, sizeof(received.body_text), received.message_text);
     received.body_length.set(static_cast<int32_t>(strlen(received.body_text)), now_us);
-    int32_t serial = 0; bool has_serial = false;
-    parse_navtex_message_id(received.message_text, received.navtex_message_id, received.transmitter_id, received.subject_indicator, serial, has_serial);
-    if (has_serial) { received.serial_number.set(serial, now_us); received.subject_category.set(navtex_subject_category(received.subject_indicator), now_us); nmea_copy_cstr(received.subject_label, sizeof(received.subject_label), navtex_subject_label(received.subject_indicator)); received.subject_is_service = received.subject_category.value == 20; }
-    set_source(received.source, source); received.last_update_us = now_us; navtex_store_received_message(model.notifications.navtex, received, now_us); return true;
+
+    int32_t serial = 0;
+    bool has_serial = false;
+    parse_navtex_message_id(received.message_text,
+                            received.navtex_message_id,
+                            received.transmitter_id,
+                            received.subject_indicator,
+                            serial,
+                            has_serial);
+    if (has_serial) {
+        received.serial_number.set(serial, now_us);
+        received.subject_category.set(navtex_subject_category(received.subject_indicator), now_us);
+        nmea_copy_cstr(received.subject_label,
+                       sizeof(received.subject_label),
+                       navtex_subject_label(received.subject_indicator));
+        received.subject_is_service = received.subject_category.value == 20;
+    }
+
+    set_source(received.source, source);
+    received.last_update_us = now_us;
+    navtex_store_received_message(model.notifications.navtex, received, now_us);
+    return true;
 }
 
 template<typename Model>
 bool apply_nrm(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 4) { last_error_ = "short NRM"; return false; }
-    auto& mask = model.notifications.navtex.receiver_mask; int32_t value = 0;
+    auto& mask = model.notifications.navtex.receiver_mask;
+    int32_t value = 0;
     if (parse_int32(sentence.field(0), value)) mask.total_fragments.set(value, now_us);
     if (parse_int32(sentence.field(1), value)) mask.fragment_number.set(value, now_us);
     nmea_copy_span(mask.sentence_message_id, sizeof(mask.sentence_message_id), sentence.field(2));
     nmea_copy_span(mask.receiver_id, sizeof(mask.receiver_id), sentence.field(3));
     if (sentence.field_count > 4) nmea_copy_span(mask.station_mask, sizeof(mask.station_mask), sentence.field(4));
     if (sentence.field_count > 5) nmea_copy_span(mask.subject_mask, sizeof(mask.subject_mask), sentence.field(5));
-    int32_t enabled = 0; mask.station_mask_bits = navtex_letter_mask_bits(mask.station_mask, enabled); mask.enabled_station_count.set(enabled, now_us); mask.subject_mask_bits = navtex_letter_mask_bits(mask.subject_mask, enabled); mask.enabled_subject_count.set(enabled, now_us);
+
+    int32_t enabled = 0;
+    mask.station_mask_bits = navtex_letter_mask_bits(mask.station_mask, enabled);
+    mask.enabled_station_count.set(enabled, now_us);
+    mask.subject_mask_bits = navtex_letter_mask_bits(mask.subject_mask, enabled);
+    mask.enabled_subject_count.set(enabled, now_us);
+
     if (sentence.field_count > 6) nmea_copy_span(mask.status_text, sizeof(mask.status_text), sentence.field(6));
     mask.complete = !sentence.fragment.is_fragmented || state_.navtex_message.complete;
     mask.overflow = sentence.fragment.is_fragmented && state_.navtex_message.overflow;
-    set_source(mask.source, source); mask.last_update_us = now_us; return true;
+    set_source(mask.source, source);
+    mask.last_update_us = now_us;
+    return true;
 }
 
 template<typename Model>
