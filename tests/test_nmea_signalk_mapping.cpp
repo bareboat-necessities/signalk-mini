@@ -48,7 +48,7 @@ int main() {
 
     store.model().trawl.headrope_to_footrope_m.set(3.2f, 1000);
     mark(store, signalk_mini::ModelField::TrawlHeadropeToFootropeM);
-    REQUIRE(pop_path(store, "environment.trawl.headropeToFootrope", mapped));
+    REQUIRE(pop_path(store, "fishing.trawl.headropeToFootrope", mapped));
     NEAR(mapped.number, 3.2f, 0.0001f);
 
     store.model().ins.imu.pitch_deg.set(1.2f, 1000);
