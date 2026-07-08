@@ -46,7 +46,7 @@ int main() {
     REQUIRE(pop_path(store, "navigation.courseGreatCircle.nextPoint.position.latitude", mapped));
     NEAR(mapped.number, 49.274166f, 0.0002f);
 
-    store.model().trawl.headrope_to_footrope_m.set(3.2f, 1000);
+    store.model().fishing.trawl.headrope_to_footrope_m.set(3.2f, 1000);
     mark(store, signalk_mini::ModelField::TrawlHeadropeToFootropeM);
     REQUIRE(pop_path(store, "fishing.trawl.headropeToFootrope", mapped));
     NEAR(mapped.number, 3.2f, 0.0001f);
