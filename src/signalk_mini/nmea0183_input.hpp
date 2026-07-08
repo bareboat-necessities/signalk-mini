@@ -17,7 +17,11 @@ class Nmea0183Input {
 public:
     explicit Nmea0183Input(ModelStore<Real>& store) : store_(store) {}
 
-    bool feed_line(const char* line, SourceId source_id, uint64_t now_us, bool validate_checksum = true) {
+    bool feed_line(const char* line,
+                   SourceId source_id,
+                   uint64_t now_us,
+                   bool validate_checksum = true,
+                   ship_data_model::SensorSource source = ship_data_model::SensorSource::serial) {
         const nmea0183_connector::NmeaTokenizeResult tokens = nmea0183_connector::tokenize_nmea_line(line);
         const nmea0183_connector::NmeaToken* token = tokens.first_sentence();
         if (!token) return false;
@@ -29,7 +33,7 @@ public:
         if (!parser_.parse_line(sentence_text, sentence, validate_checksum)) return false;
 
         const uint32_t decoded_before = rx_.seatalk_receiver().decoded_count();
-        const bool applied = rx_.apply_sentence(sentence, store_.model(), now_us, ship_data_model::SensorSource::serial);
+        const bool applied = rx_.apply_sentence(sentence, store_.model(), now_us, source);
         if (!applied) return false;
 
         if (rx_.seatalk_receiver().decoded_count() != decoded_before) {
@@ -50,18 +54,14 @@ private:
         return nmea0183_connector::sentence_is(sentence, id);
     }
 
-    void mark(ModelField field, SourceId source_id, uint64_t now_us) {
-        store_.mark_changed(field, source_id, now_us);
-    }
+    void mark(ModelField field, SourceId source_id, uint64_t now_us) { store_.mark_changed(field, source_id, now_us); }
 
     void mark_gnss_position(SourceId source_id, uint64_t now_us) {
         mark(ModelField::GnssFixLatDeg, source_id, now_us);
         mark(ModelField::GnssFixLonDeg, source_id, now_us);
     }
 
-    void mark_gnss_time(SourceId source_id, uint64_t now_us) {
-        mark(ModelField::GnssTimestampS, source_id, now_us);
-    }
+    void mark_gnss_time(SourceId source_id, uint64_t now_us) { mark(ModelField::GnssTimestampS, source_id, now_us); }
 
     void mark_gnss_date(SourceId source_id, uint64_t now_us) {
         mark(ModelField::GnssDateDay, source_id, now_us);
@@ -139,22 +139,14 @@ private:
     }
 
     void mark_changed_from_sentence(const nmea0183_connector::NmeaSentence& sentence, SourceId source_id, uint64_t now_us) {
-        if (is(sentence, "RMC") || is(sentence, "GGA") || is(sentence, "GLL") || is(sentence, "GNS")) {
-            mark_gnss_position(source_id, now_us);
-        }
-        if (is(sentence, "RMC") || is(sentence, "GLL") || is(sentence, "GGA") || is(sentence, "GNS") || is(sentence, "ZDA")) {
-            mark_gnss_time(source_id, now_us);
-        }
-        if (is(sentence, "RMC") || is(sentence, "ZDA")) {
-            mark_gnss_date(source_id, now_us);
-        }
+        if (is(sentence, "RMC") || is(sentence, "GGA") || is(sentence, "GLL") || is(sentence, "GNS")) mark_gnss_position(source_id, now_us);
+        if (is(sentence, "RMC") || is(sentence, "GLL") || is(sentence, "GGA") || is(sentence, "GNS") || is(sentence, "ZDA")) mark_gnss_time(source_id, now_us);
+        if (is(sentence, "RMC") || is(sentence, "ZDA")) mark_gnss_date(source_id, now_us);
         if (is(sentence, "RMC") || is(sentence, "VTG")) {
             mark(ModelField::GnssSpeedKn, source_id, now_us);
             mark(ModelField::GnssTrackDeg, source_id, now_us);
         }
-        if (is(sentence, "GGA") || is(sentence, "GNS")) {
-            mark_gnss_fix_quality(source_id, now_us);
-        }
+        if (is(sentence, "GGA") || is(sentence, "GNS")) mark_gnss_fix_quality(source_id, now_us);
         if (is(sentence, "GSA")) {
             mark(ModelField::GnssDopActiveFixMode, source_id, now_us);
             mark(ModelField::GnssDopActivePdop, source_id, now_us);
@@ -175,7 +167,6 @@ private:
             mark(ModelField::GnssSatelliteAzimuthDeg0, source_id, now_us);
             mark(ModelField::GnssSatelliteSnrDb0, source_id, now_us);
         }
-
         if (is(sentence, "HDT")) {
             mark(ModelField::ImuHeadingDeg, source_id, now_us);
             mark(ModelField::ImuHeadingTrueDeg, source_id, now_us);
@@ -193,7 +184,6 @@ private:
             mark(ModelField::ImuPitchDeg, source_id, now_us);
             mark(ModelField::ImuRollDeg, source_id, now_us);
         }
-
         if (is(sentence, "MWV")) {
             if (sentence.field(1)[0] == 'T') {
                 mark(ModelField::WindTrueDirectionDeg, source_id, now_us);
@@ -231,22 +221,11 @@ private:
             mark(ModelField::WindSurfaceSpeedMs, source_id, now_us);
             mark(ModelField::WindTrueSpeedMs, source_id, now_us);
         }
-
-        if (is(sentence, "DBT") || is(sentence, "DPT")) {
-            mark(ModelField::SeaDepthM, source_id, now_us);
-        }
-        if (is(sentence, "DPT")) {
-            mark(ModelField::SeaDepthOffsetM, source_id, now_us);
-        }
-        if (is(sentence, "DBK")) {
-            mark(ModelField::SeaDepthBelowKeelM, source_id, now_us);
-        }
-        if (is(sentence, "DBS")) {
-            mark(ModelField::SeaDepthBelowSurfaceM, source_id, now_us);
-        }
-        if (is(sentence, "MTW")) {
-            mark(ModelField::SeaTemperatureC, source_id, now_us);
-        }
+        if (is(sentence, "DBT") || is(sentence, "DPT")) mark(ModelField::SeaDepthM, source_id, now_us);
+        if (is(sentence, "DPT")) mark(ModelField::SeaDepthOffsetM, source_id, now_us);
+        if (is(sentence, "DBK")) mark(ModelField::SeaDepthBelowKeelM, source_id, now_us);
+        if (is(sentence, "DBS")) mark(ModelField::SeaDepthBelowSurfaceM, source_id, now_us);
+        if (is(sentence, "MTW")) mark(ModelField::SeaTemperatureC, source_id, now_us);
         if (is(sentence, "VBW")) {
             mark(ModelField::SeaLongitudinalWaterSpeedKn, source_id, now_us);
             mark(ModelField::SeaTransverseWaterSpeedKn, source_id, now_us);
@@ -254,39 +233,25 @@ private:
             mark(ModelField::SeaTransverseGroundSpeedKn, source_id, now_us);
             mark(ModelField::SeaSpeedKn, source_id, now_us);
         }
-        if (is(sentence, "VHW")) {
-            mark(ModelField::SeaSpeedKn, source_id, now_us);
-        }
+        if (is(sentence, "VHW")) mark(ModelField::SeaSpeedKn, source_id, now_us);
         if (is(sentence, "VPW")) {
             mark(ModelField::SeaSpeedParallelToWindKn, source_id, now_us);
             mark(ModelField::SeaSpeedParallelToWindMs, source_id, now_us);
         }
-        if (is(sentence, "LWY")) {
-            mark(ModelField::SeaLeewayDeg, source_id, now_us);
-        }
-        if (is(sentence, "VDR") || is(sentence, "CUR")) {
-            mark_current(source_id, now_us);
-        }
-
+        if (is(sentence, "LWY")) mark(ModelField::SeaLeewayDeg, source_id, now_us);
+        if (is(sentence, "VDR") || is(sentence, "CUR")) mark_current(source_id, now_us);
         if (is(sentence, "RPM")) {
             mark(ModelField::PropulsionRevolutionsNumber, source_id, now_us);
             mark(ModelField::PropulsionRevolutionsSpeedRpm, source_id, now_us);
             mark(ModelField::PropulsionRevolutionsPitchPercent, source_id, now_us);
         }
-        if (is(sentence, "RSA")) {
-            mark(ModelField::SteeringRudderAngleDeg, source_id, now_us);
-        }
-
+        if (is(sentence, "RSA")) mark(ModelField::SteeringRudderAngleDeg, source_id, now_us);
         if (is(sentence, "VLW")) {
             mark(ModelField::RouteLogTotalDistanceNmi, source_id, now_us);
             mark(ModelField::RouteLogTripDistanceNmi, source_id, now_us);
         }
-        if (is(sentence, "AAM")) {
-            mark_waypoint_arrival(source_id, now_us);
-        }
-        if (is(sentence, "APB") || is(sentence, "APA")) {
-            mark_route_course(source_id, now_us);
-        }
+        if (is(sentence, "AAM")) mark_waypoint_arrival(source_id, now_us);
+        if (is(sentence, "APB") || is(sentence, "APA")) mark_route_course(source_id, now_us);
         if (is(sentence, "RMB")) {
             mark_rmb(source_id, now_us);
             mark(ModelField::RouteApbXteNmi, source_id, now_us);
@@ -298,9 +263,7 @@ private:
             mark(ModelField::RouteWaypointToId, source_id, now_us);
             mark(ModelField::RouteWaypointFromId, source_id, now_us);
         }
-        if (is(sentence, "BEC") || is(sentence, "BWC") || is(sentence, "BWR")) {
-            mark_waypoint(source_id, now_us);
-        }
+        if (is(sentence, "BEC") || is(sentence, "BWC") || is(sentence, "BWR")) mark_waypoint(source_id, now_us);
         if (is(sentence, "WPL")) {
             mark(ModelField::RouteWaypointLatDeg, source_id, now_us);
             mark(ModelField::RouteWaypointLonDeg, source_id, now_us);
@@ -320,9 +283,7 @@ private:
             mark(ModelField::RouteApbXteNmi, source_id, now_us);
             mark(ModelField::RouteRmbXteNmi, source_id, now_us);
         }
-        if (is(sentence, "R00") || is(sentence, "RTE")) {
-            mark(ModelField::RouteActiveWaypointCount, source_id, now_us);
-        }
+        if (is(sentence, "R00") || is(sentence, "RTE")) mark(ModelField::RouteActiveWaypointCount, source_id, now_us);
         if (is(sentence, "HSC")) {
             mark(ModelField::RouteHeadingSteeringCommandTrueDeg, source_id, now_us);
             mark(ModelField::RouteHeadingSteeringCommandMagneticDeg, source_id, now_us);
@@ -343,28 +304,16 @@ private:
             mark(ModelField::RouteWaypointDestinationTimeRemainingS, source_id, now_us);
             mark(ModelField::RouteWaypointToId, source_id, now_us);
         }
-
-        if (is(sentence, "HFB") || is(sentence, "TDS") || is(sentence, "TPC") || is(sentence, "TPR") || is(sentence, "TPT")) {
-            mark_trawl(source_id, now_us);
-        }
-
+        if (is(sentence, "HFB") || is(sentence, "TDS") || is(sentence, "TPC") || is(sentence, "TPR") || is(sentence, "TPT")) mark_trawl(source_id, now_us);
         if (is(sentence, "VDM") || is(sentence, "VDO")) {
             mark(ModelField::AisTargetsObject, source_id, now_us);
             mark(ModelField::AisOwnVesselObject, source_id, now_us);
             mark(ModelField::AisSafetyObject, source_id, now_us);
         }
-        if (is(sentence, "ABK") || is(sentence, "ADS") || is(sentence, "AGA") || is(sentence, "BCL")) {
-            mark(ModelField::AisDataLinkStatusObject, source_id, now_us);
-        }
-        if (is(sentence, "ASD")) {
-            mark(ModelField::AisSafetyObject, source_id, now_us);
-        }
-        if (is(sentence, "DSC") || is(sentence, "DSE")) {
-            mark(ModelField::DscStructuredNotification, source_id, now_us);
-        }
-        if (is(sentence, "NRX") || is(sentence, "NRM")) {
-            mark(ModelField::NavtexStructuredNotification, source_id, now_us);
-        }
+        if (is(sentence, "ABK") || is(sentence, "ADS") || is(sentence, "AGA") || is(sentence, "BCL")) mark(ModelField::AisDataLinkStatusObject, source_id, now_us);
+        if (is(sentence, "ASD")) mark(ModelField::AisSafetyObject, source_id, now_us);
+        if (is(sentence, "DSC") || is(sentence, "DSE")) mark(ModelField::DscStructuredNotification, source_id, now_us);
+        if (is(sentence, "NRX") || is(sentence, "NRM")) mark(ModelField::NavtexStructuredNotification, source_id, now_us);
         if (is(sentence, "SM1") || is(sentence, "SM2") || is(sentence, "SM3") || is(sentence, "SM4") ||
             is(sentence, "SMB") || is(sentence, "CAN") || is(sentence, "CRQ") || is(sentence, "DSM") || is(sentence, "TMD")) {
             mark(ModelField::InmarsatSafetyNetStructuredNotification, source_id, now_us);
@@ -373,9 +322,7 @@ private:
             is(sentence, "ALF") || is(sentence, "ALR") || is(sentence, "ARC") || is(sentence, "HBT") || is(sentence, "FIR")) {
             mark(ModelField::AlertStructuredNotification, source_id, now_us);
         }
-        if (is(sentence, "MOB") || is(sentence, "SMV")) {
-            mark(ModelField::MobStructuredNotification, source_id, now_us);
-        }
+        if (is(sentence, "MOB") || is(sentence, "SMV")) mark(ModelField::MobStructuredNotification, source_id, now_us);
         if (is(sentence, "FSI") || is(sentence, "MSK") || is(sentence, "MSS") || is(sentence, "RLM") ||
             is(sentence, "CEK") || is(sentence, "COP") || is(sentence, "DCR") || is(sentence, "DDC") || is(sentence, "DOR")) {
             mark(ModelField::LegacyCommObject, source_id, now_us);
@@ -386,12 +333,8 @@ private:
             mark(ModelField::NotificationText, source_id, now_us);
             mark(ModelField::NotificationEvent, source_id, now_us);
         }
-        if (is(sentence, "EVE")) {
-            mark(ModelField::NotificationEvent, source_id, now_us);
-        }
-        if (is(sentence, "ETL")) {
-            mark(ModelField::NotificationEventLog, source_id, now_us);
-        }
+        if (is(sentence, "EVE")) mark(ModelField::NotificationEvent, source_id, now_us);
+        if (is(sentence, "ETL")) mark(ModelField::NotificationEventLog, source_id, now_us);
     }
 
     ModelStore<Real>& store_;
