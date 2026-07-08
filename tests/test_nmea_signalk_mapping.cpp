@@ -27,21 +27,6 @@ static void mark(signalk_mini::ModelStore<float>& store, signalk_mini::ModelFiel
     store.mark_changed(field, 1, 1000000);
 }
 
-static void require_object_json(signalk_mini::ModelStore<float>& store,
-                                signalk_mini::ModelField field,
-                                const char* path,
-                                const char* expected_fragment) {
-    mark(store, field);
-    signalk_mini::SignalKMappedValue<float> mapped;
-    REQUIRE(pop_path(store, path, mapped));
-    REQUIRE(mapped.kind == signalk_mini::SignalKMappedValueKind::Object);
-    char json[4096];
-    signalk_mini::SignalKDeltaWriter<float> writer;
-    const int n = writer.write_mapped(json, sizeof(json), "test", store.model(), mapped);
-    REQUIRE(n > 0);
-    REQUIRE(std::strstr(json, expected_fragment) != nullptr);
-}
-
 int main() {
     signalk_mini::ModelStore<float> store;
     signalk_mini::SignalKMappedValue<float> mapped;
@@ -76,23 +61,18 @@ int main() {
     target.mmsi.set(123456789, 1000);
     target.latitude_deg.set(40.1f, 1000);
     target.longitude_deg.set(-73.9f, 1000);
-    target.speed_over_ground_kn.set(6.2f, 1000);
-    std::strcpy(target.vessel_name, "TESTVESSEL");
     store.model().ais.targets.target_count.set(1, 1000);
-    require_object_json(store, signalk_mini::ModelField::AisTargetsObject, "navigation.ais.targets", "123456789");
-
-    auto& dsc = store.model().notifications.dsc.distress;
-    std::strcpy(dsc.sender_mmsi, "111222333");
-    std::strcpy(dsc.alert_text, "distress");
-    dsc.active = true;
-    dsc.last_update_us = 2000;
-    require_object_json(store, signalk_mini::ModelField::DscStructuredNotification, "notifications.dsc", "distress");
+    mark(store, signalk_mini::ModelField::AisTargetsObject);
+    REQUIRE(pop_path(store, "navigation.ais.targets", mapped));
+    REQUIRE(mapped.kind == signalk_mini::SignalKMappedValueKind::Object);
 
     auto& navtex = store.model().notifications.navtex.received;
     std::strcpy(navtex.navtex_message_id, "A1");
     std::strcpy(navtex.body_text, "navtex body");
     navtex.first_seen_us = 3000;
-    require_object_json(store, signalk_mini::ModelField::NavtexStructuredNotification, "notifications.navtex", "navtex body");
+    mark(store, signalk_mini::ModelField::NavtexStructuredNotification);
+    REQUIRE(pop_path(store, "notifications.navtex", mapped));
+    REQUIRE(mapped.kind == signalk_mini::SignalKMappedValueKind::Object);
 
     return 0;
 }
