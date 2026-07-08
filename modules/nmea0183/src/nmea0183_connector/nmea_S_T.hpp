@@ -3,6 +3,8 @@
 // Included inside Nmea0183RxConnector.
 // Balanced NMEA sentence group: S-T.
 
+#include "nmea_F_R_tail.hpp"
+
 template<typename Model>
 bool apply_sfi(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 4) {
@@ -97,18 +99,19 @@ bool apply_tds(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
         return false;
     }
 
+    auto& trawl = model.fishing.trawl;
     float v = 0.0f;
     if (sentence.field(1)[0] == 'M' && parse_real(sentence.field(0), v)) {
-        model.trawl.door_centerline_offset_m.set(static_cast<Real>(v), now_us);
+        trawl.door_centerline_offset_m.set(static_cast<Real>(v), now_us);
     }
     if (sentence.field(3)[0] == 'M' && parse_real(sentence.field(2), v)) {
-        model.trawl.door_along_centerline_m.set(static_cast<Real>(v), now_us);
+        trawl.door_along_centerline_m.set(static_cast<Real>(v), now_us);
     }
     if (sentence.field(5)[0] == 'M' && parse_real(sentence.field(4), v)) {
-        model.trawl.depth_below_surface_m.set(static_cast<Real>(v), now_us);
+        trawl.depth_below_surface_m.set(static_cast<Real>(v), now_us);
     }
-    set_source(model.trawl.source, source);
-    model.trawl.last_update_us = now_us;
+    set_source(trawl.source, source);
+    trawl.last_update_us = now_us;
     return true;
 }
 
@@ -119,14 +122,15 @@ bool apply_tfi(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
         return false;
     }
 
+    auto& trawl = model.fishing.trawl;
     int32_t n = 0;
     for (uint8_t i = 0; i < 3; ++i) {
         if (parse_int32(sentence.field(i), n)) {
-            model.trawl.catch_sensor_status[i].set(n, now_us);
+            trawl.catch_sensor_status[i].set(n, now_us);
         }
     }
-    set_source(model.trawl.source, source);
-    model.trawl.last_update_us = now_us;
+    set_source(trawl.source, source);
+    trawl.last_update_us = now_us;
     return true;
 }
 
@@ -193,18 +197,19 @@ bool apply_tpc(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
         return false;
     }
 
+    auto& trawl = model.fishing.trawl;
     float v = 0.0f;
     if (sentence.field(1)[0] == 'M' && parse_real(sentence.field(0), v)) {
-        model.trawl.cartesian_centerline_offset_m.set(static_cast<Real>(v), now_us);
+        trawl.cartesian_centerline_offset_m.set(static_cast<Real>(v), now_us);
     }
     if (sentence.field(3)[0] == 'M' && parse_real(sentence.field(2), v)) {
-        model.trawl.cartesian_along_centerline_m.set(static_cast<Real>(v), now_us);
+        trawl.cartesian_along_centerline_m.set(static_cast<Real>(v), now_us);
     }
     if (sentence.field(5)[0] == 'M' && parse_real(sentence.field(4), v)) {
-        model.trawl.depth_below_surface_m.set(static_cast<Real>(v), now_us);
+        trawl.depth_below_surface_m.set(static_cast<Real>(v), now_us);
     }
-    set_source(model.trawl.source, source);
-    model.trawl.last_update_us = now_us;
+    set_source(trawl.source, source);
+    trawl.last_update_us = now_us;
     return true;
 }
 
@@ -215,18 +220,19 @@ bool apply_tpr(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
         return false;
     }
 
+    auto& trawl = model.fishing.trawl;
     float v = 0.0f;
     if (sentence.field(1)[0] == 'M' && parse_real(sentence.field(0), v)) {
-        model.trawl.relative_range_m.set(static_cast<Real>(v), now_us);
+        trawl.relative_range_m.set(static_cast<Real>(v), now_us);
     }
     if (parse_real(sentence.field(2), v)) {
-        model.trawl.relative_bearing_deg.set(static_cast<Real>(wrap_360_deg(v)), now_us);
+        trawl.relative_bearing_deg.set(static_cast<Real>(wrap_360_deg(v)), now_us);
     }
     if (sentence.field(5)[0] == 'M' && parse_real(sentence.field(4), v)) {
-        model.trawl.depth_below_surface_m.set(static_cast<Real>(v), now_us);
+        trawl.depth_below_surface_m.set(static_cast<Real>(v), now_us);
     }
-    set_source(model.trawl.source, source);
-    model.trawl.last_update_us = now_us;
+    set_source(trawl.source, source);
+    trawl.last_update_us = now_us;
     return true;
 }
 
@@ -237,18 +243,19 @@ bool apply_tpt(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
         return false;
     }
 
+    auto& trawl = model.fishing.trawl;
     float v = 0.0f;
     if (sentence.field(1)[0] == 'M' && parse_real(sentence.field(0), v)) {
-        model.trawl.true_range_m.set(static_cast<Real>(v), now_us);
+        trawl.true_range_m.set(static_cast<Real>(v), now_us);
     }
     if (parse_real(sentence.field(2), v)) {
-        model.trawl.true_bearing_deg.set(static_cast<Real>(wrap_360_deg(v)), now_us);
+        trawl.true_bearing_deg.set(static_cast<Real>(wrap_360_deg(v)), now_us);
     }
     if (sentence.field(5)[0] == 'M' && parse_real(sentence.field(4), v)) {
-        model.trawl.depth_below_surface_m.set(static_cast<Real>(v), now_us);
+        trawl.depth_below_surface_m.set(static_cast<Real>(v), now_us);
     }
-    set_source(model.trawl.source, source);
-    model.trawl.last_update_us = now_us;
+    set_source(trawl.source, source);
+    trawl.last_update_us = now_us;
     return true;
 }
 
