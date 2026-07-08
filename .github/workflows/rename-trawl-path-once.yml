@@ -1,0 +1,34 @@
+name: Rename trawl SignalK path once
+
+on:
+  push:
+    branches:
+      - codex/rename-trawl-dir-fishing
+
+permissions:
+  contents: write
+
+jobs:
+  rename:
+    if: ${{ !contains(github.event.head_commit.message, '[trawl-path-generated]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Rename SignalK trawl paths
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          for path in [Path('src/signalk_mini/signalk_mapper.hpp'), Path('tests/test_nmea_signalk_mapping.cpp')]:
+              text = path.read_text()
+              text = text.replace('environment.trawl', 'fishing.trawl')
+              path.write_text(text)
+          PY
+      - name: Commit generated rename
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/signalk_mini/signalk_mapper.hpp tests/test_nmea_signalk_mapping.cpp
+          git commit -m "rename trawl SignalK paths to fishing [trawl-path-generated]"
+          git push
