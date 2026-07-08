@@ -95,13 +95,15 @@ inline bool make_apparent_wind_angle_deg(SeaTalkFrame& frame, Real angle_deg) {
 template<typename Real>
 inline bool make_apparent_wind_speed_kn(SeaTalkFrame& frame, Real speed_kn) {
     if (speed_kn < static_cast<Real>(0)) speed_kn = static_cast<Real>(0);
+    if (speed_kn > static_cast<Real>(127)) speed_kn = static_cast<Real>(127);
+
     uint8_t whole = static_cast<uint8_t>(speed_kn);
     uint8_t tenth = seatalk_tx_round_u8((speed_kn - static_cast<Real>(whole)) * static_cast<Real>(10));
     if (tenth >= 10u) {
-        ++whole;
+        if (whole < 127u) ++whole;
         tenth = 0;
     }
-    if (whole > 127u) whole = 127u;
+
     const uint8_t bytes[] = {0x11, 0x01, whole, tenth};
     return seatalk_tx_set(frame, bytes, sizeof(bytes));
 }
