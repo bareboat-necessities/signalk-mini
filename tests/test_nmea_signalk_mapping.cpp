@@ -23,6 +23,19 @@ static bool pop_path(signalk_mini::ModelStore<float>& store, const char* path, s
     return ok;
 }
 
+static void drain_heading_paths(signalk_mini::ModelStore<float>& store, bool& saw_true, bool& saw_magnetic) {
+    signalk_mini::SignalKMapper<float> mapper;
+    signalk_mini::ModelChange change;
+    saw_true = false;
+    saw_magnetic = false;
+    while (store.changes().pop(change)) {
+        signalk_mini::SignalKMappedValue<float> mapped;
+        if (!mapper.map_change(store.model(), change, mapped) || !mapped.path) continue;
+        if (std::strcmp(mapped.path, "navigation.headingTrue") == 0) saw_true = true;
+        if (std::strcmp(mapped.path, "navigation.headingMagnetic") == 0) saw_magnetic = true;
+    }
+}
+
 static void mark(signalk_mini::ModelStore<float>& store, signalk_mini::ModelField field) {
     store.mark_changed(field, 1, 1000000);
 }
@@ -73,6 +86,41 @@ int main() {
     mark(store, signalk_mini::ModelField::NavtexStructuredNotification);
     REQUIRE(pop_path(store, "notifications.navtex", mapped));
     REQUIRE(mapped.kind == signalk_mini::SignalKMappedValueKind::Object);
+
+    signalk_mini::ModelStore<float> heading_store;
+    signalk_mini::Nmea0183Input<float> input(heading_store);
+    bool saw_true = false;
+    bool saw_magnetic = false;
+
+    REQUIRE(input.feed_line("$IIHDT,123.4,T", 1, 1000, false));
+    REQUIRE(heading_store.model().ins.imu.heading_deg.valid);
+    REQUIRE(heading_store.model().ins.imu.heading_true_deg.valid);
+    NEAR(heading_store.model().ins.imu.heading_deg.value, 123.4f, 0.0001f);
+    NEAR(heading_store.model().ins.imu.heading_true_deg.value, 123.4f, 0.0001f);
+    drain_heading_paths(heading_store, saw_true, saw_magnetic);
+    REQUIRE(saw_true);
+
+    REQUIRE(input.feed_line("$IIHDM,045.0,M", 1, 2000, false));
+    REQUIRE(heading_store.model().ins.imu.heading_deg.valid);
+    REQUIRE(heading_store.model().ins.imu.heading_true_deg.valid);
+    REQUIRE(heading_store.model().ins.imu.heading_magnetic_deg.valid);
+    NEAR(heading_store.model().ins.imu.heading_deg.value, 123.4f, 0.0001f);
+    NEAR(heading_store.model().ins.imu.heading_true_deg.value, 123.4f, 0.0001f);
+    NEAR(heading_store.model().ins.imu.heading_magnetic_deg.value, 45.0f, 0.0001f);
+    drain_heading_paths(heading_store, saw_true, saw_magnetic);
+    REQUIRE(!saw_true);
+    REQUIRE(saw_magnetic);
+
+    signalk_mini::ModelStore<float> hdm_only_store;
+    signalk_mini::Nmea0183Input<float> hdm_only_input(hdm_only_store);
+    REQUIRE(hdm_only_input.feed_line("$IIHDM,270.0,M", 1, 3000, false));
+    REQUIRE(!hdm_only_store.model().ins.imu.heading_deg.valid);
+    REQUIRE(!hdm_only_store.model().ins.imu.heading_true_deg.valid);
+    REQUIRE(hdm_only_store.model().ins.imu.heading_magnetic_deg.valid);
+    NEAR(hdm_only_store.model().ins.imu.heading_magnetic_deg.value, 270.0f, 0.0001f);
+    drain_heading_paths(hdm_only_store, saw_true, saw_magnetic);
+    REQUIRE(!saw_true);
+    REQUIRE(saw_magnetic);
 
     return 0;
 }
