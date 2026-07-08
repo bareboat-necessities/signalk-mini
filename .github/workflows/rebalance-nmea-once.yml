@@ -78,3 +78,4 @@ jobs:
           git add modules/nmea0183/src/nmea0183_connector
           git commit -m "rebalance NMEA alphabetical headers [rebalance-generated]"
           git push
+# trigger
