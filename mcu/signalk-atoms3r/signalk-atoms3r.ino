@@ -54,23 +54,16 @@ namespace {
 constexpr size_t nmea_buffer_size = 160;
 
 signalk_mini::SignalKMiniConfig make_config() {
-  signalk_mini::SignalKMiniConfig cfg;
-  cfg.identity.server_name = "signalk-mini-atoms3r";
-  cfg.identity.server_version = "0.1.0";
-  cfg.signalk.host = "0.0.0.0";
-  cfg.signalk.port = SIGNALK_SERVER_PORT;
-  cfg.signalk.allow_rx = true;
-  cfg.signalk.allow_tx = true;
-  cfg.publisher.interval_us = 10000;
-  cfg.publisher.max_changes_per_tick = 32;
-  cfg.publisher.json_buffer_size = 512;
-  cfg.publisher.source_label = "atoms3r";
-
-  // On AtomS3R the sketch owns the board UART and feeds NMEA into the typed model
-  // directly. The core server still owns the Signal K TCP protocol server.
-  cfg.connectors = nullptr;
-  cfg.connector_count = 0;
-  return cfg;
+  // MCU strategy: the sketch owns board-specific hardware I/O and feeds the
+  // typed protocol facade directly. The core app owns Signal K TCP serving and
+  // delta publishing only.
+  return signalk_mini::make_sketch_owned_io_config(
+    "signalk-mini-atoms3r",
+    "atoms3r",
+    SIGNALK_SERVER_PORT,
+    10000,
+    32,
+    512);
 }
 
 signalk_mini::SignalKMiniConfig config = make_config();

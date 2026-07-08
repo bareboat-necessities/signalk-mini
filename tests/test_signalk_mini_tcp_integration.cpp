@@ -149,7 +149,7 @@ bool line_has_valid_wind_speed_delta(const std::string& line) {
         JsonObject source = update["source"].as<JsonObject>();
         REQUIRE(!source.isNull());
         const char* label = source["label"] | "";
-        REQUIRE(std::strcmp(label, "integration-test") == 0);
+        REQUIRE(std::strcmp(label, "integration-nmea0183-tcp-client") == 0);
 
         JsonArray values = update["values"].as<JsonArray>();
         REQUIRE(!values.isNull());
