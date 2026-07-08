@@ -26,23 +26,10 @@ public:
         ModelChange change;
         size_t emitted = 0;
         while (emitted < config_.publisher.max_changes_per_tick && store_.changes().pop(change)) {
+            SignalKMappedValue<Real> mapped;
+            if (!mapper.map_change(store_.model(), change, mapped) || !mapped.path) continue;
             const char* source_label = label_for_source(change.source_id);
-            int len = 0;
-
-            if (change.field == ModelField::CommServerClockS) {
-                const auto& clock = store_.model().comm.server.clock_s;
-                if (!clock.valid) continue;
-                len = writer.write_number(json_,
-                                          json_capacity,
-                                          source_label,
-                                          "communication.server.clock",
-                                          static_cast<Real>(clock.value));
-            } else {
-                SignalKMappedValue<Real> mapped;
-                if (!mapper.map_change(store_.model(), change, mapped) || !mapped.path) continue;
-                len = writer.write_mapped(json_, json_capacity, source_label, store_.model(), mapped);
-            }
-
+            const int len = writer.write_mapped(json_, json_capacity, source_label, store_.model(), mapped);
             if (len <= 0 || static_cast<size_t>(len) >= json_capacity) {
                 ++dropped_publish_count_;
                 continue;
