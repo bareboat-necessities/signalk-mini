@@ -136,13 +136,35 @@ std::string nmea_sentence(const char* body) {
     return std::string(out);
 }
 
+bool line_has_valid_hello(const std::string& line) {
+    JsonDocument doc;
+    const DeserializationError err = deserializeJson(doc, line);
+    REQUIRE(!err);
+
+    REQUIRE(std::strcmp(doc["name"] | "", "integration-signalk-server") == 0);
+    REQUIRE(std::strcmp(doc["version"] | "", "0.1-integration") == 0);
+    REQUIRE(std::strcmp(doc["self"] | "", "vessels.self") == 0);
+
+    JsonArray roles = doc["roles"].as<JsonArray>();
+    REQUIRE(!roles.isNull());
+    bool has_master = false;
+    bool has_main = false;
+    for (const char* role : roles) {
+        if (role && std::strcmp(role, "master") == 0) has_master = true;
+        if (role && std::strcmp(role, "main") == 0) has_main = true;
+    }
+    REQUIRE(has_master);
+    REQUIRE(has_main);
+    return true;
+}
+
 bool line_has_valid_wind_speed_delta(const std::string& line) {
     JsonDocument doc;
     const DeserializationError err = deserializeJson(doc, line);
     REQUIRE(!err);
 
     JsonArray updates = doc["updates"].as<JsonArray>();
-    REQUIRE(!updates.isNull());
+    if (updates.isNull()) return false;
     REQUIRE(updates.size() > 0);
 
     for (JsonObject update : updates) {
@@ -168,7 +190,8 @@ bool line_has_valid_wind_speed_delta(const std::string& line) {
     return false;
 }
 
-bool wait_for_signal_k_wind_delta(int fd, int timeout_ms) {
+template<typename Predicate>
+bool wait_for_signal_k_line(int fd, int timeout_ms, Predicate predicate) {
     std::string buffer;
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
     while (std::chrono::steady_clock::now() < deadline) {
@@ -195,10 +218,18 @@ bool wait_for_signal_k_wind_delta(int fd, int timeout_ms) {
             buffer.erase(0, newline + 1);
             if (!line.empty() && line.back() == '\r') line.pop_back();
             if (line.empty()) continue;
-            if (line_has_valid_wind_speed_delta(line)) return true;
+            if (predicate(line)) return true;
         }
     }
     return false;
+}
+
+bool wait_for_signal_k_hello(int fd, int timeout_ms) {
+    return wait_for_signal_k_line(fd, timeout_ms, line_has_valid_hello);
+}
+
+bool wait_for_signal_k_wind_delta(int fd, int timeout_ms) {
+    return wait_for_signal_k_line(fd, timeout_ms, line_has_valid_wind_speed_delta);
 }
 
 } // namespace
@@ -221,6 +252,9 @@ int main() {
     nmea_connector.transport.tcp_client.port = nmea_source.port();
 
     signalk_mini::SignalKMiniConfig config;
+    config.identity.server_name = "integration-signalk-server";
+    config.identity.server_version = "0.1-integration";
+    config.identity.self = "vessels.self";
     config.signalk.host = "127.0.0.1";
     config.signalk.port = signalk_port;
     config.signalk.allow_rx = true;
@@ -246,6 +280,7 @@ int main() {
 
     Fd signalk_client = connect_loopback(signalk_port, 3000);
     REQUIRE(signalk_client.valid());
+    REQUIRE(wait_for_signal_k_hello(signalk_client.get(), 3000));
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
