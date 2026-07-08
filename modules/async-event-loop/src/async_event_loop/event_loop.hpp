@@ -256,6 +256,9 @@ public:
     /** Access the native clock for advanced integrations/tests. */
     NativeClock& clock() { return clock_; }
 
+    /** Access the native clock from const contexts. */
+    const NativeClock& clock() const { return clock_; }
+
     /** Access the native scheduler for fd readiness or lower-level integrations. */
     NativeSchedulerFor<MaxCallbacks>& scheduler() { return scheduler_; }
 
