@@ -22,8 +22,11 @@ public:
         roles.add("master");
         roles.add("main");
 
+        const size_t json_len = measureJson(doc);
+        if (json_len == 0 || json_len + 3 > dst_size) return 0;
+
         const size_t len = serializeJson(doc, dst, dst_size);
-        if (len + 2 >= dst_size) return 0;
+        if (len != json_len) return 0;
         dst[len] = '\r';
         dst[len + 1] = '\n';
         dst[len + 2] = '\0';
