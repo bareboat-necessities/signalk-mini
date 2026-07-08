@@ -154,6 +154,7 @@ enum class ModelField : uint16_t {
 
     NotificationText,
     NotificationEvent,
+    NotificationEventLog,
 };
 
 } // namespace signalk_mini
