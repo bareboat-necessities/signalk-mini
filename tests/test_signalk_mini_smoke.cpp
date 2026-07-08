@@ -140,8 +140,8 @@ static void test_third_smart0183_group(signalk_mini::SignalKMiniApp<float>& app,
 
 static void test_fourth_smart0183_group(signalk_mini::SignalKMiniApp<float>& app, uint64_t& now_us) {
     feed(app, "GPHFB,12.3,M,45.6,M", now_us);
-    NEAR(app.store().model().trawl.headrope_to_footrope_m.value, 12.3f, 0.001f);
-    NEAR(app.store().model().trawl.headrope_to_bottom_m.value, 45.6f, 0.001f);
+    NEAR(app.store().model().fishing.trawl.headrope_to_footrope_m.value, 12.3f, 0.001f);
+    NEAR(app.store().model().fishing.trawl.headrope_to_bottom_m.value, 45.6f, 0.001f);
 
     feed(app, "GPHSC,123.4,T,121.1,M", now_us);
     NEAR(app.store().model().route.heading_steering_command.heading_true_deg.value, 123.4f, 0.001f);
@@ -228,19 +228,19 @@ static void test_sixth_smart0183_group(signalk_mini::SignalKMiniApp<float>& app,
 
 static void test_seventh_smart0183_group(signalk_mini::SignalKMiniApp<float>& app, uint64_t& now_us) {
     feed(app, "IITDS,1.2,M,33.4,M,56.7,M", now_us);
-    NEAR(app.store().model().trawl.door_centerline_offset_m.value, 1.2f, 0.001f);
-    NEAR(app.store().model().trawl.door_along_centerline_m.value, 33.4f, 0.001f);
-    NEAR(app.store().model().trawl.depth_below_surface_m.value, 56.7f, 0.001f);
+    NEAR(app.store().model().fishing.trawl.door_centerline_offset_m.value, 1.2f, 0.001f);
+    NEAR(app.store().model().fishing.trawl.door_along_centerline_m.value, 33.4f, 0.001f);
+    NEAR(app.store().model().fishing.trawl.depth_below_surface_m.value, 56.7f, 0.001f);
 
     feed(app, "IITPR,120.5,M,034.0,,60.0,M", now_us);
-    NEAR(app.store().model().trawl.relative_range_m.value, 120.5f, 0.001f);
-    NEAR(app.store().model().trawl.relative_bearing_deg.value, 34.0f, 0.001f);
-    NEAR(app.store().model().trawl.depth_below_surface_m.value, 60.0f, 0.001f);
+    NEAR(app.store().model().fishing.trawl.relative_range_m.value, 120.5f, 0.001f);
+    NEAR(app.store().model().fishing.trawl.relative_bearing_deg.value, 34.0f, 0.001f);
+    NEAR(app.store().model().fishing.trawl.depth_below_surface_m.value, 60.0f, 0.001f);
 
     feed(app, "IITPT,130.5,M,210.0,,65.0,M", now_us);
-    NEAR(app.store().model().trawl.true_range_m.value, 130.5f, 0.001f);
-    NEAR(app.store().model().trawl.true_bearing_deg.value, 210.0f, 0.001f);
-    NEAR(app.store().model().trawl.depth_below_surface_m.value, 65.0f, 0.001f);
+    NEAR(app.store().model().fishing.trawl.true_range_m.value, 130.5f, 0.001f);
+    NEAR(app.store().model().fishing.trawl.true_bearing_deg.value, 210.0f, 0.001f);
+    NEAR(app.store().model().fishing.trawl.depth_below_surface_m.value, 65.0f, 0.001f);
 
     feed(app, "GPTRF,123519,010726,4917.24,N,12309.57,W,45.0,3,12,1.5,7,A", now_us);
     REQUIRE(std::strcmp(app.store().model().nav.transit_fix.date_ddmmyy, "010726") == 0);
