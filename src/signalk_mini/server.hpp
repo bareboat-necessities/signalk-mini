@@ -3,6 +3,7 @@
 #include <memory>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 #include <vector>
@@ -696,6 +697,11 @@ private:
         return loop_.clock().micros() / 1000000ULL;
     }
 
+    const char* server_source_label() const {
+        if (config_.publisher.source_label && config_.publisher.source_label[0]) return config_.publisher.source_label;
+        return config_.identity.server_name ? config_.identity.server_name : "signalk-mini";
+    }
+
     void update_server_clock_model(uint64_t now_us) {
         auto& server = store_.model().comm.server;
         server.source.value = ship_data_model::SensorSource::signalk;
@@ -706,8 +712,17 @@ private:
     void publish_server_clock() {
         const uint64_t now_us = loop_.clock().micros();
         update_server_clock_model(now_us);
-        store_.mark_changed(ModelField::CommServerClockS, 0, now_us);
-        publish();
+        char json[192];
+        const unsigned long clock_s = static_cast<unsigned long>(store_.model().comm.server.clock_s.value);
+        const int len = snprintf(json,
+                                 sizeof(json),
+                                 "{\"updates\":[{\"source\":{\"label\":\"%s\"},\"values\":[{\"path\":\"communication.server.clock\",\"value\":%lu}]}]}\r\n",
+                                 server_source_label(),
+                                 clock_s);
+        if (len <= 0 || static_cast<size_t>(len) >= sizeof(json)) return;
+        signalk_connections_.connections.for_each_tx([&](async_event_loop::ITcpConnection& connection) {
+            connection.write(reinterpret_cast<const uint8_t*>(json), static_cast<size_t>(len));
+        });
     }
 
     bool write_all(async_event_loop::IByteStream& stream, const uint8_t* data, size_t length) {
