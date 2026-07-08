@@ -152,6 +152,8 @@ enum class ModelField : uint16_t {
     MobStructuredNotification,
     LegacyCommObject,
 
+    CommServerClockS,
+
     NotificationText,
     NotificationEvent,
     NotificationEventLog,
