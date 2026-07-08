@@ -26,6 +26,7 @@
 #include "nmea0183_input.hpp"
 #include "publisher.hpp"
 #include "seatalk_input.hpp"
+#include "signalk_hello_writer.hpp"
 
 namespace signalk_mini {
 
@@ -361,6 +362,18 @@ private:
         return server.listen(options, handler);
     }
 
+    bool send_signal_k_hello(async_event_loop::ITcpConnection& connection) {
+        char hello[256];
+        SignalKHelloWriter writer;
+        const int len = writer.write(hello,
+                                     sizeof(hello),
+                                     config_.identity.server_name,
+                                     config_.identity.server_version,
+                                     config_.identity.self);
+        if (len <= 0) return false;
+        return write_all(connection, reinterpret_cast<const uint8_t*>(hello), static_cast<size_t>(len));
+    }
+
     struct SignalKConnectionHandler : async_event_loop::ITcpLineServerHandler {
         explicit SignalKConnectionHandler(MiniSignalKServer& owner_ref) : owner(owner_ref) {}
         MiniSignalKServer& owner;
@@ -372,7 +385,14 @@ private:
                 return;
             }
             ConnectionFlags flags{owner.config_.signalk.allow_rx, owner.config_.signalk.allow_tx};
-            if (!connections.add(connection, flags)) connection.close();
+            if (!connections.add(connection, flags)) {
+                connection.close();
+                return;
+            }
+            if (!owner.send_signal_k_hello(connection)) {
+                connections.remove(connection);
+                connection.close();
+            }
         }
         void on_line(async_event_loop::ITcpConnection& connection, async_event_loop::LineView) override {
             if (!connections.allow_rx(connection)) return;
