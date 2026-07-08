@@ -115,6 +115,18 @@ Implemented NMEA0183 transports in this stage:
 - `tcp_server`
 - `serial`
 
+## Arduino / MCU strategy
+
+On MCU targets, board-specific sketch code owns hardware I/O for now. The core app owns the Signal K TCP server, the typed model, and delta publishing. The sketch polls UART/I2C/pins or other board APIs and feeds the typed protocol facade directly, for example:
+
+```cpp
+app.nmea0183().feed_line(line, signalk_mini::SourceId(1), micros(), true);
+```
+
+Use `make_sketch_owned_io_config(...)` for this mode. It disables configured core connectors by setting `connectors = nullptr` and `connector_count = 0`, while keeping the Signal K TCP server and publisher enabled.
+
+The AtomS3R sketch uses this mode. Core UDP/TCP/serial connector runtime support is still Linux-first; Arduino WiFi TCP serving is enabled for the main Signal K server, but Arduino UDP listener connectors are not enabled by the core connector abstraction yet.
+
 ## Build
 
 ```bash
