@@ -3,6 +3,8 @@
 #include <memory>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 #include <time.h>
 #include <vector>
 
@@ -13,7 +15,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
-#include <string.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -27,7 +28,6 @@
 #include "nmea0183_input.hpp"
 #include "publisher.hpp"
 #include "seatalk_input.hpp"
-#include "signalk_delta_writer.hpp"
 #include "signalk_hello_writer.hpp"
 
 namespace signalk_mini {
@@ -712,16 +712,14 @@ private:
     void publish_server_clock() {
         const uint64_t now_us = loop_.clock().micros();
         update_server_clock_model(now_us);
-        SignalKDeltaWriter<Real> writer;
         char json[192];
-        const int len = writer.write_number(json,
-                                            sizeof(json),
-                                            server_source_label(),
-                                            "communication.server.clock",
-                                            static_cast<Real>(store_.model().comm.server.clock_s.value));
-        if (len <= 0) {
-            return;
-        }
+        const unsigned long clock_s = static_cast<unsigned long>(store_.model().comm.server.clock_s.value);
+        const int len = snprintf(json,
+                                 sizeof(json),
+                                 "{\"updates\":[{\"source\":{\"label\":\"%s\"},\"values\":[{\"path\":\"communication.server.clock\",\"value\":%lu}]}]}\r\n",
+                                 server_source_label(),
+                                 clock_s);
+        if (len <= 0 || static_cast<size_t>(len) >= sizeof(json)) return;
         signalk_connections_.connections.for_each_tx([&](async_event_loop::ITcpConnection& connection) {
             connection.write(reinterpret_cast<const uint8_t*>(json), static_cast<size_t>(len));
         });
