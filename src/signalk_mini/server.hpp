@@ -3,6 +3,7 @@
 #include <memory>
 #include <stddef.h>
 #include <stdint.h>
+#include <time.h>
 #include <vector>
 
 #if defined(ARDUINO)
@@ -26,6 +27,7 @@
 #include "nmea0183_input.hpp"
 #include "publisher.hpp"
 #include "seatalk_input.hpp"
+#include "signalk_delta_writer.hpp"
 #include "signalk_hello_writer.hpp"
 
 namespace signalk_mini {
@@ -209,6 +211,8 @@ public:
         if (!start_configured_connectors()) return false;
         timer_ = loop_.on_repeat_us(config_.publisher.interval_us, [this]() { publish(); });
         if (!timer_) return set_startup_error(StartupError::InvalidPublisherInterval, config_.connector_count);
+        clock_timer_ = loop_.on_repeat_us(1000000ULL, [this]() { publish_server_clock(); });
+        if (!clock_timer_) return set_startup_error(StartupError::InvalidPublisherInterval, config_.connector_count);
         return true;
     }
 
@@ -276,6 +280,27 @@ private:
         options.backpressure = async_event_loop::TcpBackpressureOptions::server_default();
 #endif
         return options;
+    }
+
+    static bool is_space(char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; }
+
+    static bool line_starts_with(const char* text, const char* prefix) {
+        return text && prefix && strncmp(text, prefix, strlen(prefix)) == 0;
+    }
+
+    static bool is_subscribe_all_line(async_event_loop::LineView line) {
+        char text[256];
+        async_event_loop::line_to_cstr(line, text);
+        char* begin = text;
+        while (*begin && is_space(*begin)) ++begin;
+        char* end = begin + strlen(begin);
+        while (end > begin && is_space(end[-1])) --end;
+        *end = '\0';
+
+        if (strcmp(begin, "*") == 0 || strcmp(begin, "subscribe") == 0 || strcmp(begin, "subscribe all") == 0) return true;
+        if (line_starts_with(begin, "SUBSCRIBE") || line_starts_with(begin, "Subscribe")) return true;
+        if (begin[0] == '{' && strstr(begin, "subscribe") && (strstr(begin, "all") || strstr(begin, "*") || strstr(begin, "path"))) return true;
+        return false;
     }
 
     static ship_data_model::SensorSource sensor_source_for_transport(ConnectorTransport transport) {
@@ -384,7 +409,7 @@ private:
                 connection.close();
                 return;
             }
-            ConnectionFlags flags{owner.config_.signalk.allow_rx, owner.config_.signalk.allow_tx};
+            ConnectionFlags flags{owner.config_.signalk.allow_rx, false};
             if (!connections.add(connection, flags)) {
                 connection.close();
                 return;
@@ -394,8 +419,12 @@ private:
                 connection.close();
             }
         }
-        void on_line(async_event_loop::ITcpConnection& connection, async_event_loop::LineView) override {
+        void on_line(async_event_loop::ITcpConnection& connection, async_event_loop::LineView line) override {
             if (!connections.allow_rx(connection)) return;
+            if (owner.is_subscribe_all_line(line)) {
+                connections.set_allow_tx(connection, owner.config_.signalk.allow_tx);
+                owner.publish_server_clock();
+            }
         }
         void on_backpressure(async_event_loop::ITcpConnection& connection, const async_event_loop::TcpBackpressureInfo&) override {
             connections.remove(connection);
@@ -660,6 +689,44 @@ private:
         if (nmea_.feed_line(text, source_id, loop_.clock().micros(), slot.nmea0183_validate_checksum, connector_sensor_source(index))) publish();
     }
 
+    uint64_t server_clock_s() const {
+#if !defined(ARDUINO)
+        const time_t now = ::time(nullptr);
+        if (now > 0) return static_cast<uint64_t>(now);
+#endif
+        return loop_.clock().micros() / 1000000ULL;
+    }
+
+    const char* server_source_label() const {
+        if (config_.publisher.source_label && config_.publisher.source_label[0]) return config_.publisher.source_label;
+        return config_.identity.server_name ? config_.identity.server_name : "signalk-mini";
+    }
+
+    void update_server_clock_model(uint64_t now_us) {
+        auto& server = store_.model().comm.server;
+        server.source.value = ship_data_model::SensorSource::signalk;
+        server.clock_s.set(server_clock_s(), now_us);
+        server.last_update_us = now_us;
+    }
+
+    void publish_server_clock() {
+        const uint64_t now_us = loop_.clock().micros();
+        update_server_clock_model(now_us);
+        SignalKDeltaWriter<Real> writer;
+        char json[192];
+        const int len = writer.write_number(json,
+                                            sizeof(json),
+                                            server_source_label(),
+                                            "communication.server.clock",
+                                            static_cast<Real>(store_.model().comm.server.clock_s.value));
+        if (len <= 0) {
+            return;
+        }
+        signalk_connections_.connections.for_each_tx([&](async_event_loop::ITcpConnection& connection) {
+            connection.write(reinterpret_cast<const uint8_t*>(json), static_cast<size_t>(len));
+        });
+    }
+
     bool write_all(async_event_loop::IByteStream& stream, const uint8_t* data, size_t length) {
         if (!data || length == 0 || !stream.valid() || !stream.writable()) return false;
         const int n = stream.write(data, length);
@@ -708,6 +775,7 @@ private:
     async_event_loop::TcpLineServerHandler<256, MaxSignalKConnections> signalk_line_handler_;
     std::vector<std::unique_ptr<ConnectorRuntimeSlot>> connector_slots_;
     async_event_loop::EventHandle timer_{};
+    async_event_loop::EventHandle clock_timer_{};
     StartupError last_startup_error_ = StartupError::None;
     size_t last_failed_connector_index_ = 0;
     uint32_t connector_start_failure_count_ = 0;

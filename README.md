@@ -46,10 +46,17 @@ Port `10110` is the de facto NMEA0183-over-IP port used for NMEA0183 navigationa
 
 ## Linux config
 
-Default path:
+Default config discovery when no explicit config is provided:
 
 ```text
+~/.signalk-mini/signalk-mini.conf
 /etc/signalk-mini/signalk-mini.conf
+```
+
+If neither file exists, the Linux binary attempts to create a default config at:
+
+```text
+~/.signalk-mini/signalk-mini.conf
 ```
 
 Example:
@@ -116,6 +123,90 @@ Implemented NMEA0183 transports in this stage:
 - `tcp_client`
 - `tcp_server`
 - `serial`
+
+## Minimal Signal K subscribe-all
+
+The main Signal K TCP server sends a hello line immediately after a client connects. Deltas are not sent to that client until it sends a minimal subscribe-all line.
+
+This stage intentionally does not implement the full Signal K subscription protocol yet. To receive all deltas, send one line after reading hello:
+
+```text
+{"subscribe":"all"}\r\n
+```
+
+Also accepted:
+
+```text
+subscribe all\r\n
+subscribe\r\n
+*\r\n
+```
+
+After subscribing, the server publishes all model-change deltas for that connection. It also publishes a server clock delta once per second so a client can verify that the connection is alive even when no NMEA0183 or SeaTalk data is arriving.
+
+The clock is stored internally in the typed model as:
+
+```text
+model.comm.server.clock_s
+```
+
+It is published on the Signal K TCP stream as:
+
+```text
+communication.server.clock
+```
+
+Example session with `nc`:
+
+```bash
+nc 127.0.0.1 20223
+```
+
+Expected first line from the server:
+
+```json
+{"name":"signalk-mini","version":"0.1.0","self":"vessels.self","roles":["master","main"]}
+```
+
+Then type or send:
+
+```text
+{"subscribe":"all"}
+```
+
+Expected clock delta shape:
+
+```json
+{"updates":[{"source":{"label":"signalk-mini"},"values":[{"path":"communication.server.clock","value":1760000000}]}]}
+```
+
+One-shot shell example that subscribes and prints deltas:
+
+```bash
+printf '{"subscribe":"all"}\r\n' | nc 127.0.0.1 20223
+```
+
+Python example that reads hello, subscribes, and prints clock deltas:
+
+```python
+import json
+import socket
+
+with socket.create_connection(("127.0.0.1", 20223)) as s:
+    f = s.makefile("rw", newline="\n")
+    hello = json.loads(f.readline())
+    print("hello:", hello)
+
+    f.write('{"subscribe":"all"}\r\n')
+    f.flush()
+
+    while True:
+        msg = json.loads(f.readline())
+        for update in msg.get("updates", []):
+            for value in update.get("values", []):
+                if value.get("path") == "communication.server.clock":
+                    print("server clock:", value.get("value"))
+```
 
 ## Arduino / MCU strategy
 

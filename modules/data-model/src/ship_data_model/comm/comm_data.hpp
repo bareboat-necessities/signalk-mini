@@ -48,6 +48,13 @@ struct ReturnLinkMessageData {
     uint64_t last_update_us = 0;
 };
 
+template<typename Real = float>
+struct ServerCommData {
+    Setting<SensorSource> source;
+    Stamped<uint64_t> clock_s;
+    uint64_t last_update_us = 0;
+};
+
 enum class DscPriority : uint8_t {
     unknown,
     routine,
@@ -204,6 +211,7 @@ struct CommData {
     BeaconReceiverControlData<Real> beacon_control;
     BeaconReceiverStatusData<Real> beacon_status;
     ReturnLinkMessageData<Real> return_link_message;
+    ServerCommData<Real> server;
     DscCommData<Real> dsc;
     CommEquipmentData<Real> equipment;
 };
