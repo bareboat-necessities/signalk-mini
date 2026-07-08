@@ -29,22 +29,25 @@ enum class SeaTalkPilotKey : uint8_t {
     standby_minus_1 = 0x30,
 };
 
-inline float seatalk_tx_wrap_360(float deg) {
-    while (deg < 0.0f) deg += 360.0f;
-    while (deg >= 360.0f) deg -= 360.0f;
+template<typename Real>
+inline Real seatalk_tx_wrap_360(Real deg) {
+    while (deg < static_cast<Real>(0)) deg += static_cast<Real>(360);
+    while (deg >= static_cast<Real>(360)) deg -= static_cast<Real>(360);
     return deg;
 }
 
-inline uint16_t seatalk_tx_round_u16(float value) {
-    if (value <= 0.0f) return 0;
-    if (value >= 65535.0f) return 65535u;
-    return static_cast<uint16_t>(value + 0.5f);
+template<typename Real>
+inline uint16_t seatalk_tx_round_u16(Real value) {
+    if (value <= static_cast<Real>(0)) return 0;
+    if (value >= static_cast<Real>(65535)) return 65535u;
+    return static_cast<uint16_t>(value + static_cast<Real>(0.5));
 }
 
-inline uint8_t seatalk_tx_round_u8(float value) {
-    if (value <= 0.0f) return 0;
-    if (value >= 255.0f) return 255u;
-    return static_cast<uint8_t>(value + 0.5f);
+template<typename Real>
+inline uint8_t seatalk_tx_round_u8(Real value) {
+    if (value <= static_cast<Real>(0)) return 0;
+    if (value >= static_cast<Real>(255)) return 255u;
+    return static_cast<uint8_t>(value + static_cast<Real>(0.5));
 }
 
 inline bool seatalk_tx_set(SeaTalkFrame& frame, const uint8_t* bytes, uint8_t length) {
@@ -64,8 +67,9 @@ inline bool seatalk_tx_copy_bytes(const SeaTalkFrame& frame, uint8_t* out, size_
     return true;
 }
 
-inline bool make_depth_m(SeaTalkFrame& frame, float depth_m, bool alarm = false) {
-    const uint16_t raw_ft_x10 = seatalk_tx_round_u16(depth_m / 0.3048f * 10.0f);
+template<typename Real>
+inline bool make_depth_m(SeaTalkFrame& frame, Real depth_m, bool alarm = false) {
+    const uint16_t raw_ft_x10 = seatalk_tx_round_u16(depth_m / static_cast<Real>(0.3048) * static_cast<Real>(10));
     const uint8_t bytes[] = {
         0x00,
         0x02,
@@ -76,8 +80,9 @@ inline bool make_depth_m(SeaTalkFrame& frame, float depth_m, bool alarm = false)
     return seatalk_tx_set(frame, bytes, sizeof(bytes));
 }
 
-inline bool make_apparent_wind_angle_deg(SeaTalkFrame& frame, float angle_deg) {
-    const uint16_t raw_half_deg = seatalk_tx_round_u16(seatalk_tx_wrap_360(angle_deg) * 2.0f);
+template<typename Real>
+inline bool make_apparent_wind_angle_deg(SeaTalkFrame& frame, Real angle_deg) {
+    const uint16_t raw_half_deg = seatalk_tx_round_u16(seatalk_tx_wrap_360(angle_deg) * static_cast<Real>(2));
     const uint8_t bytes[] = {
         0x10,
         0x01,
@@ -87,10 +92,11 @@ inline bool make_apparent_wind_angle_deg(SeaTalkFrame& frame, float angle_deg) {
     return seatalk_tx_set(frame, bytes, sizeof(bytes));
 }
 
-inline bool make_apparent_wind_speed_kn(SeaTalkFrame& frame, float speed_kn) {
-    if (speed_kn < 0.0f) speed_kn = 0.0f;
+template<typename Real>
+inline bool make_apparent_wind_speed_kn(SeaTalkFrame& frame, Real speed_kn) {
+    if (speed_kn < static_cast<Real>(0)) speed_kn = static_cast<Real>(0);
     uint8_t whole = static_cast<uint8_t>(speed_kn);
-    uint8_t tenth = seatalk_tx_round_u8((speed_kn - static_cast<float>(whole)) * 10.0f);
+    uint8_t tenth = seatalk_tx_round_u8((speed_kn - static_cast<Real>(whole)) * static_cast<Real>(10));
     if (tenth >= 10u) {
         ++whole;
         tenth = 0;
@@ -100,8 +106,9 @@ inline bool make_apparent_wind_speed_kn(SeaTalkFrame& frame, float speed_kn) {
     return seatalk_tx_set(frame, bytes, sizeof(bytes));
 }
 
-inline bool make_speed_through_water_kn(SeaTalkFrame& frame, float speed_kn) {
-    const uint16_t raw_kn_x10 = seatalk_tx_round_u16(speed_kn * 10.0f);
+template<typename Real>
+inline bool make_speed_through_water_kn(SeaTalkFrame& frame, Real speed_kn) {
+    const uint16_t raw_kn_x10 = seatalk_tx_round_u16(speed_kn * static_cast<Real>(10));
     const uint8_t bytes[] = {
         0x20,
         0x01,
@@ -111,8 +118,9 @@ inline bool make_speed_through_water_kn(SeaTalkFrame& frame, float speed_kn) {
     return seatalk_tx_set(frame, bytes, sizeof(bytes));
 }
 
-inline bool make_speed_over_ground_kn(SeaTalkFrame& frame, float speed_kn) {
-    const uint16_t raw_kn_x10 = seatalk_tx_round_u16(speed_kn * 10.0f);
+template<typename Real>
+inline bool make_speed_over_ground_kn(SeaTalkFrame& frame, Real speed_kn) {
+    const uint16_t raw_kn_x10 = seatalk_tx_round_u16(speed_kn * static_cast<Real>(10));
     const uint8_t bytes[] = {
         0x52,
         0x01,
