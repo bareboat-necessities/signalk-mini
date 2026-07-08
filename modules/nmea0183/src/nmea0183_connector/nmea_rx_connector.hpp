@@ -202,9 +202,9 @@ private:
 #include "nmea_ais.hpp"
 #include "nmea_ais_own_vessel.hpp"
 #include "nmea_A_E.hpp"
-#include "nmea_F_G.hpp"
-#include "nmea_H_N.hpp"
-#include "nmea_O_Z.hpp"
+#include "nmea_F_R.hpp"
+#include "nmea_S_T.hpp"
+#include "nmea_V_Z.hpp"
 
     static const char* abk_ack_label(int32_t value) {
         switch (value) {
