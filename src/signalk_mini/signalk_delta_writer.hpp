@@ -76,7 +76,8 @@ private:
     void set_mps(JsonObject object, const char* key, const StampedValue& stamped) const { if (stamped.valid) object[key] = knots_to_mps<Real>(static_cast<Real>(stamped.value)); }
     void set_text(JsonObject object, const char* key, const char* text) const { if (text && text[0]) object[key] = text; }
 
-    void set_position(JsonObject object, auto const& lat, auto const& lon) const {
+    template<typename LatStamped, typename LonStamped>
+    void set_position(JsonObject object, const LatStamped& lat, const LonStamped& lon) const {
         if (!lat.valid && !lon.valid) return;
         JsonObject pos = object["position"].to<JsonObject>();
         set(pos, "latitude", lat);
