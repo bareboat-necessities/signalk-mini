@@ -25,8 +25,8 @@ public:
         while (emitted < config_.publisher.max_changes_per_tick && store_.changes().pop(change)) {
             SignalKMappedValue<Real> mapped;
             if (!mapper.map_change(store_.model(), change, mapped) || !mapped.path) continue;
-            char json[512];
-            const int len = writer.write_mapped(json, sizeof(json), config_.publisher.source_label, mapped);
+            char json[1024];
+            const int len = writer.write_mapped(json, sizeof(json), config_.publisher.source_label, store_.model(), mapped);
             if (len <= 0 || static_cast<size_t>(len) >= sizeof(json)) continue;
             connections.for_each_tx([&](async_event_loop::ITcpConnection& connection) {
                 connection.write(reinterpret_cast<const uint8_t*>(json), static_cast<size_t>(len));

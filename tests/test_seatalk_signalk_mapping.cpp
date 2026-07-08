@@ -59,7 +59,7 @@ int main() {
     const uint8_t display_units[] = {0x24, 0x02, 0x00, 0x00, 0x86};
     now_us += 1000;
     REQUIRE(input.feed_datagram(display_units, sizeof(display_units), 1, now_us));
-    REQUIRE(pop_path(store, "notifications.seatalk.message", mapped));
+    REQUIRE(pop_path(store, "notifications.message.text", mapped));
     REQUIRE(mapped.kind == signalk_mini::SignalKMappedValueKind::Text);
 
     return 0;

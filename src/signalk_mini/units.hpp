@@ -20,4 +20,13 @@ constexpr Real celsius_to_kelvin(Real celsius) { return celsius + static_cast<Re
 template<typename Real>
 constexpr Real rpm_to_hz(Real rpm) { return rpm / static_cast<Real>(60); }
 
+template<typename Real>
+constexpr Real bar_to_pa(Real bar) { return bar * static_cast<Real>(100000); }
+
+template<typename Real>
+constexpr Real inhg_to_pa(Real inhg) { return inhg * static_cast<Real>(3386.389); }
+
+template<typename Real>
+constexpr Real percent_to_ratio(Real percent) { return percent / static_cast<Real>(100); }
+
 } // namespace signalk_mini

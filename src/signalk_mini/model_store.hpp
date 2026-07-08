@@ -46,7 +46,7 @@ private:
     size_t count_ = 0;
 };
 
-template<typename Real, size_t QueueCapacity = 128>
+template<typename Real, size_t QueueCapacity = 512>
 class ModelStore {
 public:
     using Model = ship_data_model::DataModel<Real>;
