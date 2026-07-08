@@ -48,6 +48,13 @@ public:
         return index >= 0 && entries_[index].flags.allow_tx;
     }
 
+    bool set_allow_tx(async_event_loop::ITcpConnection& connection, bool allow_tx) {
+        const int index = index_of(connection);
+        if (index < 0) return false;
+        entries_[index].flags.allow_tx = allow_tx;
+        return true;
+    }
+
     size_t size() const { return count_; }
 
     template<typename Callback>
