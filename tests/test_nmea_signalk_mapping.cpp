@@ -23,6 +23,21 @@ static bool pop_path(signalk_mini::ModelStore<float>& store, const char* path, s
     return ok;
 }
 
+static void require_object_json(signalk_mini::ModelStore<float>& store,
+                                signalk_mini::ModelField field,
+                                const char* path,
+                                const char* expected_fragment) {
+    store.mark_changed(field, 1, 1000000);
+    signalk_mini::SignalKMappedValue<float> mapped;
+    REQUIRE(pop_path(store, path, mapped));
+    REQUIRE(mapped.kind == signalk_mini::SignalKMappedValueKind::Object);
+    char json[1024];
+    signalk_mini::SignalKDeltaWriter<float> writer;
+    const int n = writer.write_mapped(json, sizeof(json), "test", store.model(), mapped);
+    REQUIRE(n > 0);
+    REQUIRE(std::strstr(json, expected_fragment) != nullptr);
+}
+
 int main() {
     signalk_mini::SignalKMiniApp<float> app;
     signalk_mini::SignalKMappedValue<float> mapped;
@@ -44,13 +59,37 @@ int main() {
 
     now_us += 1000;
     REQUIRE(app.nmea0183().feed_line("$IIHFB,3.2,M,5.4,M*00", 1, now_us, false));
-    REQUIRE(pop_path(app.store(), "fishing.trawl.headropeToFootrope", mapped));
+    REQUIRE(pop_path(app.store(), "environment.trawl.headropeToFootrope", mapped));
     NEAR(mapped.number, 3.2f, 0.0001f);
 
     now_us += 1000;
     REQUIRE(app.nmea0183().feed_line("$IIXDR,A,1.2,D,PTCH,A,-2.3,D,ROLL*00", 1, now_us, false));
     REQUIRE(pop_path(app.store(), "navigation.attitude.pitch", mapped));
     NEAR(mapped.number, 1.2f * 3.14159265358979323846f / 180.0f, 0.0001f);
+
+    signalk_mini::ModelStore<float> store;
+    auto& target = store.model().ais.targets.targets[0];
+    target.occupied = true;
+    target.mmsi.set(123456789, 1000);
+    target.latitude_deg.set(40.1f, 1000);
+    target.longitude_deg.set(-73.9f, 1000);
+    target.speed_over_ground_kn.set(6.2f, 1000);
+    std::strcpy(target.vessel_name, "TESTVESSEL");
+    store.model().ais.targets.target_count.set(1, 1000);
+    require_object_json(store, signalk_mini::ModelField::AisTargetsObject, "navigation.ais.targets", "123456789");
+
+    auto& dsc = store.model().notifications.dsc.distress;
+    std::strcpy(dsc.sender_mmsi, "111222333");
+    std::strcpy(dsc.alert_text, "distress");
+    dsc.active = true;
+    dsc.last_update_us = 2000;
+    require_object_json(store, signalk_mini::ModelField::DscStructuredNotification, "notifications.dsc", "distress");
+
+    auto& navtex = store.model().notifications.navtex.received;
+    std::strcpy(navtex.navtex_message_id, "A1");
+    std::strcpy(navtex.body_text, "navtex body");
+    navtex.first_seen_us = 3000;
+    require_object_json(store, signalk_mini::ModelField::NavtexStructuredNotification, "notifications.navtex", "navtex body");
 
     return 0;
 }
