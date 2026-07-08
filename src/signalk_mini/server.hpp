@@ -249,22 +249,22 @@ public:
 
     bool transmit_seatalk_depth_m(Real depth_m, bool alarm = false) {
         seatalk::SeaTalkFrame frame;
-        return seatalk::make_depth_m(frame, static_cast<float>(depth_m), alarm) && transmit_seatalk_frame(frame);
+        return seatalk::make_depth_m(frame, depth_m, alarm) && transmit_seatalk_frame(frame);
     }
 
     bool transmit_seatalk_apparent_wind_angle_deg(Real angle_deg) {
         seatalk::SeaTalkFrame frame;
-        return seatalk::make_apparent_wind_angle_deg(frame, static_cast<float>(angle_deg)) && transmit_seatalk_frame(frame);
+        return seatalk::make_apparent_wind_angle_deg(frame, angle_deg) && transmit_seatalk_frame(frame);
     }
 
     bool transmit_seatalk_apparent_wind_speed_kn(Real speed_kn) {
         seatalk::SeaTalkFrame frame;
-        return seatalk::make_apparent_wind_speed_kn(frame, static_cast<float>(speed_kn)) && transmit_seatalk_frame(frame);
+        return seatalk::make_apparent_wind_speed_kn(frame, speed_kn) && transmit_seatalk_frame(frame);
     }
 
     bool transmit_seatalk_speed_through_water_kn(Real speed_kn) {
         seatalk::SeaTalkFrame frame;
-        return seatalk::make_speed_through_water_kn(frame, static_cast<float>(speed_kn)) && transmit_seatalk_frame(frame);
+        return seatalk::make_speed_through_water_kn(frame, speed_kn) && transmit_seatalk_frame(frame);
     }
 
 private:
