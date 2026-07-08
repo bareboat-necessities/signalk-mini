@@ -19,19 +19,27 @@ public:
     void set_stream_gap_timeout_us(uint64_t timeout_us) { stream_gap_timeout_us_ = timeout_us; }
     void reset_stream() { receiver_.reset_stream(); }
 
-    bool feed_datagram(const uint8_t* bytes, size_t length, SourceId source_id, uint64_t now_us) {
+    bool feed_datagram(const uint8_t* bytes,
+                       size_t length,
+                       SourceId source_id,
+                       uint64_t now_us,
+                       ship_data_model::SensorSource source = ship_data_model::SensorSource::serial) {
         const uint32_t before = receiver_.decoded_count();
-        if (!receiver_.accept_datagram(bytes, length, store_.model(), now_us, ship_data_model::SensorSource::serial)) return false;
+        if (!receiver_.accept_datagram(bytes, length, store_.model(), now_us, source)) return false;
         mark_changed_if_decoded(before, source_id, now_us);
         return receiver_.decoded_count() != before;
     }
 
-    bool feed_octets(const uint8_t* bytes, size_t length, SourceId source_id, uint64_t now_us) {
+    bool feed_octets(const uint8_t* bytes,
+                     size_t length,
+                     SourceId source_id,
+                     uint64_t now_us,
+                     ship_data_model::SensorSource source = ship_data_model::SensorSource::serial) {
         reset_stream_after_gap(now_us);
         last_stream_octets_us_ = now_us;
 
         const uint32_t before = receiver_.decoded_count();
-        if (!receiver_.accept_octets(bytes, length, store_.model(), now_us, ship_data_model::SensorSource::serial)) return false;
+        if (!receiver_.accept_octets(bytes, length, store_.model(), now_us, source)) return false;
         mark_changed_if_decoded(before, source_id, now_us);
         return receiver_.decoded_count() != before;
     }
