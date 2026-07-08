@@ -148,4 +148,31 @@ struct SignalKMiniConfig {
     size_t connector_count = sizeof(default_connector_configs) / sizeof(default_connector_configs[0]);
 };
 
+// Standard MCU/sketch-owned input configuration.
+// Use this when board-specific sketch code owns UART/I2C/pin polling and feeds
+// parsed protocol facades directly, while the core server owns only Signal K TCP
+// serving and delta publishing. This avoids enabling core UDP/TCP/serial
+// connectors on MCU targets before those transports have board-specific support.
+inline SignalKMiniConfig make_sketch_owned_io_config(const char* server_name,
+                                                     const char* source_label,
+                                                     uint16_t signalk_port = 20223,
+                                                     uint32_t publisher_interval_us = 10000,
+                                                     uint16_t max_changes_per_tick = 32,
+                                                     uint16_t json_buffer_size = 512) {
+    SignalKMiniConfig cfg;
+    cfg.identity.server_name = server_name ? server_name : "signalk-mini";
+    cfg.identity.server_version = "0.1.0";
+    cfg.signalk.host = "0.0.0.0";
+    cfg.signalk.port = signalk_port;
+    cfg.signalk.allow_rx = true;
+    cfg.signalk.allow_tx = true;
+    cfg.publisher.interval_us = publisher_interval_us;
+    cfg.publisher.max_changes_per_tick = max_changes_per_tick;
+    cfg.publisher.json_buffer_size = json_buffer_size;
+    cfg.publisher.source_label = source_label ? source_label : cfg.identity.server_name;
+    cfg.connectors = nullptr;
+    cfg.connector_count = 0;
+    return cfg;
+}
+
 } // namespace signalk_mini
