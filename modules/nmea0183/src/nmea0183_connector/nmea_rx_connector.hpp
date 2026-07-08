@@ -204,6 +204,7 @@ private:
 #include "nmea_A_E.hpp"
 #include "nmea_F_R.hpp"
 #include "nmea_S_T.hpp"
+#include "nmea_xdr.hpp"
 #include "nmea_V_Z.hpp"
 
     static const char* abk_ack_label(int32_t value) {
