@@ -141,6 +141,17 @@ enum class ModelField : uint16_t {
     TrawlTrueRangeM,
     TrawlTrueBearingDeg,
 
+    AisTargetsObject,
+    AisOwnVesselObject,
+    AisSafetyObject,
+    AisDataLinkStatusObject,
+    DscStructuredNotification,
+    InmarsatSafetyNetStructuredNotification,
+    NavtexStructuredNotification,
+    AlertStructuredNotification,
+    MobStructuredNotification,
+    LegacyCommObject,
+
     NotificationText,
     NotificationEvent,
 };
