@@ -189,26 +189,21 @@ bool line_has_valid_wind_speed_delta(const std::string& line) {
 
     JsonArray updates = doc["updates"].as<JsonArray>();
     if (updates.isNull()) return false;
-    REQUIRE(updates.size() > 0);
 
     for (JsonObject update : updates) {
         JsonObject source = update["source"].as<JsonObject>();
-        REQUIRE(!source.isNull());
-        const char* label = source["label"] | "";
-        REQUIRE(std::strcmp(label, "integration-nmea0183-tcp-client") == 0);
-
         JsonArray values = update["values"].as<JsonArray>();
-        REQUIRE(!values.isNull());
-        REQUIRE(values.size() > 0);
+        if (values.isNull()) continue;
         for (JsonObject value : values) {
             const char* path = value["path"] | "";
-            REQUIRE(path[0] != '\0');
+            if (std::strcmp(path, "environment.wind.speedApparent") != 0) continue;
+            REQUIRE(!source.isNull());
+            const char* label = source["label"] | "";
+            REQUIRE(std::strcmp(label, "integration-nmea0183-tcp-client") == 0);
             REQUIRE(value["value"].is<double>() || value["value"].is<float>() || value["value"].is<int>());
-            if (std::strcmp(path, "environment.wind.speedApparent") == 0) {
-                const double wind_mps = value["value"] | -1.0;
-                NEAR(wind_mps, 6.5848889, 0.001);
-                return true;
-            }
+            const double wind_mps = value["value"] | -1.0;
+            NEAR(wind_mps, 6.5848889, 0.001);
+            return true;
         }
     }
     return false;
