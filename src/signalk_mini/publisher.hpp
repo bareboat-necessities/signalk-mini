@@ -30,13 +30,20 @@ public:
             if (!mapper.map_change(store_.model(), change, mapped) || !mapped.path) continue;
             const char* source_label = label_for_source(change.source_id);
             const int len = writer.write_mapped(json_, json_capacity, source_label, store_.model(), mapped);
-            if (len <= 0 || static_cast<size_t>(len) >= json_capacity) continue;
+            if (len <= 0 || static_cast<size_t>(len) >= json_capacity) {
+                ++dropped_publish_count_;
+                continue;
+            }
             connections.for_each_tx([&](async_event_loop::ITcpConnection& connection) {
                 connection.write(reinterpret_cast<const uint8_t*>(json_), static_cast<size_t>(len));
             });
+            ++published_delta_count_;
             ++emitted;
         }
     }
+
+    uint64_t dropped_publish_count() const { return dropped_publish_count_; }
+    uint64_t published_delta_count() const { return published_delta_count_; }
 
 private:
     size_t effective_json_buffer_size() const {
@@ -59,6 +66,8 @@ private:
     ModelStore<Real>& store_;
     const SignalKMiniConfig& config_;
     char json_[MaxJsonBufferSize]{};
+    uint64_t dropped_publish_count_ = 0;
+    uint64_t published_delta_count_ = 0;
 };
 
 } // namespace signalk_mini

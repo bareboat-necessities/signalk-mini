@@ -78,6 +78,7 @@ private:
     static signalk_mini::ConnectorProtocol protocol_from_string(const char* value) {
         const std::string text = value ? value : "";
         if (text == "nmea0183") return signalk_mini::ConnectorProtocol::Nmea0183;
+        if (text == "seatalk" || text == "seatalk1" || text == "seatalk_1") return signalk_mini::ConnectorProtocol::SeaTalk1;
         if (text == "nmea2000") return signalk_mini::ConnectorProtocol::Nmea2000;
         if (text == "signalk") return signalk_mini::ConnectorProtocol::SignalK;
         if (text == "generic_sensor") return signalk_mini::ConnectorProtocol::GenericSensor;
