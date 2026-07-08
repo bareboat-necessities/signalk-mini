@@ -1,18 +1,32 @@
+#include <cerrno>
+#include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <string>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include <signalk_mini.hpp>
 #include "config_loader.hpp"
 
 namespace {
 
-constexpr const char* kDefaultConfigPath = "/etc/signalk-mini/signalk-mini.conf";
+constexpr const char* kConfigFileName = "signalk-mini.conf";
+constexpr const char* kUserConfigDirName = ".signalk-mini";
+constexpr const char* kEtcConfigPath = "/etc/signalk-mini/signalk-mini.conf";
 
 enum class CliAction {
     Run,
     ExitSuccess,
     ExitFailure,
+};
+
+struct ConfigDiscoveryResult {
+    std::string path;
+    bool explicit_path = false;
+    bool created_default = false;
+    bool using_built_in_defaults = false;
 };
 
 const char* startup_error_to_string(signalk_mini::MiniSignalKServer<float>::StartupError error) {
@@ -57,6 +71,134 @@ const char* transport_to_string(signalk_mini::ConnectorTransport transport) {
     return "unknown";
 }
 
+bool file_exists(const std::string& path) {
+    return !path.empty() && ::access(path.c_str(), F_OK) == 0;
+}
+
+bool directory_exists(const std::string& path) {
+    struct stat st{};
+    return !path.empty() && ::stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+std::string user_config_dir() {
+    const char* home = std::getenv("HOME");
+    if (!home || !home[0]) return std::string();
+    std::string path(home);
+    if (!path.empty() && path.back() != '/') path += '/';
+    path += kUserConfigDirName;
+    return path;
+}
+
+std::string user_config_path() {
+    std::string dir = user_config_dir();
+    if (dir.empty()) return std::string();
+    return dir + "/" + kConfigFileName;
+}
+
+const char* default_config_text() {
+    return
+        "identity = {\n"
+        "  server_name = \"signalk-mini\";\n"
+        "  server_version = \"0.1.0\";\n"
+        "  self = \"vessels.self\";\n"
+        "};\n"
+        "\n"
+        "signalk = {\n"
+        "  host = \"0.0.0.0\";\n"
+        "  port = 20223;\n"
+        "  max_connections = 8;\n"
+        "  allow_rx = true;\n"
+        "  allow_tx = true;\n"
+        "};\n"
+        "\n"
+        "publisher = {\n"
+        "  interval_us = 10000;\n"
+        "  max_changes_per_tick = 32;\n"
+        "  json_buffer_size = 512;\n"
+        "  source_label = \"signalk-mini\";\n"
+        "};\n"
+        "\n"
+        "connectors = (\n"
+        "  {\n"
+        "    enabled = true;\n"
+        "    label = \"nmea0183-udp-10110\";\n"
+        "    protocol = \"nmea0183\";\n"
+        "    transport = \"udp\";\n"
+        "    access = { allow_rx = true; allow_tx = false; };\n"
+        "    nmea0183 = { validate_checksum = false; };\n"
+        "    udp = {\n"
+        "      listen_host = \"0.0.0.0\";\n"
+        "      listen_port = 10110;\n"
+        "      allow_broadcast = true;\n"
+        "    };\n"
+        "  }\n"
+        ");\n";
+}
+
+bool ensure_user_config_dir(std::string& error) {
+    const std::string dir = user_config_dir();
+    if (dir.empty()) {
+        error = "HOME is not set";
+        return false;
+    }
+    if (directory_exists(dir)) return true;
+    if (::mkdir(dir.c_str(), 0755) == 0) return true;
+    if (errno == EEXIST && directory_exists(dir)) return true;
+    error = std::string("cannot create ") + dir + ": " + std::strerror(errno);
+    return false;
+}
+
+bool create_default_user_config(std::string& path, std::string& error) {
+    if (!ensure_user_config_dir(error)) return false;
+    path = user_config_path();
+    if (path.empty()) {
+        error = "HOME is not set";
+        return false;
+    }
+    if (file_exists(path)) return true;
+
+    std::ofstream out(path, std::ios::out | std::ios::trunc);
+    if (!out) {
+        error = std::string("cannot create ") + path;
+        return false;
+    }
+    out << default_config_text();
+    if (!out.good()) {
+        error = std::string("cannot write ") + path;
+        return false;
+    }
+    return true;
+}
+
+ConfigDiscoveryResult discover_config(bool explicit_config, const char* explicit_path) {
+    ConfigDiscoveryResult result;
+    result.explicit_path = explicit_config;
+    if (explicit_config) {
+        result.path = explicit_path ? explicit_path : "";
+        return result;
+    }
+
+    const std::string user_path = user_config_path();
+    if (!user_path.empty() && file_exists(user_path)) {
+        result.path = user_path;
+        return result;
+    }
+
+    if (file_exists(kEtcConfigPath)) {
+        result.path = kEtcConfigPath;
+        return result;
+    }
+
+    std::string error;
+    if (create_default_user_config(result.path, error)) {
+        result.created_default = true;
+    } else {
+        result.using_built_in_defaults = true;
+        std::cerr << "could not create default user config: " << error << "\n";
+    }
+    return result;
+}
+
 void print_usage(const char* argv0) {
     const char* program = argv0 && argv0[0] ? argv0 : "signalk-mini";
     std::cout
@@ -65,8 +207,11 @@ void print_usage(const char* argv0) {
         << "  -c, --config PATH   Read libconfig configuration from PATH\n"
         << "  -h, --help          Show this help and exit\n"
         << "      --version       Show version and exit\n\n"
-        << "Defaults when no config file is found:\n"
-        << "  config:       " << kDefaultConfigPath << "\n"
+        << "Config discovery when no explicit config is provided:\n"
+        << "  1. ~/.signalk-mini/signalk-mini.conf\n"
+        << "  2. " << kEtcConfigPath << "\n"
+        << "  3. create ~/.signalk-mini/signalk-mini.conf with defaults\n\n"
+        << "Default endpoints:\n"
         << "  Signal K TCP: 0.0.0.0:20223\n"
         << "  NMEA0183 UDP: 0.0.0.0:10110\n";
 }
@@ -107,10 +252,13 @@ void print_connector_summary(const signalk_mini::ConnectorConfig& connector, siz
               << "\n";
 }
 
-void print_startup_summary(const signalk_mini::SignalKMiniConfig& config, bool used_default_config) {
+void print_startup_summary(const signalk_mini::SignalKMiniConfig& config, const ConfigDiscoveryResult& discovery) {
     std::cout << "signalk-mini " << (config.identity.server_version ? config.identity.server_version : "unknown") << " started\n";
-    if (used_default_config) {
+    if (discovery.using_built_in_defaults) {
         std::cout << "config: built-in defaults\n";
+    } else {
+        std::cout << "config: " << discovery.path << "\n";
+        if (discovery.created_default) std::cout << "created default config: " << discovery.path << "\n";
     }
     std::cout << "Signal K TCP listening on "
               << (config.signalk.host ? config.signalk.host : "0.0.0.0")
@@ -133,7 +281,7 @@ void print_startup_summary(const signalk_mini::SignalKMiniConfig& config, bool u
 }
 
 CliAction parse_args(int argc, char** argv, const char*& config_path, bool& explicit_config) {
-    config_path = kDefaultConfigPath;
+    config_path = nullptr;
     explicit_config = false;
     for (int i = 1; i < argc; ++i) {
         const char* arg = argv[i];
@@ -159,7 +307,7 @@ CliAction parse_args(int argc, char** argv, const char*& config_path, bool& expl
             print_usage(argv[0]);
             return CliAction::ExitFailure;
         }
-        if (explicit_config || std::strcmp(config_path, kDefaultConfigPath) != 0) {
+        if (explicit_config || config_path) {
             std::cerr << "multiple config paths provided\n";
             return CliAction::ExitFailure;
         }
@@ -172,22 +320,19 @@ CliAction parse_args(int argc, char** argv, const char*& config_path, bool& expl
 } // namespace
 
 int main(int argc, char** argv) {
-    const char* config_path = nullptr;
+    const char* explicit_config_path = nullptr;
     bool explicit_config = false;
-    const CliAction cli_action = parse_args(argc, argv, config_path, explicit_config);
+    const CliAction cli_action = parse_args(argc, argv, explicit_config_path, explicit_config);
     if (cli_action == CliAction::ExitSuccess) return 0;
     if (cli_action == CliAction::ExitFailure) return 1;
 
+    const ConfigDiscoveryResult discovery = discover_config(explicit_config, explicit_config_path);
+
     signalk_mini_linux::ConfigLoader config_loader;
     std::string error;
-    bool used_default_config = false;
-    if (!config_loader.load_file(config_path, error)) {
-        if (explicit_config) {
-            std::cerr << error << "\n";
-            return 1;
-        }
-        used_default_config = true;
-        std::cerr << "using built-in defaults: " << error << "\n";
+    if (!discovery.using_built_in_defaults && !config_loader.load_file(discovery.path.c_str(), error)) {
+        std::cerr << error << "\n";
+        return 1;
     }
 
     signalk_mini::SignalKMiniApp<float> app(config_loader.config);
@@ -199,7 +344,7 @@ int main(int argc, char** argv) {
                   << "\n";
         return 1;
     }
-    print_startup_summary(config_loader.config, used_default_config);
+    print_startup_summary(config_loader.config, discovery);
     app.run_forever();
     return 0;
 }
