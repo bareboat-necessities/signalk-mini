@@ -269,3 +269,5 @@ void navtex_store_received_message(NavtexData& navtex, ReceivedMessage& received
     }
     int32_t next = history.next_index.valid ? history.next_index.value : 0; if (next < 0 || next >= static_cast<int32_t>(capacity)) next = 0; auto& slot = history.messages[static_cast<uint8_t>(next)]; const bool overwriting = slot.first_seen_us != 0; received.first_seen_us = now_us; received.repeat_count.set(1, now_us); received.duplicate = false; slot = received; const int32_t count = history.count.valid ? history.count.value : 0; if (count < static_cast<int32_t>(capacity)) history.count.set(count + 1, now_us); if (overwriting) { const int32_t overwrite_count = history.overwrite_count.valid ? history.overwrite_count.value : 0; history.overwrite_count.set(overwrite_count + 1, now_us); } history.next_index.set((next + 1) % static_cast<int32_t>(capacity), now_us);
 }
+
+#include "nmea_F_R_tail.hpp"
