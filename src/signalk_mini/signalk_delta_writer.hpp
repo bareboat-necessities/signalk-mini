@@ -260,6 +260,45 @@ private:
     bool write_alerts(const ship_data_model::DataModel<Real>& model, JsonObject object) const {
         const auto& a = model.notifications.alerts;
         bool any = false;
+        if (a.acknowledgement.last_update_us) {
+            JsonObject o = object["acknowledgement"].to<JsonObject>();
+            set_text(o, "id", a.acknowledgement.alarm_identifier);
+            set(o, "localAlarmNumber", a.acknowledgement.local_alarm_number);
+            set(o, "fieldCount", a.acknowledgement.field_count);
+            any = true;
+        }
+        if (a.acknowledgement_detail.last_update_us) {
+            JsonObject o = object["acknowledgementDetail"].to<JsonObject>();
+            set_text(o, "id", a.acknowledgement_detail.alarm_identifier);
+            set(o, "localAlarmNumber", a.acknowledgement_detail.local_alarm_number);
+            set(o, "instance", a.acknowledgement_detail.alert_instance);
+            set(o, "state", a.acknowledgement_detail.acknowledgement_state);
+            set_text(o, "operator", a.acknowledgement_detail.operator_id);
+            set_text(o, "detail", a.acknowledgement_detail.detail);
+            any = true;
+        }
+        if (a.condition.last_update_us) {
+            JsonObject o = object["condition"].to<JsonObject>();
+            set_text(o, "id", a.condition.alarm_identifier);
+            set(o, "localAlarmNumber", a.condition.local_alarm_number);
+            set(o, "instance", a.condition.alert_instance);
+            set(o, "conditionState", a.condition.condition_state);
+            set(o, "priority", a.condition.priority);
+            set_text(o, "description", a.condition.description);
+            any = true;
+        }
+        if (a.cyclic_list.last_update_us) {
+            JsonObject o = object["cyclicList"].to<JsonObject>();
+            set(o, "totalMessages", a.cyclic_list.total_messages);
+            set(o, "messageNumber", a.cyclic_list.message_number);
+            set_text(o, "messageId", a.cyclic_list.sequential_message_id);
+            set(o, "alertCount", a.cyclic_list.alert_count);
+            JsonArray ids = o["alertIdentifiers"].to<JsonArray>();
+            for (uint8_t i = 0; i < ship_data_model::ALERT_LIST_ENTRY_CAPACITY; ++i) {
+                if (a.cyclic_list.alert_identifier[i][0]) ids.add(a.cyclic_list.alert_identifier[i]);
+            }
+            any = true;
+        }
         if (a.alert_report.last_update_us) {
             JsonObject o = object["report"].to<JsonObject>();
             set_text(o, "id", a.alert_report.alert_identifier);
@@ -276,6 +315,30 @@ private:
             set(o, "conditionState", a.alarm_state.condition_state);
             set(o, "acknowledgementState", a.alarm_state.acknowledgement_state);
             set_text(o, "description", a.alarm_state.description);
+            any = true;
+        }
+        if (a.command_refused.last_update_us) {
+            JsonObject o = object["commandRefused"].to<JsonObject>();
+            set_text(o, "id", a.command_refused.alert_identifier);
+            set(o, "instance", a.command_refused.alert_instance);
+            set_text(o, "command", a.command_refused.refused_command);
+            set_text(o, "reasonCode", a.command_refused.reason_code);
+            set_text(o, "reason", a.command_refused.reason_text);
+            any = true;
+        }
+        if (a.heartbeat.last_update_us) {
+            JsonObject o = object["heartbeat"].to<JsonObject>();
+            set(o, "status", a.heartbeat.status);
+            set(o, "interval", a.heartbeat.interval_s);
+            set_text(o, "messageId", a.heartbeat.sequential_message_id);
+            any = true;
+        }
+        if (a.fire.last_update_us) {
+            JsonObject o = object["fire"].to<JsonObject>();
+            set_text(o, "id", a.fire.id);
+            set_text(o, "code", a.fire.code);
+            set_text(o, "value", a.fire.value);
+            set_text(o, "text", a.fire.text[0] ? a.fire.text : a.fire.value);
             any = true;
         }
         return any;
@@ -302,6 +365,27 @@ private:
             set(o, "transmittingFrequencyHz", rf.transmitting_frequency_hz);
             set(o, "receivingFrequencyHz", rf.receiving_frequency_hz);
             set(o, "communicationMode", rf.communication_mode);
+            set(o, "powerLevel", rf.power_level);
+            any = true;
+        }
+        const auto& bc = model.comm.beacon_control;
+        if (bc.last_update_us) {
+            JsonObject o = object["beaconControl"].to<JsonObject>();
+            set(o, "frequencyKHz", bc.frequency_khz);
+            set(o, "frequencyMode", bc.frequency_mode);
+            set(o, "bitRateBps", bc.bit_rate_bps);
+            set(o, "bitRateMode", bc.bit_rate_mode);
+            set(o, "statusFrequencyKHz", bc.status_frequency_khz);
+            any = true;
+        }
+        const auto& bs = model.comm.beacon_status;
+        if (bs.last_update_us) {
+            JsonObject o = object["beaconStatus"].to<JsonObject>();
+            set(o, "signalStrengthDbUv", bs.signal_strength_db_uv);
+            set(o, "signalToNoiseRatioDb", bs.signal_to_noise_ratio_db);
+            set(o, "beaconFrequencyKHz", bs.beacon_frequency_khz);
+            set(o, "beaconBitRateBps", bs.beacon_bit_rate_bps);
+            set(o, "status", bs.status);
             any = true;
         }
         const auto& rlm = model.comm.return_link_message;
@@ -311,6 +395,52 @@ private:
             set(o, "receptionTime", rlm.reception_time_s);
             set(o, "messageCode", rlm.message_code);
             set_text(o, "messageBody", rlm.message_body);
+            any = true;
+        }
+        const auto& eq = model.comm.equipment;
+        if (eq.control_command.last_update_us) {
+            JsonObject o = object["equipment"]["controlCommand"].to<JsonObject>();
+            set_text(o, "equipmentId", eq.control_command.equipment_id);
+            set_text(o, "commandId", eq.control_command.command_id);
+            set(o, "state", eq.control_command.command_state);
+            set_text(o, "parameter", eq.control_command.parameter);
+            set(o, "fieldCount", eq.control_command.field_count);
+            any = true;
+        }
+        if (eq.control_operation.last_update_us) {
+            JsonObject o = object["equipment"]["controlOperation"].to<JsonObject>();
+            set_text(o, "equipmentId", eq.control_operation.equipment_id);
+            set_text(o, "operationId", eq.control_operation.operation_id);
+            set(o, "state", eq.control_operation.operation_state);
+            set_text(o, "value", eq.control_operation.value);
+            set(o, "fieldCount", eq.control_operation.field_count);
+            any = true;
+        }
+        if (eq.control_response.last_update_us) {
+            JsonObject o = object["equipment"]["controlResponse"].to<JsonObject>();
+            set_text(o, "equipmentId", eq.control_response.equipment_id);
+            set_text(o, "commandId", eq.control_response.command_id);
+            set(o, "state", eq.control_response.response_state);
+            set_text(o, "result", eq.control_response.result);
+            set(o, "fieldCount", eq.control_response.field_count);
+            any = true;
+        }
+        if (eq.display_control.last_update_us) {
+            JsonObject o = object["equipment"]["displayControl"].to<JsonObject>();
+            set_text(o, "displayId", eq.display_control.display_id);
+            set_text(o, "pageId", eq.display_control.page_id);
+            set(o, "state", eq.display_control.control_state);
+            set_text(o, "value", eq.display_control.value);
+            set(o, "fieldCount", eq.display_control.field_count);
+            any = true;
+        }
+        if (eq.door_status.last_update_us) {
+            JsonObject o = object["equipment"]["doorStatus"].to<JsonObject>();
+            set_text(o, "doorId", eq.door_status.door_id);
+            set(o, "doorState", eq.door_status.door_state);
+            set(o, "lockState", eq.door_status.lock_state);
+            set_text(o, "description", eq.door_status.description);
+            set(o, "fieldCount", eq.door_status.field_count);
             any = true;
         }
         return any;
