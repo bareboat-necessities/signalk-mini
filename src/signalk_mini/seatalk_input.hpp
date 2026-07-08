@@ -11,7 +11,7 @@
 
 namespace signalk_mini {
 
-template<typename Real, size_t QueueCapacity = 128>
+template<typename Real, size_t QueueCapacity = 512>
 class SeaTalkInput {
 public:
     explicit SeaTalkInput(ModelStore<Real, QueueCapacity>& store) : store_(store) {}
