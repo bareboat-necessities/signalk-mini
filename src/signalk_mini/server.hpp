@@ -3,6 +3,7 @@
 #include <memory>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #include <time.h>
 #include <vector>
 
@@ -13,7 +14,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
-#include <string.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -27,7 +27,6 @@
 #include "nmea0183_input.hpp"
 #include "publisher.hpp"
 #include "seatalk_input.hpp"
-#include "signalk_delta_writer.hpp"
 #include "signalk_hello_writer.hpp"
 
 namespace signalk_mini {
@@ -697,11 +696,6 @@ private:
         return loop_.clock().micros() / 1000000ULL;
     }
 
-    const char* server_source_label() const {
-        if (config_.publisher.source_label && config_.publisher.source_label[0]) return config_.publisher.source_label;
-        return config_.identity.server_name ? config_.identity.server_name : "signalk-mini";
-    }
-
     void update_server_clock_model(uint64_t now_us) {
         auto& server = store_.model().comm.server;
         server.source.value = ship_data_model::SensorSource::signalk;
@@ -712,19 +706,8 @@ private:
     void publish_server_clock() {
         const uint64_t now_us = loop_.clock().micros();
         update_server_clock_model(now_us);
-        SignalKDeltaWriter<Real> writer;
-        char json[192];
-        const int len = writer.write_number(json,
-                                            sizeof(json),
-                                            server_source_label(),
-                                            "communication.server.clock",
-                                            static_cast<Real>(store_.model().comm.server.clock_s.value));
-        if (len <= 0) {
-            return;
-        }
-        signalk_connections_.connections.for_each_tx([&](async_event_loop::ITcpConnection& connection) {
-            connection.write(reinterpret_cast<const uint8_t*>(json), static_cast<size_t>(len));
-        });
+        store_.mark_changed(ModelField::CommServerClockS, 0, now_us);
+        publish();
     }
 
     bool write_all(async_event_loop::IByteStream& stream, const uint8_t* data, size_t length) {
