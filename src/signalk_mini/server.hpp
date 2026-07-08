@@ -181,6 +181,18 @@ private:
 template<typename Real, size_t MaxSignalKConnections = 8, size_t MaxConnectionsPerConnector = 4>
 class MiniSignalKServer {
 public:
+    enum class StartupError : uint8_t {
+        None = 0,
+        InvalidSignalKPort,
+        InvalidSignalKMaxConnections,
+        InvalidPublisherInterval,
+        InvalidConnectorList,
+        UnsupportedConnectorProtocol,
+        UnsupportedConnectorTransport,
+        InvalidConnectorTransportConfig,
+        ConnectorStartFailed,
+    };
+
     explicit MiniSignalKServer(const SignalKMiniConfig& config = SignalKMiniConfig{})
         : config_(config),
           signalk_tcp_server_(loop_.scheduler()),
@@ -189,11 +201,14 @@ public:
           signalk_line_handler_(signalk_connections_, signalk_options()) {}
 
     bool begin() {
-        if (!loop_.valid()) return false;
-        if (!listen(signalk_tcp_server_, signalk_line_handler_, config_.signalk.host, config_.signalk.port)) return false;
-        start_configured_connectors();
+        reset_startup_diagnostics();
+        if (!validate_config()) return false;
+        if (!loop_.valid()) return set_startup_error(StartupError::ConnectorStartFailed, config_.connector_count);
+        if (!listen(signalk_tcp_server_, signalk_line_handler_, config_.signalk.host, config_.signalk.port)) return set_startup_error(StartupError::ConnectorStartFailed, config_.connector_count);
+        if (!start_configured_connectors()) return false;
         timer_ = loop_.on_repeat_us(config_.publisher.interval_us, [this]() { publish(); });
-        return static_cast<bool>(timer_);
+        if (!timer_) return set_startup_error(StartupError::InvalidPublisherInterval, config_.connector_count);
+        return true;
     }
 
     void tick() { loop_.tick(); }
@@ -202,6 +217,13 @@ public:
     const ModelStore<Real>& store() const { return store_; }
     Nmea0183Input<Real>& nmea0183() { return nmea_; }
     SeaTalkInput<Real>& seatalk() { return seatalk_; }
+
+    uint64_t dropped_change_count() const { return store_.dropped_change_count(); }
+    uint64_t dropped_publish_count() const { return publisher_.dropped_publish_count(); }
+    uint64_t published_delta_count() const { return publisher_.published_delta_count(); }
+    StartupError last_startup_error() const { return last_startup_error_; }
+    size_t last_failed_connector_index() const { return last_failed_connector_index_; }
+    uint32_t connector_start_failure_count() const { return connector_start_failure_count_; }
 
     bool transmit_seatalk_frame(const seatalk::SeaTalkFrame& frame) {
         if (frame.length == 0) return false;
@@ -265,6 +287,69 @@ private:
         }
     }
 
+    static bool supported_protocol(ConnectorProtocol protocol) {
+        return protocol == ConnectorProtocol::Nmea0183 || protocol == ConnectorProtocol::SeaTalk1;
+    }
+
+    static bool supported_transport(ConnectorTransport transport) {
+        return transport == ConnectorTransport::Serial ||
+               transport == ConnectorTransport::TcpClient ||
+               transport == ConnectorTransport::TcpServer ||
+               transport == ConnectorTransport::Udp;
+    }
+
+    bool set_startup_error(StartupError error, size_t connector_index) {
+        if (last_startup_error_ == StartupError::None) {
+            last_startup_error_ = error;
+            last_failed_connector_index_ = connector_index;
+        }
+        return false;
+    }
+
+    void reset_startup_diagnostics() {
+        last_startup_error_ = StartupError::None;
+        last_failed_connector_index_ = config_.connector_count;
+        connector_start_failure_count_ = 0;
+    }
+
+    bool validate_transport_config(const ConnectorConfig& connector) {
+        switch (connector.transport.kind) {
+        case ConnectorTransport::TcpClient:
+            return connector.transport.tcp_client.host && connector.transport.tcp_client.host[0] && connector.transport.tcp_client.port != 0;
+        case ConnectorTransport::TcpServer:
+            return connector.transport.tcp_server.host && connector.transport.tcp_server.host[0] && connector.transport.tcp_server.port != 0;
+        case ConnectorTransport::Serial:
+            if (connector.transport.serial.baud == 0) return false;
+#if defined(ARDUINO)
+            return true;
+#else
+            return connector.transport.serial.device && connector.transport.serial.device[0];
+#endif
+        case ConnectorTransport::Udp:
+            if (connector.access.allow_rx && connector.transport.udp.listen_port == 0) return false;
+            if (connector.access.allow_tx && (!connector.transport.udp.remote_host || !connector.transport.udp.remote_host[0] || connector.transport.udp.remote_port == 0)) return false;
+            return connector.transport.udp.listen_port != 0 || (connector.transport.udp.remote_host && connector.transport.udp.remote_host[0] && connector.transport.udp.remote_port != 0);
+        default:
+            return false;
+        }
+    }
+
+    bool validate_config() {
+        if (config_.signalk.port == 0) return set_startup_error(StartupError::InvalidSignalKPort, config_.connector_count);
+        if (config_.signalk.max_connections == 0 || config_.signalk.max_connections > MaxSignalKConnections) return set_startup_error(StartupError::InvalidSignalKMaxConnections, config_.connector_count);
+        if (config_.publisher.interval_us == 0) return set_startup_error(StartupError::InvalidPublisherInterval, config_.connector_count);
+        if (!config_.connectors && config_.connector_count != 0) return set_startup_error(StartupError::InvalidConnectorList, config_.connector_count);
+
+        for (size_t i = 0; i < config_.connector_count; ++i) {
+            const ConnectorConfig& connector = config_.connectors[i];
+            if (!connector.enabled) continue;
+            if (!supported_protocol(connector.protocol.kind)) return set_startup_error(StartupError::UnsupportedConnectorProtocol, i);
+            if (!supported_transport(connector.transport.kind)) return set_startup_error(StartupError::UnsupportedConnectorTransport, i);
+            if (!validate_transport_config(connector)) return set_startup_error(StartupError::InvalidConnectorTransportConfig, i);
+        }
+        return true;
+    }
+
     bool listen(async_event_loop::NativeTcpServer& server,
                 async_event_loop::ITcpServerHandler& handler,
                 const char* host,
@@ -282,6 +367,10 @@ private:
         ConnectionRegistry<MaxSignalKConnections> connections;
 
         void on_accept(async_event_loop::ITcpConnection& connection, const async_event_loop::TcpPeerInfo&) override {
+            if (connections.size() >= owner.config_.signalk.max_connections) {
+                connection.close();
+                return;
+            }
             ConnectionFlags flags{owner.config_.signalk.allow_rx, owner.config_.signalk.allow_tx};
             if (!connections.add(connection, flags)) connection.close();
         }
@@ -399,9 +488,9 @@ private:
     ConnectorProtocol connector_protocol(size_t index) const { return connector_slot(index).config.protocol.kind; }
     ship_data_model::SensorSource connector_sensor_source(size_t index) const { return sensor_source_for_transport(connector_slot(index).config.transport.kind); }
 
-    void start_configured_connectors() {
+    bool start_configured_connectors() {
         connector_slots_.clear();
-        if (!config_.connectors || config_.connector_count == 0) return;
+        if (!config_.connectors || config_.connector_count == 0) return true;
         connector_slots_.reserve(config_.connector_count);
         for (size_t i = 0; i < config_.connector_count; ++i) {
             const ConnectorConfig& connector = config_.connectors[i];
@@ -416,7 +505,12 @@ private:
             if (!connector.enabled) continue;
             if (connector.protocol.kind == ConnectorProtocol::Nmea0183) runtime.started = start_nmea0183_connector(runtime);
             else if (connector.protocol.kind == ConnectorProtocol::SeaTalk1) runtime.started = start_seatalk_connector(runtime);
+            if (!runtime.started) {
+                ++connector_start_failure_count_;
+                return set_startup_error(StartupError::ConnectorStartFailed, i);
+            }
         }
+        return true;
     }
 
     bool start_nmea0183_connector(ConnectorRuntimeSlot& slot) {
@@ -594,6 +688,9 @@ private:
     async_event_loop::TcpLineServerHandler<256, MaxSignalKConnections> signalk_line_handler_;
     std::vector<std::unique_ptr<ConnectorRuntimeSlot>> connector_slots_;
     async_event_loop::EventHandle timer_{};
+    StartupError last_startup_error_ = StartupError::None;
+    size_t last_failed_connector_index_ = 0;
+    uint32_t connector_start_failure_count_ = 0;
 };
 
 } // namespace signalk_mini
