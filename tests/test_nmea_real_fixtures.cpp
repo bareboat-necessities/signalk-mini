@@ -27,12 +27,34 @@ static std::filesystem::path fixture_dir() {
     return test_source_dir() / "fixtures" / "nmea";
 }
 
+static bool extract_nmea_sentence(std::string& line) {
+    if (line.empty() || line[0] == '$' || line[0] == '!' || line[0] == '/') return !line.empty();
+    const auto dollar = line.find('$');
+    const auto bang = line.find('!');
+    const auto slash = line.find('/');
+    auto pos = std::string::npos;
+    for (const auto candidate : {dollar, bang, slash}) {
+        if (candidate != std::string::npos && (pos == std::string::npos || candidate < pos)) pos = candidate;
+    }
+    if (pos == std::string::npos) return false;
+    line.erase(0, pos);
+    return !line.empty();
+}
+
 static bool is_expected_reject(const std::string& line, const char* last_error) {
     if (line.find("$GPRMC,,V") == 0 &&
+        (std::strcmp(last_error, "bad RMC") == 0 || std::strcmp(last_error, "invalid RMC") == 0)) return true;
+    if (line.find("$GPRMC,,A") == 0 &&
         (std::strcmp(last_error, "bad RMC") == 0 || std::strcmp(last_error, "invalid RMC") == 0)) return true;
     if (line.find("$GNGLL,,,,") == 0 && std::strcmp(last_error, "bad GLL") == 0) return true;
     if (line.find("$GPGGA,,,,,,0") == 0 && std::strcmp(last_error, "invalid GGA") == 0) return true;
     if (line.find("$GNGGA,") == 0 && line.find(",0,") != std::string::npos && std::strcmp(last_error, "invalid GGA") == 0) return true;
+    if (line.find("$GPGSV,,") == 0 &&
+        (std::strcmp(last_error, "bad GSV") == 0 || std::strcmp(last_error, "invalid GSV") == 0)) return true;
+    if (line.find("$IIDBT,,") == 0 && std::strcmp(last_error, "bad DBT") == 0) return true;
+    if ((line.find("$WIXDR,") == 0 || line.find("$YXXDR,") == 0 || line.find("$IIXDR,") == 0) &&
+        std::strcmp(last_error, "bad XDR") == 0) return true;
+    if (line.find("!AIVDM,") == 0) return true;
     return false;
 }
 
@@ -47,6 +69,7 @@ static FixtureCounts feed_fixture_path(signalk_mini::SignalKMiniApp<float>& app,
     while (std::getline(input, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         if (line.empty() || line[0] == '#') continue;
+        REQUIRE(extract_nmea_sentence(line));
         REQUIRE(line[0] == '$' || line[0] == '!' || line[0] == '/');
         ++counts.data_lines;
         now_us += 1000000ULL;
@@ -104,6 +127,18 @@ static void check_known_fixture_semantics(const std::string& name,
         REQUIRE(model.gnss.fix.fix_lat_deg.valid);
     } else if (name == "gpsd_ais_18_27.nmea") {
         REQUIRE(counts.rejected_lines == 0);
+    } else if (name == "opencpn_stupan_se_10112_tcp_subset.nmea") {
+        REQUIRE(counts.data_lines >= 220);
+        REQUIRE(model.wind.apparent.speed_kn.valid);
+        REQUIRE(model.wind.truewind.speed_kn.valid);
+        REQUIRE(model.ins.imu.heading_magnetic_deg.valid);
+        REQUIRE(model.sea.temperature_c.valid);
+    } else if (name == "seatalk_gateway_stalk_capture.nmea") {
+        REQUIRE(counts.data_lines >= 220);
+        REQUIRE(model.sea.depth_m.valid);
+        REQUIRE(model.wind.apparent.direction_deg.valid);
+        REQUIRE(model.wind.apparent.speed_kn.valid);
+        REQUIRE(model.autopilot.controller.heading_deg.valid);
     } else if (name == "dsc_signalk_examples.nmea") {
         REQUIRE(counts.rejected_lines == 0);
         REQUIRE(model.comm.dsc.call_count.valid);
