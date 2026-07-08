@@ -15,76 +15,47 @@ class SignalKDeltaWriter {
 public:
     int write_number(char* dst, size_t dst_size, const char* source_label, const char* path, Real value) const {
         if (!dst || dst_size == 0 || !path) return 0;
-
         JsonDocument doc;
-        JsonArray updates = doc["updates"].to<JsonArray>();
-        JsonObject update = updates.add<JsonObject>();
-        JsonObject source = update["source"].to<JsonObject>();
-        source["label"] = source_label ? source_label : "signalk-mini";
-
-        JsonArray values = update["values"].to<JsonArray>();
-        JsonObject item = values.add<JsonObject>();
-        item["path"] = path;
+        JsonObject item = start_item(doc, source_label, path);
         item["value"] = value;
-
         return serialize_delta(dst, dst_size, doc);
     }
 
     int write_mapped(char* dst, size_t dst_size, const char* source_label, const SignalKMappedValue<Real>& value) const {
         if (value.kind == SignalKMappedValueKind::Object) return 0;
-        return write_scalar_mapped(dst, dst_size, source_label, value);
+        return write_scalar(dst, dst_size, source_label, value);
     }
 
-    int write_mapped(char* dst,
-                     size_t dst_size,
-                     const char* source_label,
-                     const ship_data_model::DataModel<Real>& model,
-                     const SignalKMappedValue<Real>& value) const {
-        if (value.kind != SignalKMappedValueKind::Object) return write_scalar_mapped(dst, dst_size, source_label, value);
+    int write_mapped(char* dst, size_t dst_size, const char* source_label, const ship_data_model::DataModel<Real>& model, const SignalKMappedValue<Real>& value) const {
+        if (value.kind != SignalKMappedValueKind::Object) return write_scalar(dst, dst_size, source_label, value);
         if (!dst || dst_size == 0 || !value.path) return 0;
-
         JsonDocument doc;
-        JsonArray updates = doc["updates"].to<JsonArray>();
-        JsonObject update = updates.add<JsonObject>();
-        JsonObject source = update["source"].to<JsonObject>();
-        source["label"] = source_label ? source_label : "signalk-mini";
-
-        JsonArray values = update["values"].to<JsonArray>();
-        JsonObject item = values.add<JsonObject>();
-        item["path"] = value.path;
+        JsonObject item = start_item(doc, source_label, value.path);
         JsonObject object = item["value"].to<JsonObject>();
-        if (!write_object_value(model, value.object_kind, object)) return 0;
-
+        if (!write_object(model, value.object_kind, object)) return 0;
         return serialize_delta(dst, dst_size, doc);
     }
 
 private:
-    int write_scalar_mapped(char* dst, size_t dst_size, const char* source_label, const SignalKMappedValue<Real>& value) const {
-        if (!dst || dst_size == 0 || !value.path) return 0;
-
-        JsonDocument doc;
+    JsonObject start_item(JsonDocument& doc, const char* source_label, const char* path) const {
         JsonArray updates = doc["updates"].to<JsonArray>();
         JsonObject update = updates.add<JsonObject>();
         JsonObject source = update["source"].to<JsonObject>();
         source["label"] = source_label ? source_label : "signalk-mini";
-
         JsonArray values = update["values"].to<JsonArray>();
         JsonObject item = values.add<JsonObject>();
-        item["path"] = value.path;
-        switch (value.kind) {
-        case SignalKMappedValueKind::Number:
-            item["value"] = value.number;
-            break;
-        case SignalKMappedValueKind::Bool:
-            item["value"] = value.boolean;
-            break;
-        case SignalKMappedValueKind::Text:
-            item["value"] = value.text ? value.text : "";
-            break;
-        case SignalKMappedValueKind::Object:
-            return 0;
-        }
+        item["path"] = path;
+        return item;
+    }
 
+    int write_scalar(char* dst, size_t dst_size, const char* source_label, const SignalKMappedValue<Real>& value) const {
+        if (!dst || dst_size == 0 || !value.path) return 0;
+        JsonDocument doc;
+        JsonObject item = start_item(doc, source_label, value.path);
+        if (value.kind == SignalKMappedValueKind::Number) item["value"] = value.number;
+        else if (value.kind == SignalKMappedValueKind::Bool) item["value"] = value.boolean;
+        else if (value.kind == SignalKMappedValueKind::Text) item["value"] = value.text ? value.text : "";
+        else return 0;
         return serialize_delta(dst, dst_size, doc);
     }
 
@@ -98,333 +69,257 @@ private:
     }
 
     template<typename StampedValue>
-    void set_if_valid(JsonObject object, const char* key, const StampedValue& stamped) const {
-        if (stamped.valid) object[key] = stamped.value;
-    }
-
+    void set(JsonObject object, const char* key, const StampedValue& stamped) const { if (stamped.valid) object[key] = stamped.value; }
     template<typename StampedValue>
-    void set_if_valid_rad(JsonObject object, const char* key, const StampedValue& stamped) const {
-        if (stamped.valid) object[key] = deg_to_rad<Real>(static_cast<Real>(stamped.value));
-    }
-
+    void set_rad(JsonObject object, const char* key, const StampedValue& stamped) const { if (stamped.valid) object[key] = deg_to_rad<Real>(static_cast<Real>(stamped.value)); }
     template<typename StampedValue>
-    void set_if_valid_mps(JsonObject object, const char* key, const StampedValue& stamped) const {
-        if (stamped.valid) object[key] = knots_to_mps<Real>(static_cast<Real>(stamped.value));
-    }
+    void set_mps(JsonObject object, const char* key, const StampedValue& stamped) const { if (stamped.valid) object[key] = knots_to_mps<Real>(static_cast<Real>(stamped.value)); }
+    void set_text(JsonObject object, const char* key, const char* text) const { if (text && text[0]) object[key] = text; }
 
-    template<typename StampedValue>
-    void set_if_valid_m(JsonObject object, const char* key, const StampedValue& stamped) const {
-        if (stamped.valid) object[key] = nmi_to_m<Real>(static_cast<Real>(stamped.value));
-    }
-
-    void set_text_if_present(JsonObject object, const char* key, const char* text) const {
-        if (text && text[0] != '\0') object[key] = text;
-    }
-
-    template<typename Target>
-    void write_ais_target(JsonObject object, const Target& target) const {
-        set_if_valid(object, "mmsi", target.mmsi);
-        set_if_valid(object, "lastMessageType", target.last_message_type);
-        set_if_valid(object, "repeatIndicator", target.repeat_indicator);
-        set_if_valid(object, "navigationStatus", target.navigation_status);
-        set_if_valid(object, "shipType", target.ship_type);
-        set_if_valid(object, "imoNumber", target.imo_number);
-        set_if_valid(object, "aidType", target.aid_type);
-        set_text_if_present(object, "name", target.vessel_name);
-        set_text_if_present(object, "callSign", target.call_sign);
-        set_text_if_present(object, "destination", target.destination);
-        if (target.latitude_deg.valid || target.longitude_deg.valid) {
-            JsonObject pos = object["position"].to<JsonObject>();
-            set_if_valid(pos, "latitude", target.latitude_deg);
-            set_if_valid(pos, "longitude", target.longitude_deg);
-        }
-        set_if_valid_mps(object, "speedOverGround", target.speed_over_ground_kn);
-        set_if_valid_rad(object, "courseOverGroundTrue", target.course_over_ground_deg);
-        set_if_valid_rad(object, "headingTrue", target.true_heading_deg);
-        set_if_valid(object, "timestamp", target.timestamp_s);
-        object["positionAccuracy"] = target.position_accuracy;
-        object["raim"] = target.raim;
-        object["classB"] = target.class_b;
-        object["baseStation"] = target.base_station;
-        object["aidToNavigation"] = target.aid_to_navigation;
-        object["sarAircraft"] = target.sar_aircraft;
-        object["stale"] = target.stale;
+    void set_position(JsonObject object, auto const& lat, auto const& lon) const {
+        if (!lat.valid && !lon.valid) return;
+        JsonObject pos = object["position"].to<JsonObject>();
+        set(pos, "latitude", lat);
+        set(pos, "longitude", lon);
     }
 
     bool write_ais_targets(const ship_data_model::DataModel<Real>& model, JsonObject object) const {
         bool any = false;
         for (uint8_t i = 0; i < ship_data_model::AIS_TARGET_TABLE_CAPACITY; ++i) {
-            const auto& target = model.ais.targets.targets[i];
-            if (!target.occupied || !target.mmsi.valid) continue;
+            const auto& t = model.ais.targets.targets[i];
+            if (!t.occupied || !t.mmsi.valid) continue;
             char key[16];
-            snprintf(key, sizeof(key), "%ld", static_cast<long>(target.mmsi.value));
-            JsonObject entry = object[key].to<JsonObject>();
-            write_ais_target(entry, target);
+            snprintf(key, sizeof(key), "%ld", static_cast<long>(t.mmsi.value));
+            JsonObject o = object[key].to<JsonObject>();
+            set(o, "mmsi", t.mmsi);
+            set(o, "lastMessageType", t.last_message_type);
+            set(o, "navigationStatus", t.navigation_status);
+            set_position(o, t.latitude_deg, t.longitude_deg);
+            set_mps(o, "speedOverGround", t.speed_over_ground_kn);
+            set_rad(o, "courseOverGroundTrue", t.course_over_ground_deg);
+            set_rad(o, "headingTrue", t.true_heading_deg);
+            set(o, "shipType", t.ship_type);
+            set(o, "imoNumber", t.imo_number);
+            set_text(o, "name", t.vessel_name);
+            set_text(o, "callSign", t.call_sign);
+            set_text(o, "destination", t.destination);
+            o["classB"] = t.class_b;
+            o["aidToNavigation"] = t.aid_to_navigation;
+            o["stale"] = t.stale;
             any = true;
         }
-        set_if_valid(object, "count", model.ais.targets.target_count);
-        set_if_valid(object, "replacementCount", model.ais.targets.replacement_count);
-        set_if_valid(object, "overflowCount", model.ais.targets.overflow_count);
+        set(object, "count", model.ais.targets.target_count);
+        set(object, "replacementCount", model.ais.targets.replacement_count);
+        set(object, "overflowCount", model.ais.targets.overflow_count);
         return any || model.ais.targets.target_count.valid;
     }
 
-    bool write_ais_own_vessel(const ship_data_model::DataModel<Real>& model, JsonObject object) const {
-        if (!model.ais.own_vessel.valid) return false;
-        write_ais_target(object, model.ais.own_vessel);
+    bool write_ais_own(const ship_data_model::DataModel<Real>& model, JsonObject object) const {
+        const auto& t = model.ais.own_vessel;
+        if (!t.valid) return false;
+        set(object, "messageType", t.message_type);
+        set(object, "mmsi", t.mmsi);
+        set(object, "navigationStatus", t.navigation_status);
+        set_position(object, t.latitude_deg, t.longitude_deg);
+        set_mps(object, "speedOverGround", t.speed_over_ground_kn);
+        set_rad(object, "courseOverGroundTrue", t.course_over_ground_deg);
+        set_rad(object, "headingTrue", t.true_heading_deg);
+        set(object, "shipType", t.ship_type);
+        set(object, "imoNumber", t.imo_number);
+        set_text(object, "name", t.vessel_name);
+        set_text(object, "callSign", t.call_sign);
+        set_text(object, "destination", t.destination);
+        object["classB"] = t.class_b;
+        object["aidToNavigation"] = t.aid_to_navigation;
         return true;
     }
 
     bool write_ais_safety(const ship_data_model::DataModel<Real>& model, JsonObject object) const {
-        const auto& text = model.ais.safety_text;
-        const auto& addressed = model.ais.addressed_safety;
         bool any = false;
-        if (text.last_update_us != 0) {
-            JsonObject item = object["broadcast"].to<JsonObject>();
-            set_if_valid(item, "sourceMmsi", text.mmsi);
-            set_if_valid(item, "messageType", text.message_type);
-            set_if_valid(item, "destinationMmsi", text.destination_mmsi);
-            set_if_valid(item, "sequenceNumber", text.sequence_number);
-            item["retransmit"] = text.retransmit;
-            set_text_if_present(item, "text", text.text);
+        const auto& b = model.ais.safety_text;
+        if (b.last_update_us) {
+            JsonObject o = object["broadcast"].to<JsonObject>();
+            set(o, "sourceMmsi", b.mmsi);
+            set(o, "destinationMmsi", b.destination_mmsi);
+            set(o, "sequenceNumber", b.sequence_number);
+            o["retransmit"] = b.retransmit;
+            set_text(o, "text", b.text);
             any = true;
         }
-        if (addressed.last_update_us != 0) {
-            JsonObject item = object["addressed"].to<JsonObject>();
-            set_text_if_present(item, "destinationMmsi", addressed.destination_mmsi);
-            set_text_if_present(item, "messageId", addressed.sequential_message_id);
-            item["retransmit"] = addressed.retransmit_flag;
-            set_text_if_present(item, "text", addressed.safety_text);
-            set_if_valid(item, "fieldCount", addressed.field_count);
+        const auto& a = model.ais.addressed_safety;
+        if (a.last_update_us) {
+            JsonObject o = object["addressed"].to<JsonObject>();
+            set_text(o, "destinationMmsi", a.destination_mmsi);
+            set_text(o, "messageId", a.sequential_message_id);
+            o["retransmit"] = a.retransmit_flag;
+            set_text(o, "text", a.safety_text);
             any = true;
         }
         return any;
     }
 
-    bool write_ais_data_link_status(const ship_data_model::DataModel<Real>& model, JsonObject object) const {
-        const auto& status = model.ais.data_link_status;
-        if (status.last_update_us == 0) return false;
-        set_text_if_present(object, "stationId", status.station_id);
-        set_text_if_present(object, "slotStatus", status.slot_status);
-        set_text_if_present(object, "status", status.status_text);
-        set_if_valid(object, "fieldCount", status.field_count);
+    bool write_ais_status(const ship_data_model::DataModel<Real>& model, JsonObject object) const {
+        const auto& s = model.ais.data_link_status;
+        if (!s.last_update_us) return false;
+        set_text(object, "stationId", s.station_id);
+        set_text(object, "slotStatus", s.slot_status);
+        set_text(object, "status", s.status_text);
+        set(object, "fieldCount", s.field_count);
         return true;
     }
 
-    template<typename DscAlert>
-    void write_dsc_alert(JsonObject object, const char* name, const DscAlert& alert) const {
-        if (alert.last_update_us == 0) return;
-        JsonObject item = object[name].to<JsonObject>();
-        set_text_if_present(item, "senderMmsi", alert.sender_mmsi);
-        set_text_if_present(item, "addressOrDistressMmsi", alert.address_or_distress_mmsi);
-        set_if_valid(item, "category", alert.category);
-        set_if_valid(item, "natureOrTelecommand", alert.nature_or_first_telecommand);
-        if (alert.latitude_deg.valid || alert.longitude_deg.valid) {
-            JsonObject pos = item["position"].to<JsonObject>();
-            set_if_valid(pos, "latitude", alert.latitude_deg);
-            set_if_valid(pos, "longitude", alert.longitude_deg);
-        }
-        set_if_valid(item, "timeOfDay", alert.utc_time_s);
-        set_text_if_present(item, "text", alert.alert_text);
-        item["active"] = alert.active;
-        item["acknowledged"] = alert.acknowledged;
-        item["resolved"] = alert.resolved;
-        item["duplicate"] = alert.duplicate;
-        set_if_valid(item, "repeatCount", alert.repeat_count);
+    template<typename Alert>
+    void set_dsc_alert(JsonObject object, const char* key, const Alert& a) const {
+        if (!a.last_update_us) return;
+        JsonObject o = object[key].to<JsonObject>();
+        set_text(o, "senderMmsi", a.sender_mmsi);
+        set_text(o, "addressOrDistressMmsi", a.address_or_distress_mmsi);
+        set(o, "category", a.category);
+        set(o, "natureOrTelecommand", a.nature_or_first_telecommand);
+        set_position(o, a.latitude_deg, a.longitude_deg);
+        set(o, "timeOfDay", a.utc_time_s);
+        set_text(o, "text", a.alert_text);
+        o["active"] = a.active;
+        o["acknowledged"] = a.acknowledged;
+        o["resolved"] = a.resolved;
+        o["duplicate"] = a.duplicate;
     }
 
     bool write_dsc(const ship_data_model::DataModel<Real>& model, JsonObject object) const {
-        const auto& latest = model.comm.dsc.latest_call;
-        if (latest.last_update_us != 0) {
-            JsonObject call = object["latestCall"].to<JsonObject>();
-            set_if_valid(call, "formatSpecifier", latest.format_specifier);
-            set_text_if_present(call, "senderMmsi", latest.sender_mmsi);
-            set_if_valid(call, "category", latest.category);
-            set_if_valid(call, "natureOrTelecommand", latest.nature_or_first_telecommand);
-            set_if_valid(call, "communicationOrTelecommand", latest.communication_or_second_telecommand);
-            set_text_if_present(call, "addressOrDistressMmsi", latest.address_or_distress_mmsi);
-            if (latest.latitude_deg.valid || latest.longitude_deg.valid) {
-                JsonObject pos = call["position"].to<JsonObject>();
-                set_if_valid(pos, "latitude", latest.latitude_deg);
-                set_if_valid(pos, "longitude", latest.longitude_deg);
-            }
-            set_if_valid(call, "timeOfDay", latest.utc_time_s);
-            set_text_if_present(call, "dseText", latest.dse_decoded_text);
-            set_if_valid(call, "fieldCount", latest.field_count);
+        const auto& c = model.comm.dsc.latest_call;
+        if (c.last_update_us) {
+            JsonObject o = object["latestCall"].to<JsonObject>();
+            set(o, "formatSpecifier", c.format_specifier);
+            set_text(o, "senderMmsi", c.sender_mmsi);
+            set(o, "category", c.category);
+            set(o, "natureOrTelecommand", c.nature_or_first_telecommand);
+            set_text(o, "addressOrDistressMmsi", c.address_or_distress_mmsi);
+            set_position(o, c.latitude_deg, c.longitude_deg);
+            set(o, "timeOfDay", c.utc_time_s);
+            set_text(o, "dseText", c.dse_decoded_text);
         }
-        write_dsc_alert(object, "distress", model.notifications.dsc.distress);
-        write_dsc_alert(object, "urgency", model.notifications.dsc.urgency);
-        write_dsc_alert(object, "safety", model.notifications.dsc.safety);
-        set_if_valid(object, "callCount", model.comm.dsc.call_count);
-        set_if_valid(object, "distressCount", model.comm.dsc.distress_count);
-        set_if_valid(object, "urgencyCount", model.comm.dsc.urgency_count);
-        set_if_valid(object, "safetyCount", model.comm.dsc.safety_count);
-        return latest.last_update_us != 0 || model.notifications.dsc.distress.last_update_us != 0 ||
-               model.notifications.dsc.urgency.last_update_us != 0 || model.notifications.dsc.safety.last_update_us != 0;
+        set_dsc_alert(object, "distress", model.notifications.dsc.distress);
+        set_dsc_alert(object, "urgency", model.notifications.dsc.urgency);
+        set_dsc_alert(object, "safety", model.notifications.dsc.safety);
+        set(object, "callCount", model.comm.dsc.call_count);
+        return c.last_update_us || model.notifications.dsc.distress.last_update_us || model.notifications.dsc.urgency.last_update_us || model.notifications.dsc.safety.last_update_us;
     }
 
     bool write_inmarsat(const ship_data_model::DataModel<Real>& model, JsonObject object) const {
-        const auto& data = model.notifications.inmarsat.safetynet;
-        const auto& msg = data.latest_message;
-        if (msg.last_update_us == 0 && !data.message_count.valid) return false;
-        set_if_valid(object, "messageCount", data.message_count);
-        set_if_valid(object, "duplicateCount", data.duplicate_count);
-        set_if_valid(object, "unsupportedCount", data.unsupported_count);
-        JsonObject latest = object["latest"].to<JsonObject>();
-        set_text_if_present(latest, "messageId", msg.message_id);
-        set_text_if_present(latest, "terminalId", msg.terminal_id);
-        latest["msiStatus"] = msg.msi_status;
-        set_text_if_present(latest, "lesSequenceNumber", msg.les_sequence_number);
-        set_text_if_present(latest, "lesId", msg.les_id);
-        latest["oceanRegion"] = msg.ocean_region_code;
-        set_text_if_present(latest, "oceanRegionLabel", msg.ocean_region_label);
-        latest["priority"] = msg.priority_code;
-        set_text_if_present(latest, "priorityLabel", msg.priority_label);
-        set_text_if_present(latest, "serviceCode", msg.service_code);
-        set_text_if_present(latest, "service", msg.service_label);
-        set_text_if_present(latest, "addressKind", msg.address_kind);
-        set_if_valid(latest, "navareaMetarea", msg.navarea_metarea_code);
-        set_if_valid(latest, "circularRadiusNmi", msg.circular_radius_nmi);
-        set_if_valid(latest, "rectangleExtentLatDeg", msg.rectangle_extent_lat_deg);
-        set_if_valid(latest, "rectangleExtentLonDeg", msg.rectangle_extent_lon_deg);
-        if (msg.circular_center_lat_deg.valid || msg.circular_center_lon_deg.valid) {
-            JsonObject center = latest["circularCenter"].to<JsonObject>();
-            set_if_valid(center, "latitude", msg.circular_center_lat_deg);
-            set_if_valid(center, "longitude", msg.circular_center_lon_deg);
-        }
-        if (msg.rectangle_sw_lat_deg.valid || msg.rectangle_sw_lon_deg.valid) {
-            JsonObject sw = latest["rectangleSouthwest"].to<JsonObject>();
-            set_if_valid(sw, "latitude", msg.rectangle_sw_lat_deg);
-            set_if_valid(sw, "longitude", msg.rectangle_sw_lon_deg);
-        }
-        set_text_if_present(latest, "text", msg.message_text);
-        latest["complete"] = msg.complete;
-        latest["duplicate"] = msg.duplicate;
-        latest["acknowledged"] = msg.acknowledged;
-        latest["requiresAlarm"] = msg.requires_alarm;
-        latest["mandatoryReception"] = msg.mandatory_reception;
+        const auto& d = model.notifications.inmarsat.safetynet;
+        const auto& m = d.latest_message;
+        if (!m.last_update_us && !d.message_count.valid) return false;
+        set(object, "messageCount", d.message_count);
+        set(object, "duplicateCount", d.duplicate_count);
+        JsonObject o = object["latest"].to<JsonObject>();
+        set_text(o, "messageId", m.message_id);
+        set_text(o, "terminalId", m.terminal_id);
+        o["priority"] = m.priority_code;
+        set_text(o, "priorityLabel", m.priority_label);
+        set_text(o, "serviceCode", m.service_code);
+        set_text(o, "service", m.service_label);
+        set_text(o, "addressKind", m.address_kind);
+        set_text(o, "text", m.message_text);
+        o["complete"] = m.complete;
+        o["duplicate"] = m.duplicate;
+        o["acknowledged"] = m.acknowledged;
+        o["requiresAlarm"] = m.requires_alarm;
+        o["mandatoryReception"] = m.mandatory_reception;
         return true;
     }
 
     bool write_navtex(const ship_data_model::DataModel<Real>& model, JsonObject object) const {
-        const auto& navtex = model.notifications.navtex;
+        const auto& n = model.notifications.navtex;
         bool any = false;
-        if (navtex.received.first_seen_us != 0) {
-            JsonObject latest = object["latest"].to<JsonObject>();
-            set_text_if_present(latest, "messageId", navtex.received.navtex_message_id);
-            latest["transmitter"] = navtex.received.transmitter_id;
-            latest["subject"] = navtex.received.subject_indicator;
-            set_text_if_present(latest, "subjectLabel", navtex.received.subject_label);
-            set_if_valid(latest, "serialNumber", navtex.received.serial_number);
-            set_text_if_present(latest, "text", navtex.received.body_text[0] ? navtex.received.body_text : navtex.received.message_text);
-            set_if_valid(latest, "textLength", navtex.received.text_length);
-            latest["complete"] = navtex.received.complete;
-            latest["overflow"] = navtex.received.overflow;
-            latest["duplicate"] = navtex.received.duplicate;
-            latest["acknowledged"] = navtex.received.acknowledged;
+        if (n.received.first_seen_us) {
+            JsonObject o = object["latest"].to<JsonObject>();
+            set_text(o, "messageId", n.received.navtex_message_id);
+            o["transmitter"] = n.received.transmitter_id;
+            o["subject"] = n.received.subject_indicator;
+            set_text(o, "subjectLabel", n.received.subject_label);
+            set(o, "serialNumber", n.received.serial_number);
+            set_text(o, "text", n.received.body_text[0] ? n.received.body_text : n.received.message_text);
+            o["complete"] = n.received.complete;
+            o["overflow"] = n.received.overflow;
+            o["duplicate"] = n.received.duplicate;
             any = true;
         }
-        if (navtex.receiver_mask.last_update_us != 0) {
-            JsonObject mask = object["receiverMask"].to<JsonObject>();
-            set_text_if_present(mask, "receiverId", navtex.receiver_mask.receiver_id);
-            set_text_if_present(mask, "stationMask", navtex.receiver_mask.station_mask);
-            set_text_if_present(mask, "subjectMask", navtex.receiver_mask.subject_mask);
-            set_if_valid(mask, "enabledStationCount", navtex.receiver_mask.enabled_station_count);
-            set_if_valid(mask, "enabledSubjectCount", navtex.receiver_mask.enabled_subject_count);
+        if (n.receiver_mask.last_update_us) {
+            JsonObject o = object["receiverMask"].to<JsonObject>();
+            set_text(o, "receiverId", n.receiver_mask.receiver_id);
+            set_text(o, "stationMask", n.receiver_mask.station_mask);
+            set_text(o, "subjectMask", n.receiver_mask.subject_mask);
             any = true;
         }
-        set_if_valid(object, "historyCount", navtex.history.count);
-        set_if_valid(object, "duplicateCount", navtex.history.duplicate_count);
-        return any || navtex.history.count.valid;
+        set(object, "historyCount", n.history.count);
+        return any || n.history.count.valid;
     }
 
     bool write_alerts(const ship_data_model::DataModel<Real>& model, JsonObject object) const {
-        const auto& alerts = model.notifications.alerts;
+        const auto& a = model.notifications.alerts;
         bool any = false;
-        if (alerts.alert_report.last_update_us != 0) {
-            JsonObject report = object["report"].to<JsonObject>();
-            set_text_if_present(report, "id", alerts.alert_report.alert_identifier);
-            set_if_valid(report, "instance", alerts.alert_report.alert_instance);
-            report["category"] = alerts.alert_report.category;
-            report["priority"] = alerts.alert_report.priority;
-            report["state"] = alerts.alert_report.alert_state;
-            set_text_if_present(report, "text", alerts.alert_report.alert_text);
+        if (a.alert_report.last_update_us) {
+            JsonObject o = object["report"].to<JsonObject>();
+            set_text(o, "id", a.alert_report.alert_identifier);
+            set(o, "instance", a.alert_report.alert_instance);
+            o["category"] = a.alert_report.category;
+            o["priority"] = a.alert_report.priority;
+            o["state"] = a.alert_report.alert_state;
+            set_text(o, "text", a.alert_report.alert_text);
             any = true;
         }
-        if (alerts.alarm_state.last_update_us != 0) {
-            JsonObject alarm = object["alarmState"].to<JsonObject>();
-            set_text_if_present(alarm, "id", alerts.alarm_state.alarm_identifier);
-            set_if_valid(alarm, "localAlarmNumber", alerts.alarm_state.local_alarm_number);
-            alarm["conditionState"] = alerts.alarm_state.condition_state;
-            alarm["acknowledgementState"] = alerts.alarm_state.acknowledgement_state;
-            set_text_if_present(alarm, "description", alerts.alarm_state.description);
-            any = true;
-        }
-        if (alerts.heartbeat.last_update_us != 0) {
-            JsonObject heartbeat = object["heartbeat"].to<JsonObject>();
-            heartbeat["status"] = alerts.heartbeat.status;
-            set_if_valid(heartbeat, "interval", alerts.heartbeat.interval_s);
-            set_text_if_present(heartbeat, "sequence", alerts.heartbeat.sequential_message_id);
-            any = true;
-        }
-        if (alerts.fire.last_update_us != 0) {
-            JsonObject fire = object["fire"].to<JsonObject>();
-            set_text_if_present(fire, "id", alerts.fire.id);
-            set_text_if_present(fire, "text", alerts.fire.text);
-            set_if_valid(fire, "fieldCount", alerts.fire.field_count);
+        if (a.alarm_state.last_update_us) {
+            JsonObject o = object["alarmState"].to<JsonObject>();
+            set_text(o, "id", a.alarm_state.alarm_identifier);
+            o["conditionState"] = a.alarm_state.condition_state;
+            o["acknowledgementState"] = a.alarm_state.acknowledgement_state;
+            set_text(o, "description", a.alarm_state.description);
             any = true;
         }
         return any;
     }
 
     bool write_mob(const ship_data_model::DataModel<Real>& model, JsonObject object) const {
-        const auto& smv = model.notifications.special.smv;
-        if (smv.last_update_us == 0) return false;
-        set_text_if_present(object, "id", smv.message_id);
-        set_if_valid(object, "mmsi", smv.mmsi);
-        set_text_if_present(object, "mmsiText", smv.mmsi_text);
-        set_if_valid(object, "timeOfDay", smv.utc_time_s);
-        if (smv.latitude_deg.valid || smv.longitude_deg.valid) {
-            JsonObject pos = object["position"].to<JsonObject>();
-            set_if_valid(pos, "latitude", smv.latitude_deg);
-            set_if_valid(pos, "longitude", smv.longitude_deg);
-        }
-        set_text_if_present(object, "eventType", smv.event_type);
-        set_text_if_present(object, "sarCapability", smv.sar_capability);
-        set_text_if_present(object, "routeId", smv.route_id);
-        object["status"] = smv.status;
-        set_text_if_present(object, "description", smv.description);
+        const auto& m = model.notifications.special.smv;
+        if (!m.last_update_us) return false;
+        set_text(object, "id", m.message_id);
+        set(object, "mmsi", m.mmsi);
+        set(object, "timeOfDay", m.utc_time_s);
+        set_position(object, m.latitude_deg, m.longitude_deg);
+        set_text(object, "eventType", m.event_type);
+        set_text(object, "description", m.description);
+        object["status"] = m.status;
         return true;
     }
 
     bool write_legacy_comm(const ship_data_model::DataModel<Real>& model, JsonObject object) const {
         bool any = false;
         const auto& rf = model.comm.radio_frequency_set;
-        if (rf.last_update_us != 0) {
-            JsonObject item = object["radioFrequencySet"].to<JsonObject>();
-            set_if_valid(item, "transmittingFrequencyHz", rf.transmitting_frequency_hz);
-            set_if_valid(item, "receivingFrequencyHz", rf.receiving_frequency_hz);
-            item["communicationMode"] = rf.communication_mode;
-            set_if_valid(item, "powerLevel", rf.power_level);
+        if (rf.last_update_us) {
+            JsonObject o = object["radioFrequencySet"].to<JsonObject>();
+            set(o, "transmittingFrequencyHz", rf.transmitting_frequency_hz);
+            set(o, "receivingFrequencyHz", rf.receiving_frequency_hz);
+            o["communicationMode"] = rf.communication_mode;
             any = true;
         }
         const auto& rlm = model.comm.return_link_message;
-        if (rlm.last_update_us != 0) {
-            JsonObject item = object["returnLinkMessage"].to<JsonObject>();
-            set_text_if_present(item, "beaconId", rlm.beacon_id);
-            set_if_valid(item, "receptionTime", rlm.reception_time_s);
-            item["messageCode"] = rlm.message_code;
-            set_text_if_present(item, "messageBody", rlm.message_body);
+        if (rlm.last_update_us) {
+            JsonObject o = object["returnLinkMessage"].to<JsonObject>();
+            set_text(o, "beaconId", rlm.beacon_id);
+            set(o, "receptionTime", rlm.reception_time_s);
+            o["messageCode"] = rlm.message_code;
+            set_text(o, "messageBody", rlm.message_body);
             any = true;
         }
         return any;
     }
 
-    bool write_object_value(const ship_data_model::DataModel<Real>& model, SignalKObjectKind kind, JsonObject object) const {
+    bool write_object(const ship_data_model::DataModel<Real>& model, SignalKObjectKind kind, JsonObject object) const {
         switch (kind) {
         case SignalKObjectKind::AisTargets: return write_ais_targets(model, object);
-        case SignalKObjectKind::AisOwnVessel: return write_ais_own_vessel(model, object);
+        case SignalKObjectKind::AisOwnVessel: return write_ais_own(model, object);
         case SignalKObjectKind::AisSafety: return write_ais_safety(model, object);
-        case SignalKObjectKind::AisDataLinkStatus: return write_ais_data_link_status(model, object);
+        case SignalKObjectKind::AisDataLinkStatus: return write_ais_status(model, object);
         case SignalKObjectKind::Dsc: return write_dsc(model, object);
         case SignalKObjectKind::InmarsatSafetyNet: return write_inmarsat(model, object);
         case SignalKObjectKind::Navtex: return write_navtex(model, object);
