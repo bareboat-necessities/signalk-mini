@@ -8,7 +8,7 @@
 #include "ais/ais_data.hpp"
 #include "wind_sea/wind_sea_data.hpp"
 #include "env/env_data.hpp"
-#include "fishing/trawl_data.hpp"
+#include "fishing/fishing_data.hpp"
 #include "propulsion/propulsion_data.hpp"
 #include "steering/steering_model_data.hpp"
 #include "fluids/fluids_data.hpp"
@@ -38,7 +38,7 @@ struct DataModel {
     WindData<Real> wind;
     SeaData<Real> sea;
     EnvData<Real> env;
-    TrawlData<Real> trawl;
+    FishingData<Real> fishing;
 
     PropulsionData<Real> propulsion;
     SteeringModelData<Real> steering;
