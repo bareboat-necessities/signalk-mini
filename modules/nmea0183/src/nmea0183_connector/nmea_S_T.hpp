@@ -3,8 +3,6 @@
 // Included inside Nmea0183RxConnector.
 // Balanced NMEA sentence group: S-T.
 
-#include "nmea_F_R_tail.hpp"
-
 template<typename Model>
 bool apply_sfi(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship_data_model::SensorSource source) {
     if (sentence.field_count < 4) {
