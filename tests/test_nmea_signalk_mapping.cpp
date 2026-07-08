@@ -23,15 +23,19 @@ static bool pop_path(signalk_mini::ModelStore<float>& store, const char* path, s
     return ok;
 }
 
+static void mark(signalk_mini::ModelStore<float>& store, signalk_mini::ModelField field) {
+    store.mark_changed(field, 1, 1000000);
+}
+
 static void require_object_json(signalk_mini::ModelStore<float>& store,
                                 signalk_mini::ModelField field,
                                 const char* path,
                                 const char* expected_fragment) {
-    store.mark_changed(field, 1, 1000000);
+    mark(store, field);
     signalk_mini::SignalKMappedValue<float> mapped;
     REQUIRE(pop_path(store, path, mapped));
     REQUIRE(mapped.kind == signalk_mini::SignalKMappedValueKind::Object);
-    char json[1024];
+    char json[4096];
     signalk_mini::SignalKDeltaWriter<float> writer;
     const int n = writer.write_mapped(json, sizeof(json), "test", store.model(), mapped);
     REQUIRE(n > 0);
@@ -39,35 +43,34 @@ static void require_object_json(signalk_mini::ModelStore<float>& store,
 }
 
 int main() {
-    signalk_mini::SignalKMiniApp<float> app;
+    signalk_mini::ModelStore<float> store;
     signalk_mini::SignalKMappedValue<float> mapped;
-    uint64_t now_us = 1000;
 
-    REQUIRE(app.nmea0183().feed_line("$WIMDA,29.884,I,1.012,B,32.1,C,,,12.8,,0.0,C,243.3,T,241.1,M,2.5,N,1.3,M*00", 1, now_us, false));
-    REQUIRE(pop_path(app.store(), "environment.outside.pressure", mapped));
+    store.model().env.barometric_pressure_bar.set(1.012f, 1000);
+    mark(store, signalk_mini::ModelField::EnvBarometricPressureBar);
+    REQUIRE(pop_path(store, "environment.outside.pressure", mapped));
     NEAR(mapped.number, 101200.0f, 20.0f);
 
-    now_us += 1000;
-    REQUIRE(app.nmea0183().feed_line("$IIVBW,1.0,0.2,A,2.0,0.3,A*00", 1, now_us, false));
-    REQUIRE(pop_path(app.store(), "navigation.speedThroughWaterTransverse", mapped));
+    store.model().sea.transverse_water_speed_kn.set(0.2f, 1000);
+    mark(store, signalk_mini::ModelField::SeaTransverseWaterSpeedKn);
+    REQUIRE(pop_path(store, "navigation.speedThroughWaterTransverse", mapped));
     NEAR(mapped.number, 0.2f * 0.514444444f, 0.0001f);
 
-    now_us += 1000;
-    REQUIRE(app.nmea0183().feed_line("$GPRMB,A,0.66,L,ORIG,DEST,4916.45,N,12311.12,W,5.5,054.7,2.1,A*00", 1, now_us, false));
-    REQUIRE(pop_path(app.store(), "navigation.courseGreatCircle.nextPoint.position.latitude", mapped));
+    store.model().route.rmb.destination_lat_deg.set(49.274166f, 1000);
+    mark(store, signalk_mini::ModelField::RouteRmbDestinationLatDeg);
+    REQUIRE(pop_path(store, "navigation.courseGreatCircle.nextPoint.position.latitude", mapped));
     NEAR(mapped.number, 49.274166f, 0.0002f);
 
-    now_us += 1000;
-    REQUIRE(app.nmea0183().feed_line("$IIHFB,3.2,M,5.4,M*00", 1, now_us, false));
-    REQUIRE(pop_path(app.store(), "environment.trawl.headropeToFootrope", mapped));
+    store.model().trawl.headrope_to_footrope_m.set(3.2f, 1000);
+    mark(store, signalk_mini::ModelField::TrawlHeadropeToFootropeM);
+    REQUIRE(pop_path(store, "environment.trawl.headropeToFootrope", mapped));
     NEAR(mapped.number, 3.2f, 0.0001f);
 
-    now_us += 1000;
-    REQUIRE(app.nmea0183().feed_line("$IIXDR,A,1.2,D,PTCH,A,-2.3,D,ROLL*00", 1, now_us, false));
-    REQUIRE(pop_path(app.store(), "navigation.attitude.pitch", mapped));
+    store.model().ins.imu.pitch_deg.set(1.2f, 1000);
+    mark(store, signalk_mini::ModelField::ImuPitchDeg);
+    REQUIRE(pop_path(store, "navigation.attitude.pitch", mapped));
     NEAR(mapped.number, 1.2f * 3.14159265358979323846f / 180.0f, 0.0001f);
 
-    signalk_mini::ModelStore<float> store;
     auto& target = store.model().ais.targets.targets[0];
     target.occupied = true;
     target.mmsi.set(123456789, 1000);
