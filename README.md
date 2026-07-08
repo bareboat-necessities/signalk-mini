@@ -29,6 +29,8 @@ Connections are runtime objects. One connector can create zero, one, or many run
 
 Connector config is separated into common connector identity, access flags, protocol-specific settings, and transport-specific settings. For example, NMEA0183 checksum settings belong to the NMEA0183 protocol block, while UDP listen host/port belong to the UDP transport block.
 
+Signal K delta source labels are resolved from the connector that produced a model change when possible. Direct sketch-owned input falls back to the publisher source label.
+
 ## Defaults
 
 The built-in default connector listens for NMEA0183 UDP datagrams on all local interfaces:
