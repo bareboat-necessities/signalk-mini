@@ -40,6 +40,10 @@ struct DataModel {
     EnvData<Real> env;
     FishingData<Real> fishing;
 
+    // Compatibility alias while parser/tests finish moving to model.fishing.trawl.
+    // Both names address the same storage.
+    TrawlData<Real>& trawl = fishing.trawl;
+
     PropulsionData<Real> propulsion;
     SteeringModelData<Real> steering;
     AutopilotModelData<Real> autopilot;
