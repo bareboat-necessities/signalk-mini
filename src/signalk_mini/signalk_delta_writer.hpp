@@ -70,6 +70,7 @@ private:
 
     template<typename StampedValue>
     void set(JsonObject object, const char* key, const StampedValue& stamped) const { if (stamped.valid) object[key] = stamped.value; }
+    void set(JsonObject object, const char* key, char value) const { if (value) object[key] = value; }
     template<typename StampedValue>
     void set_rad(JsonObject object, const char* key, const StampedValue& stamped) const { if (stamped.valid) object[key] = deg_to_rad<Real>(static_cast<Real>(stamped.value)); }
     template<typename StampedValue>
@@ -235,8 +236,8 @@ private:
         if (n.received.first_seen_us) {
             JsonObject o = object["latest"].to<JsonObject>();
             set_text(o, "messageId", n.received.navtex_message_id);
-            o["transmitter"] = n.received.transmitter_id;
-            o["subject"] = n.received.subject_indicator;
+            set(o, "transmitter", n.received.transmitter_id);
+            set(o, "subject", n.received.subject_indicator);
             set_text(o, "subjectLabel", n.received.subject_label);
             set(o, "serialNumber", n.received.serial_number);
             set_text(o, "text", n.received.body_text[0] ? n.received.body_text : n.received.message_text);
@@ -263,17 +264,17 @@ private:
             JsonObject o = object["report"].to<JsonObject>();
             set_text(o, "id", a.alert_report.alert_identifier);
             set(o, "instance", a.alert_report.alert_instance);
-            o["category"] = a.alert_report.category;
-            o["priority"] = a.alert_report.priority;
-            o["state"] = a.alert_report.alert_state;
+            set(o, "category", a.alert_report.category);
+            set(o, "priority", a.alert_report.priority);
+            set(o, "state", a.alert_report.alert_state);
             set_text(o, "text", a.alert_report.alert_text);
             any = true;
         }
         if (a.alarm_state.last_update_us) {
             JsonObject o = object["alarmState"].to<JsonObject>();
             set_text(o, "id", a.alarm_state.alarm_identifier);
-            o["conditionState"] = a.alarm_state.condition_state;
-            o["acknowledgementState"] = a.alarm_state.acknowledgement_state;
+            set(o, "conditionState", a.alarm_state.condition_state);
+            set(o, "acknowledgementState", a.alarm_state.acknowledgement_state);
             set_text(o, "description", a.alarm_state.description);
             any = true;
         }
@@ -289,7 +290,7 @@ private:
         set_position(object, m.latitude_deg, m.longitude_deg);
         set_text(object, "eventType", m.event_type);
         set_text(object, "description", m.description);
-        object["status"] = m.status;
+        set(object, "status", m.status);
         return true;
     }
 
@@ -300,7 +301,7 @@ private:
             JsonObject o = object["radioFrequencySet"].to<JsonObject>();
             set(o, "transmittingFrequencyHz", rf.transmitting_frequency_hz);
             set(o, "receivingFrequencyHz", rf.receiving_frequency_hz);
-            o["communicationMode"] = rf.communication_mode;
+            set(o, "communicationMode", rf.communication_mode);
             any = true;
         }
         const auto& rlm = model.comm.return_link_message;
@@ -308,7 +309,7 @@ private:
             JsonObject o = object["returnLinkMessage"].to<JsonObject>();
             set_text(o, "beaconId", rlm.beacon_id);
             set(o, "receptionTime", rlm.reception_time_s);
-            o["messageCode"] = rlm.message_code;
+            set(o, "messageCode", rlm.message_code);
             set_text(o, "messageBody", rlm.message_body);
             any = true;
         }
