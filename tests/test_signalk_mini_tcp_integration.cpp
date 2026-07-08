@@ -149,9 +149,10 @@ bool line_has_valid_hello(const std::string& line) {
     REQUIRE(!roles.isNull());
     bool has_master = false;
     bool has_main = false;
-    for (const char* role : roles) {
-        if (role && std::strcmp(role, "master") == 0) has_master = true;
-        if (role && std::strcmp(role, "main") == 0) has_main = true;
+    for (JsonVariant role : roles) {
+        const char* text = role.as<const char*>();
+        if (text && std::strcmp(text, "master") == 0) has_master = true;
+        if (text && std::strcmp(text, "main") == 0) has_main = true;
     }
     REQUIRE(has_master);
     REQUIRE(has_main);
