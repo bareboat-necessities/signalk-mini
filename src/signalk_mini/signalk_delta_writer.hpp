@@ -70,7 +70,7 @@ private:
 
     template<typename StampedValue>
     void set(JsonObject object, const char* key, const StampedValue& stamped) const { if (stamped.valid) object[key] = stamped.value; }
-    void set(JsonObject object, const char* key, char value) const { if (value) object[key] = value; }
+    void set(JsonObject object, const char* key, char value) const { if (value) object[key] = static_cast<int>(value); }
     template<typename StampedValue>
     void set_rad(JsonObject object, const char* key, const StampedValue& stamped) const { if (stamped.valid) object[key] = deg_to_rad<Real>(static_cast<Real>(stamped.value)); }
     template<typename StampedValue>
@@ -153,7 +153,7 @@ private:
             JsonObject o = object["addressed"].to<JsonObject>();
             set_text(o, "destinationMmsi", a.destination_mmsi);
             set_text(o, "messageId", a.sequential_message_id);
-            o["retransmit"] = a.retransmit_flag;
+            set(o, "retransmit", a.retransmit_flag);
             set_text(o, "text", a.safety_text);
             any = true;
         }
@@ -216,7 +216,7 @@ private:
         JsonObject o = object["latest"].to<JsonObject>();
         set_text(o, "messageId", m.message_id);
         set_text(o, "terminalId", m.terminal_id);
-        o["priority"] = m.priority_code;
+        set(o, "priority", m.priority_code);
         set_text(o, "priorityLabel", m.priority_label);
         set_text(o, "serviceCode", m.service_code);
         set_text(o, "service", m.service_label);
