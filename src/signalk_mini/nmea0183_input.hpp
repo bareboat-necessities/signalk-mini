@@ -97,7 +97,7 @@ private:
         if (is(sentence, "GSA")) { mark(ModelField::GnssDopActiveFixMode, source_id, now_us); mark(ModelField::GnssDopActivePdop, source_id, now_us); mark(ModelField::GnssHdop, source_id, now_us); mark(ModelField::GnssDopActiveVdop, source_id, now_us); }
         if (is(sentence, "GFA")) { mark(ModelField::GnssFixAccuracyHorizontalM, source_id, now_us); mark(ModelField::GnssFixAccuracyVerticalM, source_id, now_us); mark(ModelField::GnssFixAccuracyPdop, source_id, now_us); mark(ModelField::GnssHdop, source_id, now_us); mark(ModelField::GnssFixAccuracyVdop, source_id, now_us); }
         if (is(sentence, "GSV")) { mark(ModelField::GnssSatellitesInView, source_id, now_us); mark(ModelField::GnssSatellitePrn0, source_id, now_us); mark(ModelField::GnssSatelliteElevationDeg0, source_id, now_us); mark(ModelField::GnssSatelliteAzimuthDeg0, source_id, now_us); mark(ModelField::GnssSatelliteSnrDb0, source_id, now_us); }
-        if (is(sentence, "HDT")) { mark(ModelField::ImuHeadingDeg, source_id, now_us); mark(ModelField::ImuHeadingTrueDeg, source_id, now_us); }
+        if (is(sentence, "HDT")) mark(ModelField::ImuHeadingTrueDeg, source_id, now_us);
         if (is(sentence, "HDM") || is(sentence, "HDG")) mark(ModelField::ImuHeadingMagneticDeg, source_id, now_us);
         if (is(sentence, "HDG")) { mark(ModelField::ImuMagneticDeviationDeg, source_id, now_us); mark(ModelField::ImuMagneticVariationDeg, source_id, now_us); mark(ModelField::GnssDeclinationDeg, source_id, now_us); }
         if (is(sentence, "XDR")) { mark(ModelField::ImuPitchDeg, source_id, now_us); mark(ModelField::ImuRollDeg, source_id, now_us); }
