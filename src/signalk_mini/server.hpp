@@ -49,9 +49,7 @@ public:
 
         int one = 1;
         (void)::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
-        if (config.allow_broadcast) {
-            (void)::setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &one, sizeof(one));
-        }
+        if (config.allow_broadcast) (void)::setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &one, sizeof(one));
 
         int flags = ::fcntl(fd, F_GETFL, 0);
         if (flags < 0 || ::fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0) {
@@ -69,7 +67,6 @@ public:
                 ::close(fd);
                 return false;
             }
-
             if (::bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
                 ::close(fd);
                 return false;
@@ -227,24 +224,24 @@ public:
         return seatalk::make_pilot_key(frame, key, long_press) && transmit_seatalk_frame(frame);
     }
 
-    bool transmit_seatalk_depth_m(float depth_m, bool alarm = false) {
+    bool transmit_seatalk_depth_m(Real depth_m, bool alarm = false) {
         seatalk::SeaTalkFrame frame;
-        return seatalk::make_depth_m(frame, depth_m, alarm) && transmit_seatalk_frame(frame);
+        return seatalk::make_depth_m(frame, static_cast<float>(depth_m), alarm) && transmit_seatalk_frame(frame);
     }
 
-    bool transmit_seatalk_apparent_wind_angle_deg(float angle_deg) {
+    bool transmit_seatalk_apparent_wind_angle_deg(Real angle_deg) {
         seatalk::SeaTalkFrame frame;
-        return seatalk::make_apparent_wind_angle_deg(frame, angle_deg) && transmit_seatalk_frame(frame);
+        return seatalk::make_apparent_wind_angle_deg(frame, static_cast<float>(angle_deg)) && transmit_seatalk_frame(frame);
     }
 
-    bool transmit_seatalk_apparent_wind_speed_kn(float speed_kn) {
+    bool transmit_seatalk_apparent_wind_speed_kn(Real speed_kn) {
         seatalk::SeaTalkFrame frame;
-        return seatalk::make_apparent_wind_speed_kn(frame, speed_kn) && transmit_seatalk_frame(frame);
+        return seatalk::make_apparent_wind_speed_kn(frame, static_cast<float>(speed_kn)) && transmit_seatalk_frame(frame);
     }
 
-    bool transmit_seatalk_speed_through_water_kn(float speed_kn) {
+    bool transmit_seatalk_speed_through_water_kn(Real speed_kn) {
         seatalk::SeaTalkFrame frame;
-        return seatalk::make_speed_through_water_kn(frame, speed_kn) && transmit_seatalk_frame(frame);
+        return seatalk::make_speed_through_water_kn(frame, static_cast<float>(speed_kn)) && transmit_seatalk_frame(frame);
     }
 
 private:
@@ -256,6 +253,16 @@ private:
         options.backpressure = async_event_loop::TcpBackpressureOptions::server_default();
 #endif
         return options;
+    }
+
+    static ship_data_model::SensorSource sensor_source_for_transport(ConnectorTransport transport) {
+        switch (transport) {
+        case ConnectorTransport::Serial: return ship_data_model::SensorSource::serial;
+        case ConnectorTransport::TcpClient:
+        case ConnectorTransport::TcpServer:
+        case ConnectorTransport::Udp: return ship_data_model::SensorSource::tcp;
+        default: return ship_data_model::SensorSource::none;
+        }
     }
 
     bool listen(async_event_loop::NativeTcpServer& server,
@@ -278,25 +285,20 @@ private:
             ConnectionFlags flags{owner.config_.signalk.allow_rx, owner.config_.signalk.allow_tx};
             if (!connections.add(connection, flags)) connection.close();
         }
-
         void on_line(async_event_loop::ITcpConnection& connection, async_event_loop::LineView) override {
             if (!connections.allow_rx(connection)) return;
         }
-
         void on_backpressure(async_event_loop::ITcpConnection& connection, const async_event_loop::TcpBackpressureInfo&) override {
             connections.remove(connection);
             connection.close();
         }
-
         void on_close(async_event_loop::ITcpConnection& connection) override { connections.remove(connection); }
         void on_error(async_event_loop::ITcpConnection& connection, int) override { connections.remove(connection); }
         void on_too_many_connections(async_event_loop::ITcpConnection& connection) override { connection.close(); }
     };
 
     struct ConnectorTcpServerHandler : async_event_loop::ITcpLineServerHandler {
-        ConnectorTcpServerHandler(MiniSignalKServer& owner_ref, size_t connector_index)
-            : owner(owner_ref), index(connector_index) {}
-
+        ConnectorTcpServerHandler(MiniSignalKServer& owner_ref, size_t connector_index) : owner(owner_ref), index(connector_index) {}
         MiniSignalKServer& owner;
         size_t index;
         ConnectionRegistry<MaxConnectionsPerConnector> connections;
@@ -304,23 +306,19 @@ private:
         void on_accept(async_event_loop::ITcpConnection& connection, const async_event_loop::TcpPeerInfo&) override {
             if (!connections.add(connection, owner.connector_connection_flags(index))) connection.close();
         }
-
         void on_line(async_event_loop::ITcpConnection& connection, async_event_loop::LineView line) override {
             if (!connections.allow_rx(connection)) return;
             char text[160];
             async_event_loop::line_to_cstr(line, text);
             owner.handle_connector_nmea_line(index, text);
         }
-
         void on_close(async_event_loop::ITcpConnection& connection) override { connections.remove(connection); }
         void on_error(async_event_loop::ITcpConnection& connection, int) override { connections.remove(connection); }
         void on_too_many_connections(async_event_loop::ITcpConnection& connection) override { connection.close(); }
     };
 
     struct ConnectorTcpRawServerHandler : async_event_loop::ITcpServerHandler {
-        ConnectorTcpRawServerHandler(MiniSignalKServer& owner_ref, size_t connector_index)
-            : owner(owner_ref), index(connector_index) {}
-
+        ConnectorTcpRawServerHandler(MiniSignalKServer& owner_ref, size_t connector_index) : owner(owner_ref), index(connector_index) {}
         MiniSignalKServer& owner;
         size_t index;
         ConnectionRegistry<MaxConnectionsPerConnector> connections;
@@ -328,20 +326,16 @@ private:
         void on_accept(async_event_loop::ITcpConnection& connection, const async_event_loop::TcpPeerInfo&) override {
             if (!connections.add(connection, owner.connector_connection_flags(index))) connection.close();
         }
-
         void on_data(async_event_loop::ITcpConnection& connection) override {
             if (!connections.allow_rx(connection)) return;
             owner.handle_connector_stream_bytes(index, connection);
         }
-
         void on_close(async_event_loop::ITcpConnection& connection) override { connections.remove(connection); }
         void on_error(async_event_loop::ITcpConnection& connection, int) override { connections.remove(connection); }
     };
 
     struct ConnectorTcpClientHandler : async_event_loop::ITcpClientHandler {
-        ConnectorTcpClientHandler(MiniSignalKServer& owner_ref, size_t connector_index)
-            : owner(owner_ref), index(connector_index) {}
-
+        ConnectorTcpClientHandler(MiniSignalKServer& owner_ref, size_t connector_index) : owner(owner_ref), index(connector_index) {}
         MiniSignalKServer& owner;
         size_t index;
 
@@ -351,11 +345,9 @@ private:
                 owner.handle_connector_stream_bytes(index, connection);
                 return;
             }
-
             char text[160];
             while (connection.read_line(text, sizeof(text))) owner.handle_connector_nmea_line(index, text);
         }
-
         void on_close(async_event_loop::ITcpConnection&) override {}
         void on_error(int) override {}
     };
@@ -405,12 +397,12 @@ private:
     const ConnectionFlags& connector_connection_flags(size_t index) const { return connector_slot(index).connection_flags; }
     bool connector_allow_rx(size_t index) const { return connector_slot(index).connection_flags.allow_rx; }
     ConnectorProtocol connector_protocol(size_t index) const { return connector_slot(index).config.protocol.kind; }
+    ship_data_model::SensorSource connector_sensor_source(size_t index) const { return sensor_source_for_transport(connector_slot(index).config.transport.kind); }
 
     void start_configured_connectors() {
         connector_slots_.clear();
         if (!config_.connectors || config_.connector_count == 0) return;
         connector_slots_.reserve(config_.connector_count);
-
         for (size_t i = 0; i < config_.connector_count; ++i) {
             const ConnectorConfig& connector = config_.connectors[i];
             std::unique_ptr<ConnectorRuntimeSlot> slot(new ConnectorRuntimeSlot(*this, i));
@@ -420,7 +412,6 @@ private:
                 ? effective_nmea0183_validate_checksum(connector.protocol.nmea0183, connector.transport.kind)
                 : false;
             connector_slots_.push_back(std::move(slot));
-
             ConnectorRuntimeSlot& runtime = *connector_slots_.back();
             if (!connector.enabled) continue;
             if (connector.protocol.kind == ConnectorProtocol::Nmea0183) runtime.started = start_nmea0183_connector(runtime);
@@ -436,14 +427,10 @@ private:
             options.port = slot.config.transport.tcp_client.port;
             return slot.tcp_client.connect(options, slot.tcp_client_handler);
         }
-        case ConnectorTransport::TcpServer:
-            return listen(slot.tcp_server, slot.tcp_line_handler, slot.config.transport.tcp_server.host, slot.config.transport.tcp_server.port);
-        case ConnectorTransport::Serial:
-            return start_nmea0183_serial_connector(slot);
-        case ConnectorTransport::Udp:
-            return start_udp_listener(slot);
-        default:
-            return false;
+        case ConnectorTransport::TcpServer: return listen(slot.tcp_server, slot.tcp_line_handler, slot.config.transport.tcp_server.host, slot.config.transport.tcp_server.port);
+        case ConnectorTransport::Serial: return start_nmea0183_serial_connector(slot);
+        case ConnectorTransport::Udp: return start_udp_listener(slot);
+        default: return false;
         }
     }
 
@@ -455,14 +442,10 @@ private:
             options.port = slot.config.transport.tcp_client.port;
             return slot.tcp_client.connect(options, slot.tcp_client_handler);
         }
-        case ConnectorTransport::TcpServer:
-            return listen(slot.tcp_server, slot.tcp_raw_server_handler, slot.config.transport.tcp_server.host, slot.config.transport.tcp_server.port);
-        case ConnectorTransport::Serial:
-            return start_seatalk_serial_connector(slot);
-        case ConnectorTransport::Udp:
-            return start_udp_listener(slot);
-        default:
-            return false;
+        case ConnectorTransport::TcpServer: return listen(slot.tcp_server, slot.tcp_raw_server_handler, slot.config.transport.tcp_server.host, slot.config.transport.tcp_server.port);
+        case ConnectorTransport::Serial: return start_seatalk_serial_connector(slot);
+        case ConnectorTransport::Udp: return start_udp_listener(slot);
+        default: return false;
         }
     }
 
@@ -521,36 +504,29 @@ private:
     void handle_connector_stream_bytes(size_t index, async_event_loop::IByteStream& stream) {
         ConnectorRuntimeSlot& slot = connector_slot(index);
         const SourceId source_id = static_cast<SourceId>(10 + index);
+        const ship_data_model::SensorSource source = connector_sensor_source(index);
         uint8_t buf[128];
         bool changed = false;
-
         while (stream.readable()) {
             const int n = stream.read(buf, sizeof(buf));
             if (n <= 0) break;
-            if (slot.seatalk_input.feed_octets(buf, static_cast<size_t>(n), source_id, loop_.clock().micros())) {
-                changed = true;
-            }
+            if (slot.seatalk_input.feed_octets(buf, static_cast<size_t>(n), source_id, loop_.clock().micros(), source)) changed = true;
         }
-
         if (changed) publish();
     }
 
     void handle_connector_udp_datagrams(size_t index) {
         ConnectorRuntimeSlot& slot = connector_slot(index);
         if (!slot.connection_flags.allow_rx) return;
+        const ship_data_model::SensorSource source = connector_sensor_source(index);
         uint8_t buf[512];
-
         while (slot.udp_listener.readable()) {
             const int n = slot.udp_listener.read(buf, sizeof(buf) - 1);
             if (n <= 0) break;
-
             if (slot.config.protocol.kind == ConnectorProtocol::SeaTalk1) {
-                if (slot.seatalk_input.feed_datagram(buf, static_cast<size_t>(n), static_cast<SourceId>(10 + index), loop_.clock().micros())) {
-                    publish();
-                }
+                if (slot.seatalk_input.feed_datagram(buf, static_cast<size_t>(n), static_cast<SourceId>(10 + index), loop_.clock().micros(), source)) publish();
                 continue;
             }
-
             buf[n] = 0;
             char* begin = reinterpret_cast<char*>(buf);
             char* line = begin;
@@ -567,7 +543,7 @@ private:
     void handle_connector_nmea_line(size_t index, const char* text) {
         const ConnectorRuntimeSlot& slot = connector_slot(index);
         const SourceId source_id = static_cast<SourceId>(10 + index);
-        if (nmea_.feed_line(text, source_id, loop_.clock().micros(), slot.nmea0183_validate_checksum)) publish();
+        if (nmea_.feed_line(text, source_id, loop_.clock().micros(), slot.nmea0183_validate_checksum, connector_sensor_source(index))) publish();
     }
 
     bool write_all(async_event_loop::IByteStream& stream, const uint8_t* data, size_t length) {
@@ -576,9 +552,7 @@ private:
         return n == static_cast<int>(length);
     }
 
-    bool transmit_to_tcp_server_connections(ConnectionRegistry<MaxConnectionsPerConnector>& connections,
-                                            const uint8_t* data,
-                                            size_t length) {
+    bool transmit_to_tcp_server_connections(ConnectionRegistry<MaxConnectionsPerConnector>& connections, const uint8_t* data, size_t length) {
         bool any = false;
         connections.for_each_tx([&](async_event_loop::ITcpConnection& connection) {
             if (write_all(connection, data, length)) any = true;
@@ -588,25 +562,17 @@ private:
 
     bool transmit_bytes_to_slot(ConnectorRuntimeSlot& slot, const uint8_t* data, size_t length) {
         switch (slot.config.transport.kind) {
-        case ConnectorTransport::Serial:
-            return write_all(slot.serial_stream, data, length);
-        case ConnectorTransport::TcpClient:
-            return slot.tcp_client.connected() && write_all(slot.tcp_client.connection(), data, length);
+        case ConnectorTransport::Serial: return write_all(slot.serial_stream, data, length);
+        case ConnectorTransport::TcpClient: return slot.tcp_client.connected() && write_all(slot.tcp_client.connection(), data, length);
         case ConnectorTransport::TcpServer:
-            if (slot.config.protocol.kind == ConnectorProtocol::SeaTalk1) {
-                return transmit_to_tcp_server_connections(slot.tcp_raw_server_handler.connections, data, length);
-            }
+            if (slot.config.protocol.kind == ConnectorProtocol::SeaTalk1) return transmit_to_tcp_server_connections(slot.tcp_raw_server_handler.connections, data, length);
             return transmit_to_tcp_server_connections(slot.tcp_server_handler.connections, data, length);
-        case ConnectorTransport::Udp:
-            return write_all(slot.udp_listener, data, length);
-        default:
-            return false;
+        case ConnectorTransport::Udp: return write_all(slot.udp_listener, data, length);
+        default: return false;
         }
     }
 
-    bool transmit_seatalk_binary(ConnectorRuntimeSlot& slot, const seatalk::SeaTalkFrame& frame) {
-        return transmit_bytes_to_slot(slot, frame.bytes, frame.length);
-    }
+    bool transmit_seatalk_binary(ConnectorRuntimeSlot& slot, const seatalk::SeaTalkFrame& frame) { return transmit_bytes_to_slot(slot, frame.bytes, frame.length); }
 
     bool transmit_seatalk_over_nmea(ConnectorRuntimeSlot& slot, const seatalk::SeaTalkFrame& frame) {
         char sentence[96];
