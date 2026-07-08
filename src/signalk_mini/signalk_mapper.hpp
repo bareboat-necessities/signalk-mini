@@ -7,12 +7,27 @@
 
 namespace signalk_mini {
 
-enum class SignalKMappedValueKind : uint8_t { Number, Bool, Text };
+enum class SignalKObjectKind : uint8_t {
+    None,
+    AisTargets,
+    AisOwnVessel,
+    AisSafety,
+    AisDataLinkStatus,
+    Dsc,
+    InmarsatSafetyNet,
+    Navtex,
+    Alerts,
+    Mob,
+    LegacyComm,
+};
+
+enum class SignalKMappedValueKind : uint8_t { Number, Bool, Text, Object };
 
 template<typename Real>
 struct SignalKMappedValue {
     const char* path = nullptr;
     SignalKMappedValueKind kind = SignalKMappedValueKind::Number;
+    SignalKObjectKind object_kind = SignalKObjectKind::None;
     Real number{};
     bool boolean = false;
     const char* text = nullptr;
@@ -102,7 +117,7 @@ public:
         case ModelField::SeaDepthBelowSurfaceM: return map_number(model.sea.depth_below_surface_m, "environment.depth.belowSurface", out);
         case ModelField::SeaDepthOffsetM: return map_number(model.sea.depth_offset_m, "environment.depth.transducerOffset", out);
         case ModelField::SteeringRudderAngleDeg: return map_number(model.steering.rudder.angle_deg, "steering.rudderAngle", out, UnitTransform::DegToRad);
-        case ModelField::PropulsionRevolutionsNumber: return map_int(model.propulsion.revolutions.number, "propulsion.main.seatalkEngineId", out);
+        case ModelField::PropulsionRevolutionsNumber: return map_int(model.propulsion.revolutions.number, "propulsion.main.engineInstance", out);
         case ModelField::PropulsionRevolutionsSpeedRpm: return map_number(model.propulsion.revolutions.speed_rpm, "propulsion.main.revolutions", out, UnitTransform::RpmToHz);
         case ModelField::PropulsionRevolutionsPitchPercent: return map_number(model.propulsion.revolutions.propeller_pitch_percent, "propulsion.main.pitch", out, UnitTransform::PercentToRatio);
         case ModelField::AutopilotMode: return map_text(signalk_autopilot_mode(model.autopilot.controller.mode.value), "steering.autopilot.mode", out);
@@ -146,17 +161,27 @@ public:
         case ModelField::RouteWaypointPerpendicularPassed: return map_bool(model.route.waypoint_arrival.perpendicular_passed.value, "navigation.courseGreatCircle.perpendicularPassed", out);
         case ModelField::RouteWaypointArrivalRadiusNmi: return map_number(model.route.waypoint_arrival.arrival_radius_nmi, "navigation.courseGreatCircle.arrivalCircleRadius", out, UnitTransform::NmiToM);
         case ModelField::RouteWaypointArrivalId: return map_text(model.route.waypoint_arrival.waypoint_id, "navigation.courseGreatCircle.nextPoint.id", out);
-        case ModelField::TrawlHeadropeToFootropeM: return map_number(model.trawl.headrope_to_footrope_m, "fishing.trawl.headropeToFootrope", out);
-        case ModelField::TrawlHeadropeToBottomM: return map_number(model.trawl.headrope_to_bottom_m, "fishing.trawl.headropeToBottom", out);
-        case ModelField::TrawlDoorCenterlineOffsetM: return map_number(model.trawl.door_centerline_offset_m, "fishing.trawl.door.centerlineOffset", out);
-        case ModelField::TrawlDoorAlongCenterlineM: return map_number(model.trawl.door_along_centerline_m, "fishing.trawl.door.alongCenterline", out);
-        case ModelField::TrawlCartesianCenterlineOffsetM: return map_number(model.trawl.cartesian_centerline_offset_m, "fishing.trawl.cartesian.centerlineOffset", out);
-        case ModelField::TrawlCartesianAlongCenterlineM: return map_number(model.trawl.cartesian_along_centerline_m, "fishing.trawl.cartesian.alongCenterline", out);
-        case ModelField::TrawlDepthBelowSurfaceM: return map_number(model.trawl.depth_below_surface_m, "fishing.trawl.depthBelowSurface", out);
-        case ModelField::TrawlRelativeRangeM: return map_number(model.trawl.relative_range_m, "fishing.trawl.relative.range", out);
-        case ModelField::TrawlRelativeBearingDeg: return map_number(model.trawl.relative_bearing_deg, "fishing.trawl.relative.bearing", out, UnitTransform::DegToRad);
-        case ModelField::TrawlTrueRangeM: return map_number(model.trawl.true_range_m, "fishing.trawl.true.range", out);
-        case ModelField::TrawlTrueBearingDeg: return map_number(model.trawl.true_bearing_deg, "fishing.trawl.true.bearing", out, UnitTransform::DegToRad);
+        case ModelField::TrawlHeadropeToFootropeM: return map_number(model.trawl.headrope_to_footrope_m, "environment.trawl.headropeToFootrope", out);
+        case ModelField::TrawlHeadropeToBottomM: return map_number(model.trawl.headrope_to_bottom_m, "environment.trawl.headropeToBottom", out);
+        case ModelField::TrawlDoorCenterlineOffsetM: return map_number(model.trawl.door_centerline_offset_m, "environment.trawl.door.centerlineOffset", out);
+        case ModelField::TrawlDoorAlongCenterlineM: return map_number(model.trawl.door_along_centerline_m, "environment.trawl.door.alongCenterline", out);
+        case ModelField::TrawlCartesianCenterlineOffsetM: return map_number(model.trawl.cartesian_centerline_offset_m, "environment.trawl.cartesian.centerlineOffset", out);
+        case ModelField::TrawlCartesianAlongCenterlineM: return map_number(model.trawl.cartesian_along_centerline_m, "environment.trawl.cartesian.alongCenterline", out);
+        case ModelField::TrawlDepthBelowSurfaceM: return map_number(model.trawl.depth_below_surface_m, "environment.trawl.depthBelowSurface", out);
+        case ModelField::TrawlRelativeRangeM: return map_number(model.trawl.relative_range_m, "environment.trawl.relative.range", out);
+        case ModelField::TrawlRelativeBearingDeg: return map_number(model.trawl.relative_bearing_deg, "environment.trawl.relative.bearing", out, UnitTransform::DegToRad);
+        case ModelField::TrawlTrueRangeM: return map_number(model.trawl.true_range_m, "environment.trawl.true.range", out);
+        case ModelField::TrawlTrueBearingDeg: return map_number(model.trawl.true_bearing_deg, "environment.trawl.true.bearing", out, UnitTransform::DegToRad);
+        case ModelField::AisTargetsObject: return map_object("navigation.ais.targets", SignalKObjectKind::AisTargets, out);
+        case ModelField::AisOwnVesselObject: return map_object("navigation.ais.ownVessel", SignalKObjectKind::AisOwnVessel, out);
+        case ModelField::AisSafetyObject: return map_object("notifications.ais.safety", SignalKObjectKind::AisSafety, out);
+        case ModelField::AisDataLinkStatusObject: return map_object("navigation.ais.dataLinkStatus", SignalKObjectKind::AisDataLinkStatus, out);
+        case ModelField::DscStructuredNotification: return map_object("notifications.dsc", SignalKObjectKind::Dsc, out);
+        case ModelField::InmarsatSafetyNetStructuredNotification: return map_object("notifications.inmarsat.safetynet", SignalKObjectKind::InmarsatSafetyNet, out);
+        case ModelField::NavtexStructuredNotification: return map_object("notifications.navtex", SignalKObjectKind::Navtex, out);
+        case ModelField::AlertStructuredNotification: return map_object("notifications.alerts", SignalKObjectKind::Alerts, out);
+        case ModelField::MobStructuredNotification: return map_object("notifications.mob", SignalKObjectKind::Mob, out);
+        case ModelField::LegacyCommObject: return map_object("communication.legacy", SignalKObjectKind::LegacyComm, out);
         case ModelField::NotificationText: return map_text(model.notifications.messages.text.text[0] ? model.notifications.messages.text.text : model.notifications.messages.text.value, "notifications.message.text", out);
         case ModelField::NotificationEvent: return map_text(model.notifications.messages.event.event_text, "notifications.message.event", out);
         default: return false;
@@ -215,6 +240,13 @@ private:
         out.path = path;
         out.kind = SignalKMappedValueKind::Text;
         out.text = text;
+        return true;
+    }
+
+    bool map_object(const char* path, SignalKObjectKind kind, SignalKMappedValue<Real>& out) const {
+        out.path = path;
+        out.kind = SignalKMappedValueKind::Object;
+        out.object_kind = kind;
         return true;
     }
 
