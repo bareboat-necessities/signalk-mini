@@ -11,7 +11,7 @@ public:
         : server_(config) {}
 
     bool begin() { return server_.begin(); }
-    void tick() { return server_.tick(); }
+    void tick() { server_.tick(); }
     void run_forever() { server_.run_forever(); }
     ModelStore<Real>& store() { return server_.store(); }
     const ModelStore<Real>& store() const { return server_.store(); }
