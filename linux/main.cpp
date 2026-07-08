@@ -9,6 +9,12 @@ namespace {
 
 constexpr const char* kDefaultConfigPath = "/etc/signalk-mini/signalk-mini.conf";
 
+enum class CliAction {
+    Run,
+    ExitSuccess,
+    ExitFailure,
+};
+
 const char* startup_error_to_string(signalk_mini::MiniSignalKServer<float>::StartupError error) {
     using StartupError = signalk_mini::MiniSignalKServer<float>::StartupError;
     switch (error) {
@@ -126,23 +132,23 @@ void print_startup_summary(const signalk_mini::SignalKMiniConfig& config, bool u
     }
 }
 
-bool parse_args(int argc, char** argv, const char*& config_path, bool& explicit_config) {
+CliAction parse_args(int argc, char** argv, const char*& config_path, bool& explicit_config) {
     config_path = kDefaultConfigPath;
     explicit_config = false;
     for (int i = 1; i < argc; ++i) {
         const char* arg = argv[i];
         if (std::strcmp(arg, "-h") == 0 || std::strcmp(arg, "--help") == 0) {
             print_usage(argv[0]);
-            return false;
+            return CliAction::ExitSuccess;
         }
         if (std::strcmp(arg, "--version") == 0) {
             std::cout << "signalk-mini 0.1.0\n";
-            return false;
+            return CliAction::ExitSuccess;
         }
         if (std::strcmp(arg, "-c") == 0 || std::strcmp(arg, "--config") == 0) {
             if (i + 1 >= argc) {
                 std::cerr << arg << " requires a path\n";
-                return false;
+                return CliAction::ExitFailure;
             }
             config_path = argv[++i];
             explicit_config = true;
@@ -151,16 +157,16 @@ bool parse_args(int argc, char** argv, const char*& config_path, bool& explicit_
         if (arg[0] == '-') {
             std::cerr << "unknown option: " << arg << "\n";
             print_usage(argv[0]);
-            return false;
+            return CliAction::ExitFailure;
         }
         if (explicit_config || std::strcmp(config_path, kDefaultConfigPath) != 0) {
             std::cerr << "multiple config paths provided\n";
-            return false;
+            return CliAction::ExitFailure;
         }
         config_path = arg;
         explicit_config = true;
     }
-    return true;
+    return CliAction::Run;
 }
 
 } // namespace
@@ -168,9 +174,9 @@ bool parse_args(int argc, char** argv, const char*& config_path, bool& explicit_
 int main(int argc, char** argv) {
     const char* config_path = nullptr;
     bool explicit_config = false;
-    if (!parse_args(argc, argv, config_path, explicit_config)) {
-        return 0;
-    }
+    const CliAction cli_action = parse_args(argc, argv, config_path, explicit_config);
+    if (cli_action == CliAction::ExitSuccess) return 0;
+    if (cli_action == CliAction::ExitFailure) return 1;
 
     signalk_mini_linux::ConfigLoader config_loader;
     std::string error;
