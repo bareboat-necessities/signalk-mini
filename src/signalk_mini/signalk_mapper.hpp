@@ -77,7 +77,6 @@ public:
         case ModelField::GnssSatelliteElevationDeg0: return map_number(model.gnss.satellites_in_view.elevation_deg[0], "navigation.gnss.satellite.0.elevation", out, UnitTransform::DegToRad);
         case ModelField::GnssSatelliteAzimuthDeg0: return map_number(model.gnss.satellites_in_view.azimuth_true_deg[0], "navigation.gnss.satellite.0.azimuth", out, UnitTransform::DegToRad);
         case ModelField::GnssSatelliteSnrDb0: return map_number(model.gnss.satellites_in_view.snr_db[0], "navigation.gnss.satellite.0.snr", out);
-        case ModelField::ImuHeadingDeg: return map_number(model.ins.imu.heading_deg, "navigation.headingTrue", out, UnitTransform::DegToRad);
         case ModelField::ImuHeadingTrueDeg: return map_number(model.ins.imu.heading_true_deg, "navigation.headingTrue", out, UnitTransform::DegToRad);
         case ModelField::ImuHeadingMagneticDeg: return map_number(model.ins.imu.heading_magnetic_deg, "navigation.headingMagnetic", out, UnitTransform::DegToRad);
         case ModelField::ImuMagneticVariationDeg: return map_number(model.ins.imu.magnetic_variation_deg, "navigation.magneticVariation", out, UnitTransform::DegToRad);

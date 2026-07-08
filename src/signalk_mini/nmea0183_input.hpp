@@ -32,9 +32,16 @@ public:
         nmea0183_connector::NmeaSentence sentence;
         if (!parser_.parse_line(sentence_text, sentence, validate_checksum)) return false;
 
+        const bool magnetic_heading_only = is(sentence, "HDM") || is(sentence, "HDG");
+        const auto previous_heading_deg = store_.model().ins.imu.heading_deg;
+
         const uint32_t decoded_before = rx_.seatalk_receiver().decoded_count();
         const bool applied = rx_.apply_sentence(sentence, store_.model(), now_us, source);
         if (!applied) return false;
+
+        if (magnetic_heading_only) {
+            store_.model().ins.imu.heading_deg = previous_heading_deg;
+        }
 
         if (rx_.seatalk_receiver().decoded_count() != decoded_before) {
             mark_seatalk_changes(store_, rx_.seatalk_receiver().last_decoded(), source_id, now_us);
@@ -90,8 +97,8 @@ private:
         if (is(sentence, "GSA")) { mark(ModelField::GnssDopActiveFixMode, source_id, now_us); mark(ModelField::GnssDopActivePdop, source_id, now_us); mark(ModelField::GnssHdop, source_id, now_us); mark(ModelField::GnssDopActiveVdop, source_id, now_us); }
         if (is(sentence, "GFA")) { mark(ModelField::GnssFixAccuracyHorizontalM, source_id, now_us); mark(ModelField::GnssFixAccuracyVerticalM, source_id, now_us); mark(ModelField::GnssFixAccuracyPdop, source_id, now_us); mark(ModelField::GnssHdop, source_id, now_us); mark(ModelField::GnssFixAccuracyVdop, source_id, now_us); }
         if (is(sentence, "GSV")) { mark(ModelField::GnssSatellitesInView, source_id, now_us); mark(ModelField::GnssSatellitePrn0, source_id, now_us); mark(ModelField::GnssSatelliteElevationDeg0, source_id, now_us); mark(ModelField::GnssSatelliteAzimuthDeg0, source_id, now_us); mark(ModelField::GnssSatelliteSnrDb0, source_id, now_us); }
-        if (is(sentence, "HDT")) { mark(ModelField::ImuHeadingDeg, source_id, now_us); mark(ModelField::ImuHeadingTrueDeg, source_id, now_us); }
-        if (is(sentence, "HDM") || is(sentence, "HDG")) { mark(ModelField::ImuHeadingDeg, source_id, now_us); mark(ModelField::ImuHeadingMagneticDeg, source_id, now_us); }
+        if (is(sentence, "HDT")) mark(ModelField::ImuHeadingTrueDeg, source_id, now_us);
+        if (is(sentence, "HDM") || is(sentence, "HDG")) mark(ModelField::ImuHeadingMagneticDeg, source_id, now_us);
         if (is(sentence, "HDG")) { mark(ModelField::ImuMagneticDeviationDeg, source_id, now_us); mark(ModelField::ImuMagneticVariationDeg, source_id, now_us); mark(ModelField::GnssDeclinationDeg, source_id, now_us); }
         if (is(sentence, "XDR")) { mark(ModelField::ImuPitchDeg, source_id, now_us); mark(ModelField::ImuRollDeg, source_id, now_us); }
         if (is(sentence, "MWV")) { if (sentence.field(1)[0] == 'T') { mark(ModelField::WindTrueDirectionDeg, source_id, now_us); mark(ModelField::WindTrueSpeedKn, source_id, now_us); } else { mark(ModelField::WindApparentDirectionDeg, source_id, now_us); mark(ModelField::WindApparentSpeedKn, source_id, now_us); } }

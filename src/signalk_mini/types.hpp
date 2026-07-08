@@ -37,7 +37,6 @@ enum class ModelField : uint16_t {
     GnssSatelliteAzimuthDeg0,
     GnssSatelliteSnrDb0,
 
-    ImuHeadingDeg,
     ImuHeadingTrueDeg,
     ImuHeadingMagneticDeg,
     ImuMagneticVariationDeg,
