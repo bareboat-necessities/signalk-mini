@@ -14,15 +14,7 @@ jobs:
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
       - name: Build
-        run: |
-          set -o pipefail
-          cmake --build build --parallel 2>&1 | tee linux-build.log
-      - name: Upload Linux build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-build-log
-          path: linux-build.log
+        run: cmake --build build --parallel
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
@@ -49,7 +41,6 @@ jobs:
           printf '%s\n' 'name=signalk-mini-seatalk' 'version=0.1.0' 'author=Bareboat Necessities' 'maintainer=Bareboat Necessities' 'sentence=Vendored SeaTalk module for signalk-mini.' 'paragraph=Source-only vendored module used by signalk-mini.' 'category=Communication' 'architectures=esp32' 'includes=seatalk.hpp' > modules/seatalk/library.properties
       - name: Compile AtomS3R sketch
         run: |
-          set -o pipefail
           arduino-cli compile \
             --fqbn esp32:esp32:esp32s3 \
             --library . \
@@ -57,10 +48,4 @@ jobs:
             --library modules/data-model \
             --library modules/nmea0183 \
             --library modules/seatalk \
-            mcu/signalk-atoms3r 2>&1 | tee arduino-build.log
-      - name: Upload Arduino build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: arduino-build-log
-          path: arduino-build.log
+            mcu/signalk-atoms3r
