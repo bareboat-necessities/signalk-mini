@@ -29,7 +29,6 @@
 #include "publisher.hpp"
 #include "seatalk_input.hpp"
 #include "signalk_hello_writer.hpp"
-#include "websocket.hpp"
 
 namespace signalk_mini {
 
@@ -203,7 +202,8 @@ public:
           signalk_websocket_server_(loop_.scheduler()),
           publisher_(store_, config_),
           signalk_connections_(*this),
-          signalk_websocket_connections_(*this),
+          signalk_websocket_handler_(*this),
+          signalk_websocket_protocol_(signalk_websocket_handler_, signalk_backpressure_options()),
           signalk_line_handler_(signalk_connections_, signalk_options()) {}
 
     bool begin() {
@@ -212,7 +212,7 @@ public:
         if (!loop_.valid()) return set_startup_error(StartupError::ConnectorStartFailed, config_.connector_count);
         if (!listen(signalk_tcp_server_, signalk_line_handler_, config_.signalk.host, config_.signalk.port)) return set_startup_error(StartupError::ConnectorStartFailed, config_.connector_count);
         if (config_.signalk.websocket.enabled) {
-            if (!listen(signalk_websocket_server_, signalk_websocket_connections_, config_.signalk.websocket.host, config_.signalk.websocket.port)) return set_startup_error(StartupError::ConnectorStartFailed, config_.connector_count);
+            if (!listen(signalk_websocket_server_, signalk_websocket_protocol_, config_.signalk.websocket.host, config_.signalk.websocket.port)) return set_startup_error(StartupError::ConnectorStartFailed, config_.connector_count);
         }
         if (!start_configured_connectors()) return false;
         timer_ = loop_.on_repeat_us(config_.publisher.interval_us, [this]() { publish(); });
@@ -323,6 +323,12 @@ private:
         return is_subscribe_all_text(text);
     }
 
+    static size_t signalk_text_len(const char* json, size_t len) {
+        if (!json) return 0;
+        while (len > 0 && (json[len - 1] == '\r' || json[len - 1] == '\n' || json[len - 1] == '\0')) --len;
+        return len;
+    }
+
     static ship_data_model::SensorSource sensor_source_for_transport(ConnectorTransport transport) {
         switch (transport) {
         case ConnectorTransport::Serial: return ship_data_model::SensorSource::serial;
@@ -429,24 +435,10 @@ private:
 
     bool send_signal_k_hello_websocket(async_event_loop::ITcpConnection& connection) {
         char hello[256];
-        int len = write_signal_k_hello(hello, sizeof(hello));
+        const int len = write_signal_k_hello(hello, sizeof(hello));
         if (len <= 0) return false;
-        while (len > 0 && (hello[len - 1] == '\r' || hello[len - 1] == '\n' || hello[len - 1] == '\0')) --len;
-        return write_websocket_text_frame(connection, hello, static_cast<size_t>(len));
-    }
-
-    bool write_websocket_text_frame(async_event_loop::ITcpConnection& connection, const char* text, size_t text_len) {
-        uint8_t frame[websocket::DefaultMaxPayloadSize + 16];
-        size_t frame_len = 0;
-        if (!websocket::encode_text_frame(text, text_len, frame, sizeof(frame), frame_len)) return false;
-        return write_all(connection, frame, frame_len);
-    }
-
-    bool write_websocket_control_frame(async_event_loop::ITcpConnection& connection, websocket::Opcode opcode, const uint8_t* payload, size_t payload_len) {
-        uint8_t frame[128];
-        size_t frame_len = 0;
-        if (!websocket::encode_control_frame(opcode, payload, payload_len, frame, sizeof(frame), frame_len)) return false;
-        return write_all(connection, frame, frame_len);
+        const size_t text_len = signalk_text_len(hello, static_cast<size_t>(len));
+        return signalk_websocket_protocol_.write_text(connection, hello, text_len);
     }
 
     struct SignalKConnectionHandler : async_event_loop::ITcpLineServerHandler {
@@ -485,213 +477,60 @@ private:
         void on_too_many_connections(async_event_loop::ITcpConnection& connection) override { connection.close(); }
     };
 
-    struct WebSocketSignalKConnectionHandler : async_event_loop::ITcpServerHandler {
-        explicit WebSocketSignalKConnectionHandler(MiniSignalKServer& owner_ref) : owner(owner_ref) {
-            for (size_t i = 0; i < MaxSignalKConnections; ++i) slots[i].backpressure.configure(owner.signalk_backpressure_options());
-        }
-
-        enum class State : uint8_t { Empty, Handshaking, Open };
-
-        struct Slot {
-            async_event_loop::ITcpConnection* connection = nullptr;
-            ConnectionFlags flags{};
-            State state = State::Empty;
-            size_t input_size = 0;
-            uint8_t input[websocket::DefaultHandshakeBufferSize + 256]{};
-            uint8_t payload[websocket::DefaultMaxPayloadSize + 1]{};
-            async_event_loop::TcpBackpressureMonitor backpressure;
-        };
-
+    struct SignalKWebSocketHandler : async_event_loop::IWebSocketServerHandler {
+        explicit SignalKWebSocketHandler(MiniSignalKServer& owner_ref) : owner(owner_ref) {}
         MiniSignalKServer& owner;
-        Slot slots[MaxSignalKConnections];
+        ConnectionRegistry<MaxSignalKConnections> connections;
 
-        void on_accept(async_event_loop::ITcpConnection& connection, const async_event_loop::TcpPeerInfo&) override {
-            if (active_count() >= owner.config_.signalk.websocket.max_connections) {
+        void on_websocket_open(async_event_loop::ITcpConnection& connection,
+                               const async_event_loop::TcpPeerInfo&,
+                               const async_event_loop::websocket::HandshakeRequest&) override {
+            if (connections.size() >= owner.config_.signalk.websocket.max_connections) {
                 connection.close();
                 return;
             }
-            Slot* slot = acquire(connection);
-            if (!slot) {
+            ConnectionFlags flags{owner.config_.signalk.websocket.allow_rx, false};
+            if (!connections.add(connection, flags)) {
                 connection.close();
                 return;
             }
-            slot->flags = ConnectionFlags{owner.config_.signalk.websocket.allow_rx, false};
-            slot->state = State::Handshaking;
-            slot->input_size = 0;
-            slot->backpressure.reset();
-        }
-
-        void on_data(async_event_loop::ITcpConnection& connection) override {
-            Slot* slot = find(connection);
-            if (!slot || !slot->flags.allow_rx) return;
-            while (connection.valid() && connection.readable()) {
-                if (slot->input_size >= sizeof(slot->input)) {
-                    close_slot(*slot);
-                    return;
-                }
-                const int n = connection.read(slot->input + slot->input_size, sizeof(slot->input) - slot->input_size);
-                if (n < 0) {
-                    close_slot(*slot);
-                    return;
-                }
-                if (n == 0) break;
-                slot->input_size += static_cast<size_t>(n);
-                if (!process_slot(*slot)) return;
-            }
-            check_backpressure(*slot);
-        }
-
-        void on_write_ready(async_event_loop::ITcpConnection& connection) override {
-            Slot* slot = find(connection);
-            if (slot) check_backpressure(*slot);
-        }
-
-        void on_close(async_event_loop::ITcpConnection& connection) override { release(connection); }
-        void on_error(async_event_loop::ITcpConnection& connection, int) override { release(connection); }
-
-        void write_text_to_tx(const char* text, size_t text_len) {
-            if (!text || text_len == 0) return;
-            for (size_t i = 0; i < MaxSignalKConnections; ++i) {
-                Slot& slot = slots[i];
-                if (slot.connection && slot.connection->valid() && slot.state == State::Open && slot.flags.allow_tx) {
-                    owner.write_websocket_text_frame(*slot.connection, text, text_len);
-                    check_backpressure(slot);
-                }
+            if (!owner.send_signal_k_hello_websocket(connection)) {
+                connections.remove(connection);
+                connection.close();
             }
         }
 
-        size_t active_count() const {
-            size_t count = 0;
-            for (size_t i = 0; i < MaxSignalKConnections; ++i) if (slots[i].connection) ++count;
-            return count;
-        }
-
-        Slot* find(async_event_loop::ITcpConnection& connection) {
-            for (size_t i = 0; i < MaxSignalKConnections; ++i) if (slots[i].connection == &connection) return &slots[i];
-            return nullptr;
-        }
-
-        Slot* acquire(async_event_loop::ITcpConnection& connection) {
-            if (Slot* existing = find(connection)) return existing;
-            for (size_t i = 0; i < MaxSignalKConnections; ++i) {
-                if (!slots[i].connection) {
-                    slots[i].connection = &connection;
-                    slots[i].state = State::Handshaking;
-                    slots[i].input_size = 0;
-                    return &slots[i];
-                }
-            }
-            return nullptr;
-        }
-
-        void release(async_event_loop::ITcpConnection& connection) {
-            Slot* slot = find(connection);
-            if (!slot) return;
-            slot->connection = nullptr;
-            slot->flags = ConnectionFlags{};
-            slot->state = State::Empty;
-            slot->input_size = 0;
-            slot->backpressure.reset();
-        }
-
-        void close_slot(Slot& slot) {
-            async_event_loop::ITcpConnection* connection = slot.connection;
-            if (!connection) return;
-            release(*connection);
-            connection->close();
-        }
-
-        bool process_slot(Slot& slot) {
-            if (slot.state == State::Handshaking) {
-                const size_t header_len = websocket_header_length(slot.input, slot.input_size);
-                if (header_len == 0) return true;
-                websocket::HandshakeRequest request;
-                const websocket::HandshakeResult parsed = websocket::parse_client_handshake(reinterpret_cast<const char*>(slot.input), header_len, request);
-                if (parsed != websocket::HandshakeResult::Ok) {
-                    close_slot(slot);
-                    return false;
-                }
-                char response[192];
-                const websocket::HandshakeResult written = websocket::write_server_handshake_response(request.key, response, sizeof(response));
-                if (written != websocket::HandshakeResult::Ok || !owner.write_all(*slot.connection, reinterpret_cast<const uint8_t*>(response), strlen(response))) {
-                    close_slot(slot);
-                    return false;
-                }
-                if (!owner.send_signal_k_hello_websocket(*slot.connection)) {
-                    close_slot(slot);
-                    return false;
-                }
-                consume(slot, header_len);
-                slot.state = State::Open;
-            }
-
-            while (slot.state == State::Open && slot.input_size > 0) {
-                websocket::FrameView frame;
-                size_t consumed = 0;
-                const websocket::FrameDecodeResult decoded = websocket::decode_frame(slot.input, slot.input_size, slot.payload, websocket::DefaultMaxPayloadSize, frame, consumed, true);
-                if (decoded == websocket::FrameDecodeResult::NeedMore) return true;
-                if (decoded != websocket::FrameDecodeResult::Ok || consumed == 0) {
-                    close_slot(slot);
-                    return false;
-                }
-                if (!handle_frame(slot, frame)) return false;
-                consume(slot, consumed);
-            }
-            return true;
-        }
-
-        bool handle_frame(Slot& slot, const websocket::FrameView& frame) {
-            switch (frame.opcode) {
-            case websocket::Opcode::Text:
-                if (frame.payload_len > websocket::DefaultMaxPayloadSize) {
-                    close_slot(slot);
-                    return false;
-                }
-                slot.payload[frame.payload_len] = '\0';
-                if (owner.is_subscribe_all_text(reinterpret_cast<const char*>(slot.payload))) {
-                    slot.flags.allow_tx = owner.config_.signalk.websocket.allow_tx;
-                    owner.publish_server_clock();
-                }
-                return true;
-            case websocket::Opcode::Ping:
-                if (!owner.write_websocket_control_frame(*slot.connection, websocket::Opcode::Pong, frame.payload, frame.payload_len)) {
-                    close_slot(slot);
-                    return false;
-                }
-                return true;
-            case websocket::Opcode::Close:
-                owner.write_websocket_control_frame(*slot.connection, websocket::Opcode::Close, frame.payload, frame.payload_len);
-                close_slot(slot);
-                return false;
-            case websocket::Opcode::Pong:
-                return true;
-            default:
-                close_slot(slot);
-                return false;
+        void on_websocket_text(async_event_loop::ITcpConnection& connection, const char* text, size_t len) override {
+            if (!connections.allow_rx(connection)) return;
+            char copy[256];
+            const size_t copy_len = len < sizeof(copy) ? len : sizeof(copy) - 1;
+            if (text && copy_len > 0) memcpy(copy, text, copy_len);
+            copy[copy_len] = '\0';
+            if (owner.is_subscribe_all_text(copy)) {
+                connections.set_allow_tx(connection, owner.config_.signalk.websocket.allow_tx);
+                owner.publish_server_clock();
             }
         }
 
-        static size_t websocket_header_length(const uint8_t* data, size_t size) {
-            if (!data || size < 4) return 0;
-            for (size_t i = 3; i < size; ++i) {
-                if (data[i - 3] == '\r' && data[i - 2] == '\n' && data[i - 1] == '\r' && data[i] == '\n') return i + 1;
-            }
-            return 0;
-        }
+        void on_websocket_close(async_event_loop::ITcpConnection& connection) override { connections.remove(connection); }
+        void on_websocket_error(async_event_loop::ITcpConnection& connection, async_event_loop::WebSocketError) override { connections.remove(connection); }
 
-        static void consume(Slot& slot, size_t count) {
-            if (count >= slot.input_size) {
-                slot.input_size = 0;
-                return;
-            }
-            memmove(slot.input, slot.input + count, slot.input_size - count);
-            slot.input_size -= count;
+        void write_signal_k_delta(const char* json, size_t len) {
+            const size_t text_len = owner.signalk_text_len(json, len);
+            if (!json || text_len == 0) return;
+            connections.for_each_tx([&](async_event_loop::ITcpConnection& connection) {
+                owner.signalk_websocket_protocol_.write_text(connection, json, text_len);
+            });
         }
+    };
 
-        void check_backpressure(Slot& slot) {
-            if (!slot.connection || !slot.connection->valid()) return;
-            async_event_loop::TcpBackpressureInfo info;
-            if (slot.backpressure.check(*slot.connection, &info) && info.close_on_limit) close_slot(slot);
+    struct SignalKDeltaFanout {
+        ConnectionRegistry<MaxSignalKConnections>& tcp;
+        SignalKWebSocketHandler& websocket;
+
+        void write_signal_k_delta(const char* json, size_t len) {
+            tcp.write_signal_k_delta(json, len);
+            websocket.write_signal_k_delta(json, len);
         }
     };
 
@@ -980,10 +819,8 @@ private:
                                  server_source_label(),
                                  clock_s);
         if (len <= 0 || static_cast<size_t>(len) >= sizeof(json)) return;
-        signalk_connections_.connections.write_signal_k_delta(json, static_cast<size_t>(len));
-        int ws_len = len;
-        while (ws_len > 0 && (json[ws_len - 1] == '\r' || json[ws_len - 1] == '\n' || json[ws_len - 1] == '\0')) --ws_len;
-        signalk_websocket_connections_.write_text_to_tx(json, static_cast<size_t>(ws_len));
+        SignalKDeltaFanout fanout{signalk_connections_.connections, signalk_websocket_handler_};
+        fanout.write_signal_k_delta(json, static_cast<size_t>(len));
     }
 
     bool write_all(async_event_loop::IByteStream& stream, const uint8_t* data, size_t length) {
@@ -1022,18 +859,7 @@ private:
     }
 
     void publish() {
-        struct DeltaFanout {
-            ConnectionRegistry<MaxSignalKConnections>& tcp;
-            WebSocketSignalKConnectionHandler& websocket;
-
-            void write_signal_k_delta(const char* json, size_t len) {
-                tcp.write_signal_k_delta(json, len);
-                if (!json || len == 0) return;
-                size_t text_len = len;
-                while (text_len > 0 && (json[text_len - 1] == '\r' || json[text_len - 1] == '\n' || json[text_len - 1] == '\0')) --text_len;
-                websocket.write_text_to_tx(json, text_len);
-            }
-        } fanout{signalk_connections_.connections, signalk_websocket_connections_};
+        SignalKDeltaFanout fanout{signalk_connections_.connections, signalk_websocket_handler_};
         publisher_.publish_pending(fanout);
     }
 
@@ -1046,7 +872,8 @@ private:
     SeaTalkInput<Real> seatalk_{store_};
     SignalKPublisher<Real> publisher_;
     SignalKConnectionHandler signalk_connections_;
-    WebSocketSignalKConnectionHandler signalk_websocket_connections_;
+    SignalKWebSocketHandler signalk_websocket_handler_;
+    async_event_loop::WebSocketServerHandler<MaxSignalKConnections, async_event_loop::websocket::DefaultHandshakeBufferSize, async_event_loop::websocket::DefaultMaxPayloadSize> signalk_websocket_protocol_;
     async_event_loop::TcpLineServerHandler<256, MaxSignalKConnections> signalk_line_handler_;
     std::vector<std::unique_ptr<ConnectorRuntimeSlot>> connector_slots_;
     async_event_loop::EventHandle timer_{};
