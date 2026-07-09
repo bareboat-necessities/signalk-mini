@@ -123,6 +123,7 @@ private:
         read_bool(s, "enabled", config.signalk.websocket.enabled);
         if (config_setting_lookup_string(s, "host", &value)) config.signalk.websocket.host = keep(value);
         read_u16(s, "port", config.signalk.websocket.port);
+        read_u16(s, "fallback_port", config.signalk.websocket.fallback_port);
         read_u16(s, "max_connections", config.signalk.websocket.max_connections);
         read_bool(s, "allow_rx", config.signalk.websocket.allow_rx);
         read_bool(s, "allow_tx", config.signalk.websocket.allow_tx);
@@ -260,8 +261,8 @@ private:
         read_u8(s, "address", connector.transport.i2c.address);
     }
 
-    void load_pin(config_setting_t* connector_setting, const char* block_name, signalk_mini::PinTransportConfig& pin) {
-        config_setting_t* s = config_setting_lookup(connector_setting, block_name);
+    static void load_pin(config_setting_t* connector_setting, const char* name, signalk_mini::PinTransportConfig& pin) {
+        config_setting_t* s = config_setting_lookup(connector_setting, name);
         if (!s) s = connector_setting;
         read_u8(s, "pin", pin.pin);
     }
