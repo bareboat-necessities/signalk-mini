@@ -1,0 +1,38 @@
+name: sizeof-datamodel
+
+on:
+  push:
+    branches:
+      - agent/sizeof-datamodel-probe
+
+jobs:
+  sizeof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print data model sizes
+        run: |
+          cat > /tmp/sizeof_datamodel.cpp <<'CPP'
+          #include <cstddef>
+          #include <iostream>
+          #include <ship_data_model.hpp>
+          #include <signalk_mini/model_store.hpp>
+
+          template<typename T>
+          void print_size(const char* name) {
+              std::cout << name << "=" << sizeof(T) << " align=" << alignof(T) << "\n";
+          }
+
+          int main() {
+              print_size<ship_data_model::DataModel<float>>("DataModel<float>");
+              print_size<ship_data_model::DataModel<double>>("DataModel<double>");
+              print_size<signalk_mini::ModelStore<float>>("ModelStore<float>");
+              print_size<signalk_mini::ModelChange>("ModelChange");
+              std::cout << "DefaultModelChangeQueueCapacity=" << signalk_mini::DefaultModelChangeQueueCapacity << "\n";
+              std::cout << "DefaultSignalKJsonBufferSize=" << signalk_mini::DefaultSignalKJsonBufferSize << "\n";
+              std::cout << "DefaultSignalKBatchValues=" << signalk_mini::DefaultSignalKBatchValues << "\n";
+              return 0;
+          }
+          CPP
+          g++ -std=c++17 -Isrc -Imodules/data-model/src /tmp/sizeof_datamodel.cpp -o /tmp/sizeof_datamodel
+          /tmp/sizeof_datamodel
