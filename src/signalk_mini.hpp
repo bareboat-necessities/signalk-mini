@@ -3,6 +3,7 @@
 #include "signalk_mini/config.hpp"
 #include "signalk_mini/types.hpp"
 #include "signalk_mini/units.hpp"
+#include "signalk_mini/memory_profile.hpp"
 #include "signalk_mini/connection_registry.hpp"
 #include "signalk_mini/model_store.hpp"
 #include "signalk_mini/nmea0183_input.hpp"
