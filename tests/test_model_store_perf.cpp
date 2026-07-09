@@ -15,6 +15,19 @@ int main() {
     REQUIRE(signalk_mini::DefaultModelChangeQueueCapacity <= signalk_mini::MaxSupportedModelChangeQueueCapacity);
     REQUIRE(signalk_mini::DefaultSignalKJsonBufferSize > 0);
     REQUIRE(signalk_mini::DefaultSignalKBatchValues > 0);
+    REQUIRE(signalk_mini::DefaultMaxChangesPerTick > 0);
+    REQUIRE(signalk_mini::DefaultSignalKMaxConnections > 0);
+
+    signalk_mini::SignalKMiniConfig defaults;
+    REQUIRE(defaults.signalk.max_connections == signalk_mini::DefaultSignalKMaxConnections);
+    REQUIRE(defaults.publisher.max_changes_per_tick == signalk_mini::DefaultMaxChangesPerTick);
+    REQUIRE(defaults.publisher.json_buffer_size == signalk_mini::DefaultSignalKJsonBufferSize);
+
+    const signalk_mini::SignalKMiniConfig sketch = signalk_mini::make_sketch_owned_io_config("mcu", "mcu-source");
+    REQUIRE(sketch.publisher.max_changes_per_tick == signalk_mini::DefaultMaxChangesPerTick);
+    REQUIRE(sketch.publisher.json_buffer_size == signalk_mini::DefaultSignalKJsonBufferSize);
+    REQUIRE(sketch.connectors == nullptr);
+    REQUIRE(sketch.connector_count == 0);
 
     signalk_mini::ModelStore<float, 4> store;
 
