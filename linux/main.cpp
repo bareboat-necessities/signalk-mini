@@ -112,7 +112,7 @@ const char* default_config_text() {
         "  websocket = {\n"
         "    enabled = true;\n"
         "    host = \"0.0.0.0\";\n"
-        "    port = 3000;\n"
+        "    port = 3001;\n"
         "    max_connections = 8;\n"
         "    allow_rx = true;\n"
         "    allow_tx = true;\n"
@@ -221,7 +221,7 @@ void print_usage(const char* argv0) {
         << "  3. create ~/.signalk-mini/signalk-mini.conf with defaults\n\n"
         << "Default endpoints:\n"
         << "  Signal K TCP:       0.0.0.0:20223\n"
-        << "  Signal K WebSocket: 0.0.0.0:3000\n"
+        << "  Signal K WebSocket: 0.0.0.0:3001\n"
         << "  NMEA0183 UDP:       0.0.0.0:10110\n";
 }
 
