@@ -21,6 +21,7 @@ struct SignalKWebSocketServerConfig {
 #endif
     const char* host = "0.0.0.0";
     uint16_t port = 3000;
+    uint16_t fallback_port = 3001;
     uint16_t max_connections = DefaultSignalKMaxConnections;
     bool allow_rx = true;
     bool allow_tx = true;
