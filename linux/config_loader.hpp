@@ -123,7 +123,6 @@ private:
         read_bool(s, "enabled", config.signalk.websocket.enabled);
         if (config_setting_lookup_string(s, "host", &value)) config.signalk.websocket.host = keep(value);
         read_u16(s, "port", config.signalk.websocket.port);
-        read_u16(s, "fallback_port", config.signalk.websocket.fallback_port);
         read_u16(s, "max_connections", config.signalk.websocket.max_connections);
         read_bool(s, "allow_rx", config.signalk.websocket.allow_rx);
         read_bool(s, "allow_tx", config.signalk.websocket.allow_tx);
