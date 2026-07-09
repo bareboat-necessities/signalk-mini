@@ -5,13 +5,14 @@
 
 #include <seatalk.hpp>
 
+#include "memory_profile.hpp"
 #include "model_store.hpp"
 #include "seatalk_change_mapper.hpp"
 #include "types.hpp"
 
 namespace signalk_mini {
 
-template<typename Real, size_t QueueCapacity = 512>
+template<typename Real, size_t QueueCapacity = DefaultModelChangeQueueCapacity>
 class SeaTalkInput {
 public:
     explicit SeaTalkInput(ModelStore<Real, QueueCapacity>& store) : store_(store) {}
