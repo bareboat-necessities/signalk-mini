@@ -980,9 +980,7 @@ private:
                                  server_source_label(),
                                  clock_s);
         if (len <= 0 || static_cast<size_t>(len) >= sizeof(json)) return;
-        signalk_connections_.connections.for_each_tx([&](async_event_loop::ITcpConnection& connection) {
-            connection.write(reinterpret_cast<const uint8_t*>(json), static_cast<size_t>(len));
-        });
+        signalk_connections_.connections.write_signal_k_delta(json, static_cast<size_t>(len));
         int ws_len = len;
         while (ws_len > 0 && (json[ws_len - 1] == '\r' || json[ws_len - 1] == '\n' || json[ws_len - 1] == '\0')) --ws_len;
         signalk_websocket_connections_.write_text_to_tx(json, static_cast<size_t>(ws_len));
@@ -1023,7 +1021,21 @@ private:
         return transmit_bytes_to_slot(slot, reinterpret_cast<const uint8_t*>(sentence), n);
     }
 
-    void publish() { publisher_.publish_pending(signalk_connections_.connections); }
+    void publish() {
+        struct DeltaFanout {
+            ConnectionRegistry<MaxSignalKConnections>& tcp;
+            WebSocketSignalKConnectionHandler& websocket;
+
+            void write_signal_k_delta(const char* json, size_t len) {
+                tcp.write_signal_k_delta(json, len);
+                if (!json || len == 0) return;
+                size_t text_len = len;
+                while (text_len > 0 && (json[text_len - 1] == '\r' || json[text_len - 1] == '\n' || json[text_len - 1] == '\0')) --text_len;
+                websocket.write_text_to_tx(json, text_len);
+            }
+        } fanout{signalk_connections_.connections, signalk_websocket_connections_};
+        publisher_.publish_pending(fanout);
+    }
 
     SignalKMiniConfig config_;
     async_event_loop::EventLoop<> loop_;
