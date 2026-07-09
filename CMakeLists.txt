@@ -43,6 +43,7 @@ if(BUILD_TESTING)
   endfunction()
 
   add_signalk_mini_test(test_signalk_mini_smoke tests/test_signalk_mini_smoke.cpp)
+  add_signalk_mini_test(test_model_store_perf tests/test_model_store_perf.cpp)
   add_signalk_mini_test(test_nmea_tokenizer_examples tests/test_nmea_tokenizer_examples.cpp)
   add_signalk_mini_test(test_nmea_tail_sentences tests/test_nmea_tail_sentences.cpp)
   add_signalk_mini_test(test_nmea_real_fixtures tests/test_nmea_real_fixtures.cpp)
