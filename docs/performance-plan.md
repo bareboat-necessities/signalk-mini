@@ -4,7 +4,7 @@ This plan keeps the server single-threaded, typed-model-first, and friendly to b
 
 ## Phase 1: counters and queue observability
 
-Status: implemented in this PR.
+Status: implemented.
 
 Goals:
 
@@ -30,7 +30,7 @@ Counters:
 
 ## Phase 2: duplicate model-change coalescing
 
-Status: implemented in this PR.
+Status: implemented.
 
 Goals:
 
@@ -45,6 +45,8 @@ Many NMEA sentences mark multiple fields, and high-rate sources can update the s
 
 ## Phase 3: batch Signal K values per source
 
+Status: implemented in this PR for scalar mapped values. Object-valued deltas remain single-message to keep AIS and notification object serialization isolated.
+
 Goals:
 
 - Emit one Signal K delta per source per publish tick, with multiple `values` entries.
@@ -58,6 +60,8 @@ Expected impact:
 - Lower latency under bursts because fewer writes are needed.
 
 ## Phase 4: sentence ID dispatch
+
+Status: implemented in this PR.
 
 Goals:
 
