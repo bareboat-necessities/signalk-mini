@@ -13,12 +13,22 @@ struct ServerIdentityConfig {
     const char* self = "vessels.self";
 };
 
+struct SignalKWebSocketServerConfig {
+    bool enabled = false;
+    const char* host = "0.0.0.0";
+    uint16_t port = 3000;
+    uint16_t max_connections = DefaultSignalKMaxConnections;
+    bool allow_rx = true;
+    bool allow_tx = true;
+};
+
 struct SignalKProtocolServerConfig {
     const char* host = "0.0.0.0";
     uint16_t port = 20223;
     uint16_t max_connections = DefaultSignalKMaxConnections;
     bool allow_rx = true;
     bool allow_tx = true;
+    SignalKWebSocketServerConfig websocket;
 };
 
 struct PublisherConfig {
@@ -168,6 +178,8 @@ inline SignalKMiniConfig make_sketch_owned_io_config(const char* server_name,
     cfg.signalk.port = signalk_port;
     cfg.signalk.allow_rx = true;
     cfg.signalk.allow_tx = true;
+    cfg.signalk.websocket.host = cfg.signalk.host;
+    cfg.signalk.websocket.enabled = false;
     cfg.publisher.interval_us = publisher_interval_us;
     cfg.publisher.max_changes_per_tick = max_changes_per_tick;
     cfg.publisher.json_buffer_size = json_buffer_size;
