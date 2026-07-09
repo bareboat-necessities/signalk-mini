@@ -260,8 +260,8 @@ private:
         read_u8(s, "address", connector.transport.i2c.address);
     }
 
-    void load_pin(config_setting_t* connector_setting, const char* block_name, signalk_mini::PinTransportConfig& pin) {
-        config_setting_t* s = config_setting_lookup(connector_setting, block_name);
+    static void load_pin(config_setting_t* connector_setting, const char* name, signalk_mini::PinTransportConfig& pin) {
+        config_setting_t* s = config_setting_lookup(connector_setting, name);
         if (!s) s = connector_setting;
         read_u8(s, "pin", pin.pin);
     }

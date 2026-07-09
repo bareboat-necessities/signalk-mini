@@ -49,6 +49,13 @@ if(BUILD_TESTING)
   add_signalk_mini_test(test_websocket_server_adapter tests/test_websocket_server_adapter.cpp)
   add_signalk_mini_test(test_linux_default_config tests/test_linux_default_config.cpp)
   target_compile_definitions(test_linux_default_config PRIVATE SIGNALK_MINI_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
+  add_executable(test_linux_default_config_startup tests/test_linux_default_config_startup.cpp)
+  target_link_libraries(test_linux_default_config_startup PRIVATE Threads::Threads)
+  target_compile_definitions(test_linux_default_config_startup PRIVATE SIGNALK_MINI_BINARY="$<TARGET_FILE:signalk-mini>")
+  add_dependencies(test_linux_default_config_startup signalk-mini)
+  add_test(NAME test_linux_default_config_startup COMMAND test_linux_default_config_startup)
+
   add_signalk_mini_test(test_nmea_parser_span tests/test_nmea_parser_span.cpp)
   add_signalk_mini_test(test_nmea_tokenizer_examples tests/test_nmea_tokenizer_examples.cpp)
   add_signalk_mini_test(test_nmea_tail_sentences tests/test_nmea_tail_sentences.cpp)

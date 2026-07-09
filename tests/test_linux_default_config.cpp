@@ -40,7 +40,7 @@ int main() {
     REQUIRE(block.find("  websocket = {") != std::string::npos);
     REQUIRE(block.find("    enabled = true;") != std::string::npos);
     REQUIRE(block.find("    host = \\\"0.0.0.0\\\";") != std::string::npos);
-    REQUIRE(block.find("    port = 3000;") != std::string::npos);
+    REQUIRE(block.find("    port = 3001;") != std::string::npos);
     REQUIRE(block.find("    max_connections = 8;") != std::string::npos);
     REQUIRE(block.find("    allow_rx = true;") != std::string::npos);
     REQUIRE(block.find("    allow_tx = true;") != std::string::npos);
