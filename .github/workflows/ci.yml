@@ -5,18 +5,13 @@ on:
   pull_request:
 
 jobs:
-  linux:
+  sizeof:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Install Linux dependencies
-        run: sudo apt-get update && sudo apt-get install -y libevent-dev libconfig-dev pkg-config
-      - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-      - name: Build
-        run: cmake --build build --parallel
       - name: Print data model sizes
         run: |
+          git clone --quiet --depth 1 https://github.com/bareboat-necessities/signalk-mini.git /tmp/signalk-mini
+          cd /tmp/signalk-mini
           cat > /tmp/sizeof_datamodel.cpp <<'CPP'
           #include <cstddef>
           #include <iostream>
@@ -39,6 +34,17 @@ jobs:
           CPP
           g++ -std=c++17 -Isrc -Imodules/data-model/src /tmp/sizeof_datamodel.cpp -o /tmp/sizeof_datamodel
           /tmp/sizeof_datamodel
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux dependencies
+        run: sudo apt-get update && sudo apt-get install -y libevent-dev libconfig-dev pkg-config
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+      - name: Build
+        run: cmake --build build --parallel
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
