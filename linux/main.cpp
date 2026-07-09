@@ -109,6 +109,14 @@ const char* default_config_text() {
         "  max_connections = 8;\n"
         "  allow_rx = true;\n"
         "  allow_tx = true;\n"
+        "  websocket = {\n"
+        "    enabled = true;\n"
+        "    host = \"0.0.0.0\";\n"
+        "    port = 3000;\n"
+        "    max_connections = 8;\n"
+        "    allow_rx = true;\n"
+        "    allow_tx = true;\n"
+        "  };\n"
         "};\n"
         "\n"
         "publisher = {\n"
@@ -212,8 +220,9 @@ void print_usage(const char* argv0) {
         << "  2. " << kEtcConfigPath << "\n"
         << "  3. create ~/.signalk-mini/signalk-mini.conf with defaults\n\n"
         << "Default endpoints:\n"
-        << "  Signal K TCP: 0.0.0.0:20223\n"
-        << "  NMEA0183 UDP: 0.0.0.0:10110\n";
+        << "  Signal K TCP:       0.0.0.0:20223\n"
+        << "  Signal K WebSocket: 0.0.0.0:3000\n"
+        << "  NMEA0183 UDP:       0.0.0.0:10110\n";
 }
 
 void print_connector_summary(const signalk_mini::ConnectorConfig& connector, size_t index) {
@@ -267,6 +276,17 @@ void print_startup_summary(const signalk_mini::SignalKMiniConfig& config, const 
               << " rx=" << (config.signalk.allow_rx ? "yes" : "no")
               << " tx=" << (config.signalk.allow_tx ? "yes" : "no")
               << "\n";
+    if (config.signalk.websocket.enabled) {
+        std::cout << "Signal K WebSocket listening on "
+                  << (config.signalk.websocket.host ? config.signalk.websocket.host : "0.0.0.0")
+                  << ":" << config.signalk.websocket.port
+                  << " max_connections=" << config.signalk.websocket.max_connections
+                  << " rx=" << (config.signalk.websocket.allow_rx ? "yes" : "no")
+                  << " tx=" << (config.signalk.websocket.allow_tx ? "yes" : "no")
+                  << "\n";
+    } else {
+        std::cout << "Signal K WebSocket disabled\n";
+    }
     std::cout << "publisher interval_us=" << config.publisher.interval_us
               << " max_changes_per_tick=" << config.publisher.max_changes_per_tick
               << " json_buffer_size=" << config.publisher.json_buffer_size
