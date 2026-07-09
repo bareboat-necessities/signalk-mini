@@ -77,7 +77,7 @@ Expected impact:
 
 ## Phase 5: parser buffer/copy reduction
 
-Status: implemented in this PR.
+Status: implemented.
 
 Goals:
 
@@ -92,7 +92,7 @@ Expected impact:
 
 ## Phase 6: deterministic memory profile
 
-Status: implemented in this PR for hot-path model-change storage and target-specific publisher defaults. Startup-only connector slot heap removal remains a follow-up item because it is more invasive and not in the common per-sentence hot path.
+Status: implemented for hot-path model-change storage, target-specific publisher defaults, compact source IDs, and target-specific NMEA field-table size. Startup-only connector slot heap removal remains a follow-up item because it is more invasive and not in the common per-sentence hot path.
 
 Goals:
 
@@ -109,6 +109,10 @@ Implemented in this phase:
 - Use compact 16-bit queue indexes with a bounded queue capacity assertion.
 - Add target-specific defaults for model-change queue capacity, Signal K JSON buffer size, and scalar batch size.
 - Keep the larger Linux defaults while reducing MCU defaults.
+- Use an 8-bit `SourceId` while keeping `ModelField` explicitly 16-bit.
+- Use a smaller NMEA field-span table on Arduino builds.
+- Add shared Signal K path constants for common high-rate paths.
+- Stream scalar Signal K JSON directly into the output buffer instead of building a JSON DOM in the publisher hot path.
 
 Expected impact:
 
