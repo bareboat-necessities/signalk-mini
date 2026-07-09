@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "signalk_mapper.hpp"
+
 namespace signalk_mini {
 
 class SignalKJsonStreamWriter {
