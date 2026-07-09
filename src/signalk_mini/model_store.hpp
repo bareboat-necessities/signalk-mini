@@ -17,6 +17,8 @@ struct ModelChange {
 template<size_t Capacity>
 class ModelChangeQueue {
 public:
+    static_assert(Capacity > 0, "ModelChangeQueue capacity must be greater than zero");
+
     bool push(const ModelChange& change) {
         if (coalesce(change)) return true;
 
