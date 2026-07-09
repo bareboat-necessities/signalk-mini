@@ -45,7 +45,7 @@ Many NMEA sentences mark multiple fields, and high-rate sources can update the s
 
 ## Phase 3: batch Signal K values per source
 
-Status: implemented in this PR for scalar mapped values. Object-valued deltas remain single-message to keep AIS and notification object serialization isolated.
+Status: implemented for scalar mapped values. Object-valued deltas remain single-message to keep AIS and notification object serialization isolated.
 
 Goals:
 
@@ -61,7 +61,7 @@ Expected impact:
 
 ## Phase 4: sentence ID dispatch
 
-Status: implemented in this PR.
+Status: implemented.
 
 Goals:
 
@@ -77,10 +77,12 @@ Expected impact:
 
 ## Phase 5: parser buffer/copy reduction
 
+Status: implemented in this PR.
+
 Goals:
 
-- Add parser support for spans or in-place token views.
-- Avoid copying the selected NMEA sentence into a temporary buffer when the input line is already mutable and bounded.
+- Add parser support for bounded spans or in-place token views.
+- Avoid copying the selected NMEA sentence into a temporary input buffer when the input line is already bounded.
 
 Expected impact:
 
@@ -88,18 +90,31 @@ Expected impact:
 - Less memory bandwidth.
 - Faster high-rate serial/UDP input.
 
-## Phase 6: MCU memory profile
+## Phase 6: deterministic memory profile
+
+Status: implemented in this PR for hot-path model-change storage and target-specific publisher defaults. Startup-only connector slot heap removal remains a follow-up item because it is more invasive and not in the common per-sentence hot path.
 
 Goals:
 
-- Evaluate compact `ModelChange` layouts for MCU builds.
-- Consider smaller default Signal K JSON buffers for MCU builds.
+- Apply compact/fixed/preallocated structures to both Linux and MCU where practical.
+- Use different default capacities per target.
+- Avoid runtime heap allocation in common hot paths.
+- Evaluate compact `ModelChange` layouts for both Linux and MCU builds.
+- Consider smaller default Signal K JSON buffers and batch arrays for MCU builds.
 - Replace dynamic connector slot storage with fixed-capacity storage where practical.
+
+Implemented in this phase:
+
+- Compact `ModelChange` from two 64-bit fields to 32-bit millisecond timestamp and 32-bit sequence.
+- Use compact 16-bit queue indexes with a bounded queue capacity assertion.
+- Add target-specific defaults for model-change queue capacity, Signal K JSON buffer size, and scalar batch size.
+- Keep the larger Linux defaults while reducing MCU defaults.
 
 Expected impact:
 
 - Lower RAM use on ESP32-class targets.
-- More deterministic memory behavior.
+- Better cache locality on Linux.
+- More deterministic memory behavior in hot paths.
 
 ## Phase 7: subscription-aware publishing
 
