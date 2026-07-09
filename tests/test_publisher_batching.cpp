@@ -71,7 +71,7 @@ int main() {
     config.connectors = &connector;
     config.connector_count = 1;
 
-    signalk_mini::ModelStore<float, 8> store;
+    signalk_mini::ModelStore<float> store;
     store.model().wind.apparent.direction_deg.set(45.0f, 1000);
     store.model().wind.apparent.speed_kn.set(12.0f, 1000);
     store.mark_changed(signalk_mini::ModelField::WindApparentDirectionDeg, 10, 1000);
