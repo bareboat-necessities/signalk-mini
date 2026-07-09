@@ -2,7 +2,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <async_event_loop.hpp>
 #include "config.hpp"
 #include "memory_profile.hpp"
 #include "signalk_delta_writer.hpp"
@@ -20,8 +19,8 @@ public:
         static_assert(MaxBatchValues > 0, "SignalKPublisher batch size must be greater than zero");
     }
 
-    template<typename RuntimeConnectionRegistry>
-    void publish_pending(RuntimeConnectionRegistry& connections) {
+    template<typename DeltaSink>
+    void publish_pending(DeltaSink& sink) {
         const size_t json_capacity = effective_json_buffer_size();
         if (json_capacity == 0) return;
 
@@ -40,13 +39,13 @@ public:
 
             const char* source_label = label_for_source(change.source_id);
             if (mapped.kind == SignalKMappedValueKind::Object) {
-                flush_scalar_batch(connections, json_capacity, batch_source_label, scalar_batch_, batch_count);
-                publish_single(connections, json_capacity, source_label, mapped);
+                flush_scalar_batch(sink, json_capacity, batch_source_label, scalar_batch_, batch_count);
+                publish_single(sink, json_capacity, source_label, mapped);
                 continue;
             }
 
             if (batch_count != 0 && (change.source_id != batch_source_id || batch_count >= MaxBatchValues)) {
-                flush_scalar_batch(connections, json_capacity, batch_source_label, scalar_batch_, batch_count);
+                flush_scalar_batch(sink, json_capacity, batch_source_label, scalar_batch_, batch_count);
             }
             if (batch_count == 0) {
                 batch_source_id = change.source_id;
@@ -55,7 +54,7 @@ public:
             scalar_batch_[batch_count++] = mapped;
         }
 
-        flush_scalar_batch(connections, json_capacity, batch_source_label, scalar_batch_, batch_count);
+        flush_scalar_batch(sink, json_capacity, batch_source_label, scalar_batch_, batch_count);
     }
 
     uint64_t dropped_publish_count() const { return dropped_publish_count_; }
@@ -108,15 +107,13 @@ private:
         return out.ok() ? static_cast<int>(out.size()) : 0;
     }
 
-    template<typename RuntimeConnectionRegistry>
-    void write_to_connections(RuntimeConnectionRegistry& connections, const char* json, size_t len) {
-        connections.for_each_tx([&](async_event_loop::ITcpConnection& connection) {
-            connection.write(reinterpret_cast<const uint8_t*>(json), len);
-        });
+    template<typename DeltaSink>
+    void write_to_sink(DeltaSink& sink, const char* json, size_t len) {
+        sink.write_signal_k_delta(json, len);
     }
 
-    template<typename RuntimeConnectionRegistry>
-    void flush_scalar_batch(RuntimeConnectionRegistry& connections,
+    template<typename DeltaSink>
+    void flush_scalar_batch(DeltaSink& sink,
                             size_t json_capacity,
                             const char* source_label,
                             SignalKMappedValue<Real>* values,
@@ -128,14 +125,14 @@ private:
             value_count = 0;
             return;
         }
-        write_to_connections(connections, json_, static_cast<size_t>(len));
+        write_to_sink(sink, json_, static_cast<size_t>(len));
         ++published_delta_count_;
         published_value_count_ += value_count;
         value_count = 0;
     }
 
-    template<typename RuntimeConnectionRegistry>
-    void publish_single(RuntimeConnectionRegistry& connections,
+    template<typename DeltaSink>
+    void publish_single(DeltaSink& sink,
                         size_t json_capacity,
                         const char* source_label,
                         const SignalKMappedValue<Real>& mapped) {
@@ -144,7 +141,7 @@ private:
             ++dropped_publish_count_;
             return;
         }
-        write_to_connections(connections, json_, static_cast<size_t>(len));
+        write_to_sink(sink, json_, static_cast<size_t>(len));
         ++published_delta_count_;
         ++published_value_count_;
     }
