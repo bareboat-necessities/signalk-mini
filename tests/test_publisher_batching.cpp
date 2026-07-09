@@ -46,6 +46,10 @@ struct SingleConnectionRegistry {
     template<typename Fn>
     void for_each_tx(Fn fn) { fn(connection); }
 
+    void write_signal_k_delta(const char* json, size_t len) {
+        connection.write(reinterpret_cast<const uint8_t*>(json), len);
+    }
+
     CaptureConnection& connection;
 };
 

@@ -14,7 +14,11 @@ struct ServerIdentityConfig {
 };
 
 struct SignalKWebSocketServerConfig {
+#if defined(ARDUINO)
     bool enabled = false;
+#else
+    bool enabled = true;
+#endif
     const char* host = "0.0.0.0";
     uint16_t port = 3000;
     uint16_t max_connections = DefaultSignalKMaxConnections;

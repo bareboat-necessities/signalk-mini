@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include <ArduinoJson.h>
+#include <nmea0183_connector.hpp>
 #include <signalk_mini.hpp>
 #include <signalk_mini/websocket.hpp>
 
@@ -20,6 +21,7 @@
 #include <vector>
 
 #define REQUIRE(x) do { if (!(x)) { std::fprintf(stderr, "FAILED %s:%d: %s\n", __FILE__, __LINE__, #x); std::exit(1); } } while (0)
+#define NEAR(a,b,e) do { if (std::fabs(static_cast<double>((a) - (b))) > (e)) { std::fprintf(stderr, "NEAR failed %s:%d: got %.9f expected %.9f\n", __FILE__, __LINE__, static_cast<double>(a), static_cast<double>(b)); std::exit(2); } } while (0)
 
 namespace {
 
@@ -73,6 +75,18 @@ public:
 
     uint16_t port() const { return port_; }
 
+    Fd accept_with_timeout(int timeout_ms) const {
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(fd_.get(), &rfds);
+        timeval tv{};
+        tv.tv_sec = timeout_ms / 1000;
+        tv.tv_usec = (timeout_ms % 1000) * 1000;
+        const int rc = ::select(fd_.get() + 1, &rfds, nullptr, nullptr, &tv);
+        if (rc <= 0) return Fd{};
+        return Fd(::accept(fd_.get(), nullptr, nullptr));
+    }
+
 private:
     Fd fd_;
     uint16_t port_ = 0;
@@ -117,6 +131,15 @@ bool send_all(int fd, const uint8_t* data, size_t size) {
 
 bool send_all(int fd, const std::string& data) {
     return send_all(fd, reinterpret_cast<const uint8_t*>(data.data()), data.size());
+}
+
+std::string nmea_sentence(const char* body) {
+    char out[192];
+    const uint8_t cs = nmea0183_connector::nmea_checksum_body(body);
+    std::snprintf(out, sizeof(out), "$%s*%c%c\r\n", body,
+                  nmea0183_connector::to_hex((cs >> 4) & 0x0f),
+                  nmea0183_connector::to_hex(cs & 0x0f));
+    return std::string(out);
 }
 
 std::vector<uint8_t> masked_client_text_frame(const char* text) {
@@ -245,11 +268,49 @@ bool has_clock_delta(const char* text) {
     return false;
 }
 
+bool has_wind_speed_delta(const char* text) {
+    JsonDocument doc;
+    const DeserializationError err = deserializeJson(doc, text);
+    REQUIRE(!err);
+    JsonArray updates = doc["updates"].as<JsonArray>();
+    if (updates.isNull()) return false;
+    for (JsonObject update : updates) {
+        JsonObject source = update["source"].as<JsonObject>();
+        JsonArray values = update["values"].as<JsonArray>();
+        if (values.isNull()) continue;
+        for (JsonObject value : values) {
+            const char* path = value["path"] | "";
+            if (std::strcmp(path, "environment.wind.speedApparent") != 0) continue;
+            REQUIRE(!source.isNull());
+            REQUIRE(std::strcmp(source["label"] | "", "integration-nmea0183-tcp-client") == 0);
+            REQUIRE(value["value"].is<double>() || value["value"].is<float>() || value["value"].is<int>());
+            const double wind_mps = value["value"] | -1.0;
+            NEAR(wind_mps, 6.5848889, 0.001);
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 int main() {
+    TcpListener nmea_source;
+    REQUIRE(nmea_source.start());
     const uint16_t raw_port = reserve_loopback_port();
     const uint16_t ws_port = reserve_loopback_port();
+
+    signalk_mini::ConnectorConfig nmea_connector;
+    nmea_connector.enabled = true;
+    nmea_connector.label = "integration-nmea0183-tcp-client";
+    nmea_connector.access.allow_rx = true;
+    nmea_connector.access.allow_tx = false;
+    nmea_connector.protocol.kind = signalk_mini::ConnectorProtocol::Nmea0183;
+    nmea_connector.protocol.nmea0183.validate_checksum = false;
+    nmea_connector.protocol.nmea0183.validate_checksum_configured = true;
+    nmea_connector.transport.kind = signalk_mini::ConnectorTransport::TcpClient;
+    nmea_connector.transport.tcp_client.host = "127.0.0.1";
+    nmea_connector.transport.tcp_client.port = nmea_source.port();
 
     signalk_mini::SignalKMiniConfig config;
     config.identity.server_name = "integration-signalk-server";
@@ -268,8 +329,8 @@ int main() {
     config.signalk.websocket.allow_tx = true;
     config.publisher.interval_us = 1000;
     config.publisher.source_label = "integration-test";
-    config.connectors = nullptr;
-    config.connector_count = 0;
+    config.connectors = &nmea_connector;
+    config.connector_count = 1;
 
     signalk_mini::SignalKMiniApp<float> app(config);
     REQUIRE(app.begin());
@@ -281,6 +342,9 @@ int main() {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     });
+
+    Fd nmea_connection = nmea_source.accept_with_timeout(3000);
+    REQUIRE(nmea_connection.valid());
 
     Fd client = connect_loopback(ws_port, 3000);
     REQUIRE(client.valid());
@@ -302,6 +366,10 @@ int main() {
     const std::vector<uint8_t> subscribe = masked_client_text_frame("{\"subscribe\":\"all\"}");
     REQUIRE(send_all(client.get(), subscribe.data(), subscribe.size()));
     REQUIRE(wait_for_ws_text(client.get(), ws_buffer, 3000, has_clock_delta));
+
+    const std::string mwv = nmea_sentence("IIMWV,045.0,R,12.8,N,A");
+    REQUIRE(send_all(nmea_connection.get(), mwv));
+    REQUIRE(wait_for_ws_text(client.get(), ws_buffer, 3000, has_wind_speed_delta));
 
     running = false;
     loop_thread.join();

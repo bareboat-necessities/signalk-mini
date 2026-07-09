@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 #include <async_event_loop.hpp>
 
 namespace signalk_mini {
@@ -65,6 +66,13 @@ public:
                 callback(*c);
             }
         }
+    }
+
+    void write_signal_k_delta(const char* json, size_t len) {
+        if (!json || len == 0) return;
+        for_each_tx([&](async_event_loop::ITcpConnection& connection) {
+            connection.write(reinterpret_cast<const uint8_t*>(json), len);
+        });
     }
 
 private:
