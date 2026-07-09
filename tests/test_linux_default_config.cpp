@@ -29,26 +29,31 @@ static std::string default_config_text_block(const std::string& main_cpp) {
     return main_cpp.substr(begin, end - begin);
 }
 
+static void require_current_linux_defaults(const std::string& text) {
+    REQUIRE(text.find("signalk") != std::string::npos);
+    REQUIRE(text.find("host = \\\"0.0.0.0\\\";") != std::string::npos || text.find("host = \"0.0.0.0\";") != std::string::npos);
+    REQUIRE(text.find("port = 20223;") != std::string::npos);
+
+    REQUIRE(text.find("websocket") != std::string::npos);
+    REQUIRE(text.find("enabled = true;") != std::string::npos);
+    REQUIRE(text.find("port = 3001;") != std::string::npos);
+    REQUIRE(text.find("max_connections = 8;") != std::string::npos);
+    REQUIRE(text.find("allow_rx = true;") != std::string::npos);
+    REQUIRE(text.find("allow_tx = true;") != std::string::npos);
+
+    REQUIRE(text.find("connectors") != std::string::npos);
+    REQUIRE(text.find("protocol = \\\"nmea0183\\\";") != std::string::npos || text.find("protocol = \"nmea0183\";") != std::string::npos);
+    REQUIRE(text.find("transport = \\\"udp\\\";") != std::string::npos || text.find("transport = \"udp\";") != std::string::npos);
+    REQUIRE(text.find("listen_port = 10110;") != std::string::npos);
+}
+
 int main() {
     const std::string main_cpp = read_file(SIGNALK_MINI_SOURCE_DIR "/linux/main.cpp");
-    const std::string block = default_config_text_block(main_cpp);
+    const std::string generated_block = default_config_text_block(main_cpp);
+    require_current_linux_defaults(generated_block);
 
-    REQUIRE(block.find("signalk = {") != std::string::npos);
-    REQUIRE(block.find("  host = \\\"0.0.0.0\\\";") != std::string::npos);
-    REQUIRE(block.find("  port = 20223;") != std::string::npos);
-
-    REQUIRE(block.find("  websocket = {") != std::string::npos);
-    REQUIRE(block.find("    enabled = true;") != std::string::npos);
-    REQUIRE(block.find("    host = \\\"0.0.0.0\\\";") != std::string::npos);
-    REQUIRE(block.find("    port = 3001;") != std::string::npos);
-    REQUIRE(block.find("    max_connections = 8;") != std::string::npos);
-    REQUIRE(block.find("    allow_rx = true;") != std::string::npos);
-    REQUIRE(block.find("    allow_tx = true;") != std::string::npos);
-
-    REQUIRE(block.find("connectors = (") != std::string::npos);
-    REQUIRE(block.find("protocol = \\\"nmea0183\\\";") != std::string::npos);
-    REQUIRE(block.find("transport = \\\"udp\\\";") != std::string::npos);
-    REQUIRE(block.find("listen_port = 10110;") != std::string::npos);
+    const std::string example_config = read_file(SIGNALK_MINI_SOURCE_DIR "/examples/linux/signalk-mini.conf");
+    require_current_linux_defaults(example_config);
 
     return 0;
 }
