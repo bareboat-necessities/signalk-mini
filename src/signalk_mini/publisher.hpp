@@ -5,13 +5,14 @@
 #include <ArduinoJson.h>
 #include <async_event_loop.hpp>
 #include "config.hpp"
+#include "memory_profile.hpp"
 #include "signalk_delta_writer.hpp"
 #include "model_store.hpp"
 #include "signalk_mapper.hpp"
 
 namespace signalk_mini {
 
-template<typename Real, size_t MaxJsonBufferSize = 1024, size_t MaxBatchValues = 32>
+template<typename Real, size_t MaxJsonBufferSize = DefaultSignalKJsonBufferSize, size_t MaxBatchValues = DefaultSignalKBatchValues>
 class SignalKPublisher {
 public:
     SignalKPublisher(ModelStore<Real>& store, const SignalKMiniConfig& config)
