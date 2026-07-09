@@ -300,19 +300,20 @@ void print_startup_summary(const signalk_mini::SignalKMiniConfig& config, const 
     }
 }
 
-void print_startup_failure(const signalk_mini::SignalKMiniConfig& config,
-                           signalk_mini::MiniSignalKServer<float>& app) {
-    const auto error = app.last_startup_error();
+template<typename App>
+void print_startup_failure(const signalk_mini::SignalKMiniConfig& config, const App& app) {
+    using StartupError = signalk_mini::MiniSignalKServer<float>::StartupError;
+    const StartupError error = app.last_startup_error();
     const size_t failed_index = app.last_failed_connector_index();
     std::cerr << "failed to start signalk-mini: " << startup_error_to_string(error);
-    if (failed_index < config.connector_count) {
+    if (failed_index < config.connector_count && config.connectors) {
         std::cerr << "; connector_index=" << failed_index;
         const signalk_mini::ConnectorConfig& connector = config.connectors[failed_index];
         std::cerr << "; connector_label=" << (connector.label && connector.label[0] ? connector.label : "-")
                   << "; connector_transport=" << transport_to_string(connector.transport.kind);
     } else {
         std::cerr << "; listener_or_core_startup=true";
-        if (error == signalk_mini::MiniSignalKServer<float>::StartupError::ConnectorStartFailed) {
+        if (error == StartupError::ConnectorStartFailed) {
             std::cerr << "; check Signal K TCP "
                       << (config.signalk.host ? config.signalk.host : "0.0.0.0")
                       << ":" << config.signalk.port;
