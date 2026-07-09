@@ -282,6 +282,7 @@ int main() {
     config.signalk.port = signalk_port;
     config.signalk.allow_rx = true;
     config.signalk.allow_tx = true;
+    config.signalk.websocket.enabled = false;
     config.publisher.interval_us = 1000;
     config.publisher.source_label = "integration-test";
     config.connectors = &nmea_connector;
