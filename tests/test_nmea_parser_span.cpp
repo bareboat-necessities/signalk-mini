@@ -21,9 +21,9 @@ int main() {
     REQUIRE(nmea0183_connector::nmea_span_equals(sentence.field(1), "M"));
 
     const char rmc_storage[] = {
-        '\\','s','x','r','c',',','c','x','*','0','0','\\','/','$','G','P','R','M','C',',','1','2','3','5','1','9',',','A',',','4','8','0','7','.','0','3','8',',','N',',','0','1','1','3','1','.','0','0','0',',','E','\r','\n','X','X'
+        '/','s','x','r','c',',','c','x','*','0','0','/','$','G','P','R','M','C',',','1','2','3','5','1','9',',','A',',','4','8','0','7','.','0','3','8',',','N',',','0','1','1','3','1','.','0','0','0',',','E','\r','\n','X','X'
     };
-    const nmea0183_connector::NmeaSpan rmc_span(rmc_storage, 52);
+    const nmea0183_connector::NmeaSpan rmc_span(rmc_storage, 51);
     REQUIRE(parser.parse_span(rmc_span, sentence, false));
     REQUIRE(nmea0183_connector::sentence_is(sentence, "RMC"));
     REQUIRE(nmea0183_connector::talker_is(sentence, "GP"));
