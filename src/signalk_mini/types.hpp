@@ -4,7 +4,9 @@
 
 namespace signalk_mini {
 
-using SourceId = uint16_t;
+using SourceId = uint8_t;
+static constexpr SourceId FirstConnectorSourceId = 10;
+static constexpr uint8_t MaxConnectorSourceCount = 245;
 
 enum class ModelField : uint16_t {
     None = 0,
