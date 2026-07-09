@@ -359,4 +359,15 @@ inline bool encode_text_frame(const char* text, size_t text_len, uint8_t* dst, s
     return true;
 }
 
+inline bool encode_control_frame(Opcode opcode, const uint8_t* payload, size_t payload_len, uint8_t* dst, size_t dst_capacity, size_t& out_len) {
+    out_len = 0;
+    if (!dst || !valid_control_payload(opcode, payload_len) || dst_capacity < 2 + payload_len) return false;
+    if (payload_len > 0 && !payload) return false;
+    dst[0] = 0x80u | static_cast<uint8_t>(opcode);
+    dst[1] = static_cast<uint8_t>(payload_len);
+    if (payload_len > 0) memcpy(dst + 2, payload, payload_len);
+    out_len = 2 + payload_len;
+    return true;
+}
+
 } // namespace signalk_mini::websocket
