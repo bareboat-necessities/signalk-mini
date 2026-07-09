@@ -300,6 +300,32 @@ void print_startup_summary(const signalk_mini::SignalKMiniConfig& config, const 
     }
 }
 
+void print_startup_failure(const signalk_mini::SignalKMiniConfig& config,
+                           signalk_mini::MiniSignalKServer<float>& app) {
+    const auto error = app.last_startup_error();
+    const size_t failed_index = app.last_failed_connector_index();
+    std::cerr << "failed to start signalk-mini: " << startup_error_to_string(error);
+    if (failed_index < config.connector_count) {
+        std::cerr << "; connector_index=" << failed_index;
+        const signalk_mini::ConnectorConfig& connector = config.connectors[failed_index];
+        std::cerr << "; connector_label=" << (connector.label && connector.label[0] ? connector.label : "-")
+                  << "; connector_transport=" << transport_to_string(connector.transport.kind);
+    } else {
+        std::cerr << "; listener_or_core_startup=true";
+        if (error == signalk_mini::MiniSignalKServer<float>::StartupError::ConnectorStartFailed) {
+            std::cerr << "; check Signal K TCP "
+                      << (config.signalk.host ? config.signalk.host : "0.0.0.0")
+                      << ":" << config.signalk.port;
+            if (config.signalk.websocket.enabled) {
+                std::cerr << " and Signal K WebSocket "
+                          << (config.signalk.websocket.host ? config.signalk.websocket.host : "0.0.0.0")
+                          << ":" << config.signalk.websocket.port;
+            }
+        }
+    }
+    std::cerr << "; connector_start_failures=" << app.connector_start_failure_count() << "\n";
+}
+
 CliAction parse_args(int argc, char** argv, const char*& config_path, bool& explicit_config) {
     config_path = nullptr;
     explicit_config = false;
@@ -357,11 +383,7 @@ int main(int argc, char** argv) {
 
     signalk_mini::SignalKMiniApp<float> app(config_loader.config);
     if (!app.begin()) {
-        std::cerr << "failed to start signalk-mini: "
-                  << startup_error_to_string(app.last_startup_error())
-                  << "; connector_index=" << app.last_failed_connector_index()
-                  << "; connector_start_failures=" << app.connector_start_failure_count()
-                  << "\n";
+        print_startup_failure(config_loader.config, app);
         return 1;
     }
     print_startup_summary(config_loader.config, discovery);
