@@ -5,6 +5,7 @@
 #include <ArduinoJson.h>
 #include <ship_data_model.hpp>
 #include "signalk_ais_delta_writer.hpp"
+#include "signalk_json_stream_writer.hpp"
 #include "signalk_mapper.hpp"
 #include "units.hpp"
 
@@ -14,11 +15,14 @@ template<typename Real>
 class SignalKDeltaWriter {
 public:
     int write_number(char* dst, size_t dst_size, const char* source_label, const char* path, Real value) const {
-        if (!dst || dst_size == 0 || !path) return 0;
-        JsonDocument doc;
-        JsonObject item = start_item(doc, source_label, path);
-        item["value"] = value;
-        return serialize_delta(dst, dst_size, doc);
+        return signalk_write_scalar_delta(dst,
+                                          dst_size,
+                                          source_label,
+                                          path,
+                                          SignalKMappedValueKind::Number,
+                                          value,
+                                          false,
+                                          nullptr);
     }
 
     int write_mapped(char* dst, size_t dst_size, const char* source_label, const SignalKMappedValue<Real>& value) const {
@@ -50,13 +54,14 @@ private:
 
     int write_scalar(char* dst, size_t dst_size, const char* source_label, const SignalKMappedValue<Real>& value) const {
         if (!dst || dst_size == 0 || !value.path) return 0;
-        JsonDocument doc;
-        JsonObject item = start_item(doc, source_label, value.path);
-        if (value.kind == SignalKMappedValueKind::Number) item["value"] = value.number;
-        else if (value.kind == SignalKMappedValueKind::Bool) item["value"] = value.boolean;
-        else if (value.kind == SignalKMappedValueKind::Text) item["value"] = value.text ? value.text : "";
-        else return 0;
-        return serialize_delta(dst, dst_size, doc);
+        return signalk_write_scalar_delta(dst,
+                                          dst_size,
+                                          source_label,
+                                          value.path,
+                                          value.kind,
+                                          value.number,
+                                          value.boolean,
+                                          value.text);
     }
 
     int serialize_delta(char* dst, size_t dst_size, JsonDocument& doc) const {

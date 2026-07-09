@@ -10,7 +10,11 @@
 namespace nmea0183_connector {
 
 static const uint8_t NMEA_MAX_SENTENCE_LEN = 192;
+#if defined(ARDUINO)
+static const uint8_t NMEA_MAX_FIELDS = 24;
+#else
 static const uint8_t NMEA_MAX_FIELDS = 32;
+#endif
 
 struct NmeaFragmentInfo {
     bool is_fragmented = false;

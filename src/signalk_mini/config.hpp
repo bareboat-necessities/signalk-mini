@@ -3,6 +3,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "memory_profile.hpp"
+
 namespace signalk_mini {
 
 struct ServerIdentityConfig {
@@ -14,15 +16,15 @@ struct ServerIdentityConfig {
 struct SignalKProtocolServerConfig {
     const char* host = "0.0.0.0";
     uint16_t port = 20223;
-    uint16_t max_connections = 8;
+    uint16_t max_connections = DefaultSignalKMaxConnections;
     bool allow_rx = true;
     bool allow_tx = true;
 };
 
 struct PublisherConfig {
     uint32_t interval_us = 10000;
-    uint16_t max_changes_per_tick = 32;
-    uint16_t json_buffer_size = 512;
+    uint16_t max_changes_per_tick = DefaultMaxChangesPerTick;
+    uint16_t json_buffer_size = static_cast<uint16_t>(DefaultSignalKJsonBufferSize);
     const char* source_label = "signalk-mini";
 };
 
@@ -157,8 +159,8 @@ inline SignalKMiniConfig make_sketch_owned_io_config(const char* server_name,
                                                      const char* source_label,
                                                      uint16_t signalk_port = 20223,
                                                      uint32_t publisher_interval_us = 10000,
-                                                     uint16_t max_changes_per_tick = 32,
-                                                     uint16_t json_buffer_size = 512) {
+                                                     uint16_t max_changes_per_tick = DefaultMaxChangesPerTick,
+                                                     uint16_t json_buffer_size = static_cast<uint16_t>(DefaultSignalKJsonBufferSize)) {
     SignalKMiniConfig cfg;
     cfg.identity.server_name = server_name ? server_name : "signalk-mini";
     cfg.identity.server_version = "0.1.0";
