@@ -6,7 +6,11 @@
 #define REQUIRE(x) do { if (!(x)) { std::fprintf(stderr, "FAILED %s:%d: %s\n", __FILE__, __LINE__, #x); std::exit(1); } } while (0)
 
 int main() {
+    REQUIRE(sizeof(signalk_mini::SourceId) == 1);
+    REQUIRE(sizeof(signalk_mini::ModelField) == 2);
     REQUIRE(sizeof(signalk_mini::ModelChange) <= 12);
+    REQUIRE(signalk_mini::FirstConnectorSourceId == 10);
+    REQUIRE(signalk_mini::MaxConnectorSourceCount > 0);
     REQUIRE(signalk_mini::DefaultModelChangeQueueCapacity > 0);
     REQUIRE(signalk_mini::DefaultModelChangeQueueCapacity <= signalk_mini::MaxSupportedModelChangeQueueCapacity);
     REQUIRE(signalk_mini::DefaultSignalKJsonBufferSize > 0);
