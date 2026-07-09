@@ -2,11 +2,11 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <ArduinoJson.h>
 #include <async_event_loop.hpp>
 #include "config.hpp"
 #include "memory_profile.hpp"
 #include "signalk_delta_writer.hpp"
+#include "signalk_json_stream_writer.hpp"
 #include "model_store.hpp"
 #include "signalk_mapper.hpp"
 
@@ -70,8 +70,8 @@ private:
     }
 
     const char* label_for_source(SourceId source_id) const {
-        if (source_id >= 10 && config_.connectors) {
-            const size_t index = static_cast<size_t>(source_id - 10);
+        if (source_id >= FirstConnectorSourceId && config_.connectors) {
+            const size_t index = static_cast<size_t>(source_id - FirstConnectorSourceId);
             if (index < config_.connector_count) {
                 const char* label = config_.connectors[index].label;
                 if (label && label[0]) return label;
@@ -87,30 +87,25 @@ private:
                            size_t value_count) const {
         if (!dst || dst_size == 0 || !values || value_count == 0) return 0;
 
-        JsonDocument doc;
-        JsonArray updates = doc["updates"].to<JsonArray>();
-        JsonObject update = updates.add<JsonObject>();
-        JsonObject source = update["source"].to<JsonObject>();
-        source["label"] = source_label ? source_label : "signalk-mini";
-        JsonArray items = update["values"].to<JsonArray>();
+        SignalKJsonStreamWriter out(dst, dst_size);
+        if (!out.append_raw("{\"updates\":[{\"source\":{\"label\":")) return 0;
+        if (!out.append_quoted(source_label ? source_label : "signalk-mini")) return 0;
+        if (!out.append_raw("},\"values\":[")) return 0;
 
         for (size_t i = 0; i < value_count; ++i) {
             const SignalKMappedValue<Real>& value = values[i];
             if (!value.path || value.kind == SignalKMappedValueKind::Object) return 0;
-            JsonObject item = items.add<JsonObject>();
-            item["path"] = value.path;
-            if (value.kind == SignalKMappedValueKind::Number) item["value"] = value.number;
-            else if (value.kind == SignalKMappedValueKind::Bool) item["value"] = value.boolean;
-            else if (value.kind == SignalKMappedValueKind::Text) item["value"] = value.text ? value.text : "";
-            else return 0;
+            if (i != 0 && !out.append_char(',')) return 0;
+            if (!out.append_raw("{\"path\":")) return 0;
+            if (!out.append_quoted(value.path)) return 0;
+            if (!out.append_raw(",\"value\":")) return 0;
+            if (!signalk_json_write_scalar_value(out, value.kind, value.number, value.boolean, value.text)) return 0;
+            if (!out.append_char('}')) return 0;
         }
 
-        const size_t len = serializeJson(doc, dst, dst_size);
-        if (len + 2 >= dst_size) return 0;
-        dst[len] = '\r';
-        dst[len + 1] = '\n';
-        dst[len + 2] = '\0';
-        return static_cast<int>(len + 2);
+        if (!out.append_raw("]}]}")) return 0;
+        if (!out.finish_crlf()) return 0;
+        return out.ok() ? static_cast<int>(out.size()) : 0;
     }
 
     template<typename RuntimeConnectionRegistry>
