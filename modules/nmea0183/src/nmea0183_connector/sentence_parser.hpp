@@ -200,7 +200,7 @@ public:
         if (c == '\n') {
             buffer_[pos_] = '\0';
             collecting_ = false;
-            return parse_line(buffer_, out);
+            return parse_span(NmeaSpan(buffer_, pos_), out, true);
         }
         if (pos_ + 1 >= NMEA_MAX_SENTENCE_LEN) {
             reset();
@@ -217,23 +217,37 @@ public:
     }
 
     bool parse_line(const char* line, NmeaSentence& out, bool validate_checksum) {
-        out.clear();
-        if (!line) { last_error_ = "bad start"; return false; }
+        return parse_span(NmeaSpan(line, line ? strlen(line) : 0), out, validate_checksum);
+    }
 
-        const char* sentence_line = line;
+    bool parse_span(NmeaSpan line, NmeaSentence& out) {
+        return parse_span(line, out, true);
+    }
+
+    bool parse_span(NmeaSpan line, NmeaSentence& out, bool validate_checksum) {
+        out.clear();
+        if (!line.data || line.length == 0) { last_error_ = "bad start"; return false; }
+
+        const char* line_begin = line.data;
+        const char* line_end = line.data + line.length;
+        while (line_end > line_begin && (line_end[-1] == '\r' || line_end[-1] == '\n' || line_end[-1] == '\0')) --line_end;
+        if (line_begin >= line_end) { last_error_ = "bad start"; return false; }
+
+        const char* sentence_line = line_begin;
         if (sentence_line[0] == '/') {
-            const char* tag_end = strchr(sentence_line + 1, '/');
-            if (!tag_end || (tag_end[1] != '$' && tag_end[1] != '!')) { last_error_ = "bad tag block"; return false; }
+            const char* tag_end = find_char(sentence_line + 1, line_end, '/');
+            if (!tag_end || tag_end + 1 >= line_end || (tag_end[1] != '$' && tag_end[1] != '!')) { last_error_ = "bad tag block"; return false; }
             sentence_line = tag_end + 1;
         }
 
-        if (sentence_line[0] != '$' && sentence_line[0] != '!') { last_error_ = "bad start"; return false; }
+        if (sentence_line >= line_end || (sentence_line[0] != '$' && sentence_line[0] != '!')) { last_error_ = "bad start"; return false; }
 
-        const char* star = strchr(sentence_line, '*');
-        const char* body_end_in = star ? star : (sentence_line + strlen(sentence_line));
+        const char* star = find_char(sentence_line, line_end, '*');
+        const char* body_end_in = star ? star : line_end;
 
         if (validate_checksum) {
             if (!star) { last_error_ = "missing checksum"; return false; }
+            if (star + 3 > line_end) { last_error_ = "bad checksum field"; return false; }
             uint8_t supplied = 0;
             if (!parse_checksum_hex(star + 1, supplied)) { last_error_ = "bad checksum field"; return false; }
             uint8_t computed = nmea_checksum_range(sentence_line + 1, star);
@@ -241,10 +255,10 @@ public:
             out.valid_checksum = true;
         } else if (star) {
             uint8_t supplied = 0;
-            out.valid_checksum = parse_checksum_hex(star + 1, supplied) && nmea_checksum_range(sentence_line + 1, star) == supplied;
+            out.valid_checksum = (star + 3 <= line_end) && parse_checksum_hex(star + 1, supplied) && nmea_checksum_range(sentence_line + 1, star) == supplied;
         }
 
-        size_t raw_len = strlen(sentence_line);
+        size_t raw_len = static_cast<size_t>(line_end - sentence_line);
         if (raw_len >= NMEA_MAX_SENTENCE_LEN) raw_len = NMEA_MAX_SENTENCE_LEN - 1;
         memcpy(out.raw, sentence_line, raw_len);
         out.raw[raw_len] = '\0';
@@ -286,6 +300,11 @@ public:
     }
 
 private:
+    static const char* find_char(const char* begin, const char* end, char needle) {
+        if (!begin || !end || begin >= end) return nullptr;
+        return static_cast<const char*>(memchr(begin, needle, static_cast<size_t>(end - begin)));
+    }
+
     bool finish_success(NmeaSentence& out) {
         out.family = classify_nmea_sentence(out);
         nmea_detect_fragment_info(out);

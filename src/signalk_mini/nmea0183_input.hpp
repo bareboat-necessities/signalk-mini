@@ -163,11 +163,8 @@ public:
         const nmea0183_connector::NmeaToken* token = tokens.first_sentence();
         if (!token) return false;
 
-        char sentence_text[nmea0183_connector::NMEA_MAX_SENTENCE_LEN];
-        nmea0183_connector::nmea_copy_span(sentence_text, sizeof(sentence_text), token->text);
-
         nmea0183_connector::NmeaSentence sentence;
-        if (!parser_.parse_line(sentence_text, sentence, validate_checksum)) return false;
+        if (!parser_.parse_span(token->text, sentence, validate_checksum)) return false;
 
         const NmeaSentenceId sentence_id = classify_nmea_sentence_id(sentence);
         const bool magnetic_heading_only = sentence_id == NmeaSentenceId::HDM || sentence_id == NmeaSentenceId::HDG;

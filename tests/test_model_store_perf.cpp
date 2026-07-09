@@ -6,6 +6,12 @@
 #define REQUIRE(x) do { if (!(x)) { std::fprintf(stderr, "FAILED %s:%d: %s\n", __FILE__, __LINE__, #x); std::exit(1); } } while (0)
 
 int main() {
+    REQUIRE(sizeof(signalk_mini::ModelChange) <= 12);
+    REQUIRE(signalk_mini::DefaultModelChangeQueueCapacity > 0);
+    REQUIRE(signalk_mini::DefaultModelChangeQueueCapacity <= signalk_mini::MaxSupportedModelChangeQueueCapacity);
+    REQUIRE(signalk_mini::DefaultSignalKJsonBufferSize > 0);
+    REQUIRE(signalk_mini::DefaultSignalKBatchValues > 0);
+
     signalk_mini::ModelStore<float, 4> store;
 
     REQUIRE(store.marked_change_count() == 0);
@@ -32,7 +38,7 @@ int main() {
     REQUIRE(store.changes().pop(change));
     REQUIRE(change.field == signalk_mini::ModelField::WindApparentSpeedKn);
     REQUIRE(change.source_id == 10);
-    REQUIRE(change.timestamp_us == 3000);
+    REQUIRE(change.timestamp_ms == 3);
     REQUIRE(change.sequence == 3);
     REQUIRE(store.pending_change_count() == 0);
 
@@ -49,17 +55,17 @@ int main() {
     REQUIRE(store.changes().pop(change));
     REQUIRE(change.field == signalk_mini::ModelField::WindApparentSpeedKn);
     REQUIRE(change.source_id == 10);
-    REQUIRE(change.timestamp_us == 4000);
+    REQUIRE(change.timestamp_ms == 4);
 
     REQUIRE(store.changes().pop(change));
     REQUIRE(change.field == signalk_mini::ModelField::WindApparentSpeedKn);
     REQUIRE(change.source_id == 11);
-    REQUIRE(change.timestamp_us == 5000);
+    REQUIRE(change.timestamp_ms == 5);
 
     REQUIRE(store.changes().pop(change));
     REQUIRE(change.field == signalk_mini::ModelField::WindApparentDirectionDeg);
     REQUIRE(change.source_id == 10);
-    REQUIRE(change.timestamp_us == 6000);
+    REQUIRE(change.timestamp_ms == 6);
 
     REQUIRE(!store.changes().pop(change));
 
