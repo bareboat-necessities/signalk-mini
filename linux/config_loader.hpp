@@ -113,6 +113,19 @@ private:
         read_u16(s, "max_connections", config.signalk.max_connections);
         read_bool(s, "allow_rx", config.signalk.allow_rx);
         read_bool(s, "allow_tx", config.signalk.allow_tx);
+        load_signalk_websocket(s);
+    }
+
+    void load_signalk_websocket(config_setting_t* signalk) {
+        config_setting_t* s = config_setting_lookup(signalk, "websocket");
+        if (!s) return;
+        const char* value = nullptr;
+        read_bool(s, "enabled", config.signalk.websocket.enabled);
+        if (config_setting_lookup_string(s, "host", &value)) config.signalk.websocket.host = keep(value);
+        read_u16(s, "port", config.signalk.websocket.port);
+        read_u16(s, "max_connections", config.signalk.websocket.max_connections);
+        read_bool(s, "allow_rx", config.signalk.websocket.allow_rx);
+        read_bool(s, "allow_tx", config.signalk.websocket.allow_tx);
     }
 
     void load_publisher(config_t* file) {
