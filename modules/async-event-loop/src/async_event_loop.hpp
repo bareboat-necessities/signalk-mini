@@ -7,6 +7,8 @@
 #include "async_event_loop/protocol_reader.hpp"
 #include "async_event_loop/tcp.hpp"
 #include "async_event_loop/tcp_line_protocol.hpp"
+#include "async_event_loop/websocket.hpp"
+#include "async_event_loop/websocket_server.hpp"
 #include "async_event_loop/pin_io.hpp"
 #include "async_event_loop/scheduler.hpp"
 #include "async_event_loop/native.hpp"
