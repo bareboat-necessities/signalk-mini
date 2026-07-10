@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "signalk_mapper.hpp"
+#include "signalk_timestamp.hpp"
 
 namespace signalk_mini {
 
@@ -103,15 +104,15 @@ inline bool signalk_json_write_scalar_value(SignalKJsonStreamWriter& out, Signal
 
 template<typename Real>
 inline int signalk_write_scalar_delta(char* dst,
-                                       size_t dst_size,
-                                       const char* context,
-                                       const char* timestamp,
-                                       const char* source_label,
-                                       const char* path,
-                                       SignalKMappedValueKind kind,
-                                       Real number,
-                                       bool boolean,
-                                       const char* text) {
+                                      size_t dst_size,
+                                      const char* context,
+                                      const char* timestamp,
+                                      const char* source_label,
+                                      const char* path,
+                                      SignalKMappedValueKind kind,
+                                      Real number,
+                                      bool boolean,
+                                      const char* text) {
     if (!dst || dst_size == 0 || !path || !timestamp) return 0;
     SignalKJsonStreamWriter out(dst, dst_size);
     if (!out.append_raw("{\"context\":")) return 0;
@@ -127,6 +128,29 @@ inline int signalk_write_scalar_delta(char* dst,
     if (!out.append_raw("}]}]}")) return 0;
     if (!out.finish_crlf()) return 0;
     return out.ok() ? static_cast<int>(out.size()) : 0;
+}
+
+template<typename Real>
+inline int signalk_write_scalar_delta(char* dst,
+                                      size_t dst_size,
+                                      const char* source_label,
+                                      const char* path,
+                                      SignalKMappedValueKind kind,
+                                      Real number,
+                                      bool boolean,
+                                      const char* text) {
+    char timestamp[32];
+    if (!format_signalk_timestamp_utc(timestamp, sizeof(timestamp))) return 0;
+    return signalk_write_scalar_delta(dst,
+                                      dst_size,
+                                      "vessels.self",
+                                      timestamp,
+                                      source_label,
+                                      path,
+                                      kind,
+                                      number,
+                                      boolean,
+                                      text);
 }
 
 } // namespace signalk_mini
