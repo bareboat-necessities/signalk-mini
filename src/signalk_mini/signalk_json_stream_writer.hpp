@@ -103,16 +103,22 @@ inline bool signalk_json_write_scalar_value(SignalKJsonStreamWriter& out, Signal
 
 template<typename Real>
 inline int signalk_write_scalar_delta(char* dst,
-                                      size_t dst_size,
-                                      const char* source_label,
-                                      const char* path,
-                                      SignalKMappedValueKind kind,
-                                      Real number,
-                                      bool boolean,
-                                      const char* text) {
-    if (!dst || dst_size == 0 || !path) return 0;
+                                       size_t dst_size,
+                                       const char* context,
+                                       const char* timestamp,
+                                       const char* source_label,
+                                       const char* path,
+                                       SignalKMappedValueKind kind,
+                                       Real number,
+                                       bool boolean,
+                                       const char* text) {
+    if (!dst || dst_size == 0 || !path || !timestamp) return 0;
     SignalKJsonStreamWriter out(dst, dst_size);
-    if (!out.append_raw("{\"updates\":[{\"source\":{\"label\":")) return 0;
+    if (!out.append_raw("{\"context\":")) return 0;
+    if (!out.append_quoted(context ? context : "vessels.self")) return 0;
+    if (!out.append_raw(",\"updates\":[{\"timestamp\":")) return 0;
+    if (!out.append_quoted(timestamp)) return 0;
+    if (!out.append_raw(",\"source\":{\"label\":")) return 0;
     if (!out.append_quoted(source_label ? source_label : "signalk-mini")) return 0;
     if (!out.append_raw("},\"values\":[{\"path\":")) return 0;
     if (!out.append_quoted(path)) return 0;
