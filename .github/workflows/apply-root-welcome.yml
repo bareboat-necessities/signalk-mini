@@ -1,0 +1,28 @@
+name: Apply root welcome page
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'feature/root-welcome-page-final'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/root-welcome-page-final
+      - name: Apply patch
+        run: python3 tools/apply_root_welcome.py
+      - name: Commit clean result
+        run: |
+          rm .github/workflows/apply-root-welcome.yml
+          rm tools/apply_root_welcome.py
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Serve a tiny welcome page at root"
+          git push origin HEAD:feature/root-welcome-page-final
