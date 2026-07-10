@@ -127,7 +127,8 @@ static std::string valid_handshake() {
         "\r\n";
 }
 
-static void open_connection(async_event_loop::WebSocketServerHandler<2, 512, 128>& server,
+template<size_t MaxConnections, size_t HandshakeBufferSize, size_t ChunkSize, size_t MaxMessageSize>
+static void open_connection(async_event_loop::WebSocketServerHandler<MaxConnections, HandshakeBufferSize, ChunkSize, MaxMessageSize>& server,
                             FakeConnection& connection,
                             CaptureWebSocketHandler& capture) {
     async_event_loop::TcpPeerInfo peer{};
