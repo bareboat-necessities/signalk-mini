@@ -26,7 +26,7 @@ int main() {
         CHECK(!error);
         JsonObject root = document.as<JsonObject>();
         CHECK(!root.isNull());
-        const char* context = root["context"] | nullptr;
+        const char* context = root["context"].as<const char*>();
         CHECK(context != nullptr);
         CHECK(strcmp(context, "*") == 0);
         JsonArray array = root["unsubscribe"].as<JsonArray>();
@@ -34,7 +34,7 @@ int main() {
         CHECK(array.size() == 1);
         JsonObject entry = array[0].as<JsonObject>();
         CHECK(!entry.isNull());
-        const char* path = entry["path"] | nullptr;
+        const char* path = entry["path"].as<const char*>();
         CHECK(path != nullptr);
         CHECK(strcmp(path, "*") == 0);
     }
