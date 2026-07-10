@@ -1,0 +1,38 @@
+name: Trigger Signal K HTTP discovery fix
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'fix/signalk-http-discovery'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/signalk-http-discovery
+          fetch-depth: 0
+      - name: Extract and run focused patch
+        run: |
+          awk '
+            /      - name: Apply focused source patch/ { in_step=1; next }
+            in_step && /        run: \|/ { in_code=1; next }
+            in_code && /      - name: Commit patch/ { exit }
+            in_code { sub(/^          /, ""); print }
+          ' .github/workflows/apply-signalk-http-discovery-fix.yml > /tmp/apply_patch.py
+          python /tmp/apply_patch.py
+          rm -f .github/workflows/apply-signalk-http-discovery-fix.yml
+          rm -f .github/workflows/trigger-signalk-http-discovery-fix.yml
+      - name: Commit source and tests
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Add Signal K HTTP discovery and stream mounts"
+          git push origin HEAD:fix/signalk-http-discovery
