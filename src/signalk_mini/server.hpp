@@ -486,6 +486,29 @@ private:
         const char* target_end = target;
         while (target_end < end && *target_end != ' ') ++target_end;
         const size_t target_len = static_cast<size_t>(target_end - target);
+
+        if (target_len == 1 && target[0] == '/') {
+            static constexpr char Body[] =
+                "<!doctype html><html><head><meta charset=\"utf-8\"><title>SignalK Mini</title></head>"
+                "<body><h1>SignalK Mini</h1><p>Lightweight Signal K server is running.</p>"
+                "<p><a href=\"/signalk\">Signal K discovery</a></p></body></html>";
+            char response[384];
+            const int response_len = snprintf(
+                response,
+                sizeof(response),
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/html; charset=utf-8\r\n"
+                "Content-Length: %u\r\n"
+                "Connection: close\r\n"
+                "\r\n%s",
+                static_cast<unsigned>(sizeof(Body) - 1),
+                Body);
+            if (response_len <= 0 || static_cast<size_t>(response_len) >= sizeof(response)) return false;
+            return write_all(connection,
+                             reinterpret_cast<const uint8_t*>(response),
+                             static_cast<size_t>(response_len));
+        }
+
         const bool discovery =
             (target_len == 8 && strncmp(target, "/signalk", 8) == 0) ||
             (target_len == 9 && strncmp(target, "/signalk/", 9) == 0);
