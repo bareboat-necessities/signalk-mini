@@ -2,5 +2,6 @@ GET /signalk HTTP/1.1
 Host: 127.0.0.1:3001
 User-Agent: BoatInstrument
 Accept: application/json
+Cache-Control: no-cache
 Connection: close
 
