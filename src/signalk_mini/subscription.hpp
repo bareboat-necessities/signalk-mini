@@ -89,13 +89,13 @@ public:
         const DeserializationError error = deserializeJson(document, json, len);
         if (error) return fallback_all();
 
-        JsonObjectConst root = document.as<JsonObjectConst>();
+        JsonObject root = document.as<JsonObject>();
         if (root.isNull()) return fallback_all();
         const char* context = root["context"] | "vessels.self";
         if (!supported_context(context)) return fallback_all();
 
-        const JsonArrayConst subscribe = root["subscribe"].as<JsonArrayConst>();
-        const JsonArrayConst unsubscribe = root["unsubscribe"].as<JsonArrayConst>();
+        JsonArray subscribe = root["subscribe"].as<JsonArray>();
+        JsonArray unsubscribe = root["unsubscribe"].as<JsonArray>();
         const bool has_subscribe = !subscribe.isNull();
         const bool has_unsubscribe = !unsubscribe.isNull();
         if (has_subscribe == has_unsubscribe) return fallback_all();
@@ -140,7 +140,7 @@ private:
         return true;
     }
 
-    static bool parse_entry(JsonObjectConst object, SignalKSubscription<MaxPathLength>& entry) {
+    static bool parse_entry(JsonObject object, SignalKSubscription<MaxPathLength>& entry) {
         if (object.isNull()) return false;
         const char* path = object["path"] | nullptr;
         if (!copy_path(path, entry.path)) return false;
@@ -154,10 +154,10 @@ private:
         return true;
     }
 
-    bool apply_subscribe_array(JsonArrayConst array) {
+    bool apply_subscribe_array(JsonArray array) {
         if (array.isNull() || array.size() == 0) return false;
-        for (JsonVariantConst item : array) {
-            JsonObjectConst object = item.as<JsonObjectConst>();
+        for (JsonVariant item : array) {
+            JsonObject object = item.as<JsonObject>();
             if (object.isNull()) return false;
             SignalKSubscription<MaxPathLength> parsed{};
             if (!parse_entry(object, parsed)) return false;
@@ -172,10 +172,10 @@ private:
         return true;
     }
 
-    bool apply_unsubscribe_array(JsonArrayConst array) {
+    bool apply_unsubscribe_array(JsonArray array) {
         if (array.isNull() || array.size() == 0) return false;
-        for (JsonVariantConst item : array) {
-            JsonObjectConst object = item.as<JsonObjectConst>();
+        for (JsonVariant item : array) {
+            JsonObject object = item.as<JsonObject>();
             if (object.isNull()) return false;
             const char* path = object["path"] | nullptr;
             if (!path || !path[0]) return false;
