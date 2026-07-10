@@ -91,7 +91,8 @@ public:
 
         JsonObject root = document.as<JsonObject>();
         if (root.isNull()) return fallback_all();
-        const char* context = root["context"] | "vessels.self";
+        const char* context = root["context"].as<const char*>();
+        if (!context) context = "vessels.self";
         if (!supported_context(context)) return fallback_all();
 
         JsonArray subscribe = root["subscribe"].as<JsonArray>();
@@ -142,15 +143,15 @@ private:
 
     static bool parse_entry(JsonObject object, SignalKSubscription<MaxPathLength>& entry) {
         if (object.isNull()) return false;
-        const char* path = object["path"] | nullptr;
+        const char* path = object["path"].as<const char*>();
         if (!copy_path(path, entry.path)) return false;
         const uint64_t period = object["period"] | 1000ULL;
         const uint64_t min_period = object["minPeriod"] | 0ULL;
         if (period > UINT32_MAX || min_period > UINT32_MAX) return false;
         entry.timing.period_ms = static_cast<uint32_t>(period);
         entry.timing.min_period_ms = static_cast<uint32_t>(min_period);
-        if (!parse_policy(object["policy"] | nullptr, entry.timing.policy)) return false;
-        if (!parse_format(object["format"] | nullptr, entry.timing.format)) return false;
+        if (!parse_policy(object["policy"].as<const char*>(), entry.timing.policy)) return false;
+        if (!parse_format(object["format"].as<const char*>(), entry.timing.format)) return false;
         return true;
     }
 
@@ -177,7 +178,7 @@ private:
         for (JsonVariant item : array) {
             JsonObject object = item.as<JsonObject>();
             if (object.isNull()) return false;
-            const char* path = object["path"] | nullptr;
+            const char* path = object["path"].as<const char*>();
             if (!path || !path[0]) return false;
             if (strcmp(path, "*") == 0) {
                 unsubscribe_all();
