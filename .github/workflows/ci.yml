@@ -17,6 +17,13 @@ jobs:
         run: cmake --build build --parallel
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Upload CTest diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-diagnostics
+          path: build/Testing/Temporary/
+          if-no-files-found: ignore
 
   arduino-atoms3r:
     runs-on: ubuntu-latest
