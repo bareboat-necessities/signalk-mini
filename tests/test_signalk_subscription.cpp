@@ -24,15 +24,15 @@ int main() {
         JsonDocument document;
         const DeserializationError error = deserializeJson(document, unsubscribe_all, strlen(unsubscribe_all));
         CHECK(!error);
-        JsonObjectConst root = document.as<JsonObjectConst>();
+        JsonObject root = document.as<JsonObject>();
         CHECK(!root.isNull());
         const char* context = root["context"] | nullptr;
         CHECK(context != nullptr);
         CHECK(strcmp(context, "*") == 0);
-        JsonArrayConst array = root["unsubscribe"].as<JsonArrayConst>();
+        JsonArray array = root["unsubscribe"].as<JsonArray>();
         CHECK(!array.isNull());
         CHECK(array.size() == 1);
-        JsonObjectConst entry = array[0].as<JsonObjectConst>();
+        JsonObject entry = array[0].as<JsonObject>();
         CHECK(!entry.isNull());
         const char* path = entry["path"] | nullptr;
         CHECK(path != nullptr);
