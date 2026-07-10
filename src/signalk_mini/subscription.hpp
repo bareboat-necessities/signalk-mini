@@ -92,20 +92,24 @@ public:
         JsonDocument document;
         const DeserializationError error = deserializeJson(document, json, len);
         if (error) return fallback_all();
-        if (!document.is<JsonObject>()) return fallback_all();
 
-        JsonObject root = document.as<JsonObject>();
+        JsonVariantConst root_variant = document.as<JsonVariantConst>();
+        if (!root_variant.is<JsonObjectConst>()) return fallback_all();
+        JsonObjectConst root = root_variant.as<JsonObjectConst>();
+
         const char* context = root["context"] | "vessels.self";
         if (!supported_context(context)) return fallback_all();
 
-        const bool has_subscribe = root["subscribe"].is<JsonArray>();
-        const bool has_unsubscribe = root["unsubscribe"].is<JsonArray>();
+        const JsonVariantConst subscribe_variant = root["subscribe"];
+        const JsonVariantConst unsubscribe_variant = root["unsubscribe"];
+        const bool has_subscribe = subscribe_variant.is<JsonArrayConst>();
+        const bool has_unsubscribe = unsubscribe_variant.is<JsonArrayConst>();
         if (has_subscribe == has_unsubscribe) return fallback_all();
 
         SignalKSubscriptionSet candidate = *this;
         const bool ok = has_subscribe
-            ? candidate.apply_subscribe_array(root["subscribe"].as<JsonArrayConst>())
-            : candidate.apply_unsubscribe_array(root["unsubscribe"].as<JsonArrayConst>());
+            ? candidate.apply_subscribe_array(subscribe_variant.as<JsonArrayConst>())
+            : candidate.apply_unsubscribe_array(unsubscribe_variant.as<JsonArrayConst>());
         if (!ok) return fallback_all();
 
         *this = candidate;
