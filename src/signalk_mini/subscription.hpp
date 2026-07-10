@@ -93,9 +93,8 @@ public:
         const DeserializationError error = deserializeJson(document, json, len);
         if (error) return fallback_all();
 
-        JsonVariantConst root_variant = document.as<JsonVariantConst>();
-        if (!root_variant.is<JsonObjectConst>()) return fallback_all();
-        JsonObjectConst root = root_variant.as<JsonObjectConst>();
+        JsonObjectConst root = document.as<JsonObjectConst>();
+        if (root.isNull()) return fallback_all();
 
         const char* context = root["context"] | "vessels.self";
         if (!supported_context(context)) return fallback_all();
