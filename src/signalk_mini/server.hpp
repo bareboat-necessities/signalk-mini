@@ -489,9 +489,9 @@ private:
 
         if (target_len == 1 && target[0] == '/') {
             static constexpr char Body[] =
-                "<!doctype html><html><head><meta charset="utf-8"><title>SignalK Mini</title></head>"
+                "<!doctype html><html><head><meta charset=\"utf-8\"><title>SignalK Mini</title></head>"
                 "<body><h1>SignalK Mini</h1><p>Lightweight Signal K server is running.</p>"
-                "<p><a href="/signalk">Signal K discovery</a></p></body></html>";
+                "<p><a href=\"/signalk\">Signal K discovery</a></p></body></html>";
             char response[384];
             const int response_len = snprintf(
                 response,
