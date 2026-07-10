@@ -237,11 +237,10 @@ private:
 
             if (!handler_.accept_websocket_request(request)) {
                 static constexpr char NotFound[] =
-                    "HTTP/1.1 404 Not Found
-Content-Length: 0
-Connection: close
-
-";
+                    "HTTP/1.1 404 Not Found\r\n"
+                    "Content-Length: 0\r\n"
+                    "Connection: close\r\n"
+                    "\r\n";
                 (void)write_all(*slot.connection,
                                 reinterpret_cast<const uint8_t*>(NotFound),
                                 sizeof(NotFound) - 1);
