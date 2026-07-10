@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <ArduinoJson.h>
 #include <signalk_mini/subscription.hpp>
 
 using signalk_mini::SignalKSubscriptionSet;
@@ -19,6 +20,24 @@ int main() {
     CHECK(subscriptions.matches("navigation.speedThroughWater"));
 
     const char unsubscribe_all[] = R"({"context":"*","unsubscribe":[{"path":"*"}]})";
+    {
+        JsonDocument document;
+        const DeserializationError error = deserializeJson(document, unsubscribe_all, strlen(unsubscribe_all));
+        CHECK(!error);
+        JsonObjectConst root = document.as<JsonObjectConst>();
+        CHECK(!root.isNull());
+        const char* context = root["context"] | nullptr;
+        CHECK(context != nullptr);
+        CHECK(strcmp(context, "*") == 0);
+        JsonArrayConst array = root["unsubscribe"].as<JsonArrayConst>();
+        CHECK(!array.isNull());
+        CHECK(array.size() == 1);
+        JsonObjectConst entry = array[0].as<JsonObjectConst>();
+        CHECK(!entry.isNull());
+        const char* path = entry["path"] | nullptr;
+        CHECK(path != nullptr);
+        CHECK(strcmp(path, "*") == 0);
+    }
     CHECK(subscriptions.apply_message(unsubscribe_all, strlen(unsubscribe_all)) == SubscriptionApplyResult::Applied);
     CHECK(subscriptions.empty());
 
