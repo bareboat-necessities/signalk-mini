@@ -1,15 +1,15 @@
 name: Fix HTTP response test
 
 on:
-  pull_request:
-    types: [edited]
+  push:
+    branches: [fix/signalk-http-discovery]
 
 permissions:
   contents: write
 
 jobs:
   fix:
-    if: github.head_ref == 'fix/signalk-http-discovery'
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
