@@ -170,6 +170,22 @@ int main() {
     REQUIRE(std::strcmp(doc["endpoints"]["v1"]["signalk-ws"] | "", expected_ws) == 0);
     REQUIRE(std::strcmp(doc["server"]["id"] | "", "integration-signalk-server") == 0);
 
+    Fd root_client = connect_loopback(ws_port, 3000);
+    REQUIRE(root_client.valid());
+    char root_request[192];
+    std::snprintf(root_request,
+                  sizeof(root_request),
+                  "GET / HTTP/1.1\r\nHost: 127.0.0.1:%u\r\nConnection: close\r\n\r\n",
+                  static_cast<unsigned>(ws_port));
+    REQUIRE(send_all(root_client.get(), root_request));
+
+    std::string root_response;
+    REQUIRE(read_http_response(root_client.get(), root_response, 3000));
+    REQUIRE(root_response.find("HTTP/1.1 200 OK\r\n") == 0);
+    REQUIRE(root_response.find("Content-Type: text/html; charset=utf-8\r\n") != std::string::npos);
+    REQUIRE(root_response.find("<h1>SignalK Mini</h1>") != std::string::npos);
+    REQUIRE(root_response.find("href=\"/signalk\"") != std::string::npos);
+
     running = false;
     loop_thread.join();
     return 0;
