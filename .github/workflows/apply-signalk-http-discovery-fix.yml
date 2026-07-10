@@ -1,0 +1,305 @@
+name: Apply Signal K HTTP discovery fix
+
+on:
+  push:
+    branches:
+      - fix/signalk-http-discovery
+    paths:
+      - .github/workflows/apply-signalk-http-discovery-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/signalk-http-discovery
+          fetch-depth: 0
+      - name: Apply focused source patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if text.count(old) != 1:
+                  raise SystemExit(f"expected one match in {path}, found {text.count(old)}")
+              p.write_text(text.replace(old, new, 1))
+
+          websocket_hpp = "modules/async-event-loop/src/async_event_loop/websocket.hpp"
+          replace_once(
+              websocket_hpp,
+              '''struct HandshakeRequest {
+              char resource[96]{};
+              char key[64]{};
+              bool upgrade_websocket = false;''',
+              '''struct HandshakeRequest {
+              char resource[96]{};
+              char host[128]{};
+              char key[64]{};
+              bool upgrade_websocket = false;''')
+          replace_once(
+              websocket_hpp,
+              '''            if (ascii_iequals(name, name_len, "Upgrade")) {
+                          out.upgrade_websocket = ascii_iequals(value, value_len, "websocket");''',
+              '''            if (ascii_iequals(name, name_len, "Host")) {
+                          copy_trimmed(out.host, sizeof(out.host), value, value_len);
+                      } else if (ascii_iequals(name, name_len, "Upgrade")) {
+                          out.upgrade_websocket = ascii_iequals(value, value_len, "websocket");''')
+
+          websocket_server = "modules/async-event-loop/src/async_event_loop/websocket_server.hpp"
+          replace_once(
+              websocket_server,
+              '''    virtual void on_websocket_open(ITcpConnection& connection, const TcpPeerInfo& peer, const websocket::HandshakeRequest& request) {
+                  (void)connection;
+                  (void)peer;
+                  (void)request;
+              }
+
+              virtual void on_websocket_text''',
+              '''    virtual bool on_http_request(ITcpConnection& connection, const TcpPeerInfo& peer, const websocket::HandshakeRequest& request) {
+                  (void)connection;
+                  (void)peer;
+                  (void)request;
+                  return false;
+              }
+
+              virtual bool accept_websocket_request(ITcpConnection& connection, const TcpPeerInfo& peer, const websocket::HandshakeRequest& request) {
+                  (void)connection;
+                  (void)peer;
+                  (void)request;
+                  return true;
+              }
+
+              virtual void on_websocket_open(ITcpConnection& connection, const TcpPeerInfo& peer, const websocket::HandshakeRequest& request) {
+                  (void)connection;
+                  (void)peer;
+                  (void)request;
+              }
+
+              virtual void on_websocket_text''')
+          replace_once(
+              websocket_server,
+              '''            const websocket::HandshakeResult parsed = websocket::parse_client_handshake(reinterpret_cast<const char*>(slot.input), header_len, request);
+                      if (parsed != websocket::HandshakeResult::Ok) {
+                          fail_and_close(slot, parsed == websocket::HandshakeResult::UnsupportedVersion ? WebSocketError::UnsupportedVersion : WebSocketError::BadHandshake);
+                          return false;
+                      }
+
+                      char response[192];''',
+              '''            const websocket::HandshakeResult parsed = websocket::parse_client_handshake(reinterpret_cast<const char*>(slot.input), header_len, request);
+                      if (parsed != websocket::HandshakeResult::Ok) {
+                          if (parsed == websocket::HandshakeResult::BadRequest && request.resource[0] &&
+                              !request.upgrade_websocket && !request.connection_upgrade) {
+                              ITcpConnection& connection = *slot.connection;
+                              const bool handled = handler_.on_http_request(connection, slot.peer, request);
+                              if (!handled) write_http_not_found(connection);
+                              close_slot(slot, false);
+                              return false;
+                          }
+                          fail_and_close(slot, parsed == websocket::HandshakeResult::UnsupportedVersion ? WebSocketError::UnsupportedVersion : WebSocketError::BadHandshake);
+                          return false;
+                      }
+
+                      if (!handler_.accept_websocket_request(*slot.connection, slot.peer, request)) {
+                          ITcpConnection& connection = *slot.connection;
+                          write_http_not_found(connection);
+                          close_slot(slot, false);
+                          return false;
+                      }
+
+                      char response[192];''')
+          replace_once(
+              websocket_server,
+              '''    bool write_all(ITcpConnection& connection, const uint8_t* data, size_t length) {
+                  if (!data || length == 0 || !connection.valid() || !connection.writable()) return false;
+                  const int n = connection.write(data, length);
+                  return n == static_cast<int>(length);
+              }
+
+              void fail_and_close''',
+              '''    bool write_all(ITcpConnection& connection, const uint8_t* data, size_t length) {
+                  if (!data || length == 0 || !connection.valid() || !connection.writable()) return false;
+                  const int n = connection.write(data, length);
+                  return n == static_cast<int>(length);
+              }
+
+              void write_http_not_found(ITcpConnection& connection) {
+                  static constexpr char response[] =
+                      "HTTP/1.1 404 Not Found\\r\\n"
+                      "Content-Length: 0\\r\\n"
+                      "Connection: close\\r\\n"
+                      "\\r\\n";
+                  (void)write_all(connection, reinterpret_cast<const uint8_t*>(response), sizeof(response) - 1);
+              }
+
+              void fail_and_close''')
+
+          server = "src/signalk_mini/server.hpp"
+          replace_once(
+              server,
+              '''    static size_t signalk_text_len(const char* json, size_t len) {
+                  if (!json) return 0;
+                  while (len > 0 && (json[len - 1] == '\\r' || json[len - 1] == '\\n' || json[len - 1] == '\\0')) --len;
+                  return len;
+              }
+
+              static ship_data_model::SensorSource''',
+              '''    static size_t signalk_text_len(const char* json, size_t len) {
+                  if (!json) return 0;
+                  while (len > 0 && (json[len - 1] == '\\r' || json[len - 1] == '\\n' || json[len - 1] == '\\0')) --len;
+                  return len;
+              }
+
+              static bool resource_path_equals(const char* resource, const char* path) {
+                  if (!resource || !path) return false;
+                  const size_t path_len = strlen(path);
+                  return strncmp(resource, path, path_len) == 0 &&
+                         (resource[path_len] == '\\0' || resource[path_len] == '?');
+              }
+
+              bool send_signalk_discovery(async_event_loop::ITcpConnection& connection, const char* request_host) {
+                  char fallback_host[128];
+                  const char* host = request_host;
+                  if (!host || !host[0]) {
+                      const char* configured_host = config_.signalk.websocket.host;
+                      if (!configured_host || !configured_host[0] || strcmp(configured_host, "0.0.0.0") == 0) configured_host = "localhost";
+                      const int host_len = snprintf(fallback_host, sizeof(fallback_host), "%s:%u", configured_host,
+                                                    static_cast<unsigned>(config_.signalk.websocket.port));
+                      if (host_len <= 0 || static_cast<size_t>(host_len) >= sizeof(fallback_host)) return false;
+                      host = fallback_host;
+                  }
+
+                  char body[512];
+                  const int body_len = snprintf(
+                      body, sizeof(body),
+                      "{\\\"endpoints\\\":{\\\"v1\\\":{\\\"version\\\":\\\"1.7.0\\\","
+                      "\\\"signalk-http\\\":\\\"http://%s/signalk/v1/api/\\\","
+                      "\\\"signalk-ws\\\":\\\"ws://%s/signalk/v1/stream\\\"}}}",
+                      host, host);
+                  if (body_len <= 0 || static_cast<size_t>(body_len) >= sizeof(body)) return false;
+
+                  char response[768];
+                  const int response_len = snprintf(
+                      response, sizeof(response),
+                      "HTTP/1.1 200 OK\\r\\n"
+                      "Content-Type: application/json\\r\\n"
+                      "Content-Length: %d\\r\\n"
+                      "Access-Control-Allow-Origin: *\\r\\n"
+                      "Connection: close\\r\\n"
+                      "\\r\\n%s",
+                      body_len, body);
+                  if (response_len <= 0 || static_cast<size_t>(response_len) >= sizeof(response)) return false;
+                  return write_all(connection, reinterpret_cast<const uint8_t*>(response), static_cast<size_t>(response_len));
+              }
+
+              static ship_data_model::SensorSource''')
+          replace_once(
+              server,
+              '''        ConnectionRegistry<MaxSignalKConnections> connections;
+
+                  void on_websocket_open(async_event_loop::ITcpConnection& connection,''',
+              '''        ConnectionRegistry<MaxSignalKConnections> connections;
+
+                  bool on_http_request(async_event_loop::ITcpConnection& connection,
+                                       const async_event_loop::TcpPeerInfo&,
+                                       const async_event_loop::websocket::HandshakeRequest& request) override {
+                      if (!owner.resource_path_equals(request.resource, "/signalk")) return false;
+                      return owner.send_signalk_discovery(connection, request.host);
+                  }
+
+                  bool accept_websocket_request(async_event_loop::ITcpConnection&,
+                                                const async_event_loop::TcpPeerInfo&,
+                                                const async_event_loop::websocket::HandshakeRequest& request) override {
+                      return owner.resource_path_equals(request.resource, "/signalk/v1/stream");
+                  }
+
+                  void on_websocket_open(async_event_loop::ITcpConnection& connection,''')
+
+          test = "tests/test_signalk_mini_websocket_integration.cpp"
+          replace_once(
+              test,
+              '''std::string nmea_sentence(const char* body) {''',
+              '''std::string read_http_response(int fd, int timeout_ms) {
+                  std::string response;
+                  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+                  while (std::chrono::steady_clock::now() < deadline) {
+                      fd_set rfds;
+                      FD_ZERO(&rfds);
+                      FD_SET(fd, &rfds);
+                      timeval tv{};
+                      tv.tv_sec = 0;
+                      tv.tv_usec = 50000;
+                      const int rc = ::select(fd + 1, &rfds, nullptr, nullptr, &tv);
+                      if (rc < 0) {
+                          if (errno == EINTR) continue;
+                          break;
+                      }
+                      if (rc == 0) continue;
+                      char chunk[512];
+                      const ssize_t n = ::recv(fd, chunk, sizeof(chunk), 0);
+                      if (n <= 0) break;
+                      response.append(chunk, static_cast<size_t>(n));
+                  }
+                  return response;
+              }
+
+              std::string nmea_sentence(const char* body) {''')
+          replace_once(
+              test,
+              '''    Fd client = connect_loopback(ws_port, 3000);
+                  REQUIRE(client.valid());
+
+                  const std::string request =''',
+              '''    Fd discovery_client = connect_loopback(ws_port, 3000);
+                  REQUIRE(discovery_client.valid());
+                  char discovery_request[256];
+                  const int discovery_request_len = std::snprintf(
+                      discovery_request, sizeof(discovery_request),
+                      "GET /signalk HTTP/1.1\\r\\nHost: localhost:%u\\r\\nConnection: close\\r\\n\\r\\n",
+                      static_cast<unsigned>(ws_port));
+                  REQUIRE(discovery_request_len > 0);
+                  REQUIRE(send_all(discovery_client.get(), reinterpret_cast<const uint8_t*>(discovery_request),
+                                   static_cast<size_t>(discovery_request_len)));
+                  const std::string discovery_response = read_http_response(discovery_client.get(), 3000);
+                  REQUIRE(discovery_response.find("HTTP/1.1 200 OK\\r\\n") == 0);
+                  REQUIRE(discovery_response.find("Content-Type: application/json\\r\\n") != std::string::npos);
+                  const size_t discovery_body_offset = discovery_response.find("\\r\\n\\r\\n");
+                  REQUIRE(discovery_body_offset != std::string::npos);
+                  JsonDocument discovery_document;
+                  REQUIRE(!deserializeJson(discovery_document, discovery_response.substr(discovery_body_offset + 4)));
+                  const std::string expected_http = "http://localhost:" + std::to_string(ws_port) + "/signalk/v1/api/";
+                  const std::string expected_ws = "ws://localhost:" + std::to_string(ws_port) + "/signalk/v1/stream";
+                  REQUIRE(std::strcmp(discovery_document["endpoints"]["v1"]["signalk-http"] | "", expected_http.c_str()) == 0);
+                  REQUIRE(std::strcmp(discovery_document["endpoints"]["v1"]["signalk-ws"] | "", expected_ws.c_str()) == 0);
+
+                  Fd wrong_mount_client = connect_loopback(ws_port, 3000);
+                  REQUIRE(wrong_mount_client.valid());
+                  const std::string wrong_mount_request =
+                      "GET /signalk HTTP/1.1\\r\\n"
+                      "Host: localhost\\r\\n"
+                      "Upgrade: websocket\\r\\n"
+                      "Connection: Upgrade\\r\\n"
+                      "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\\r\\n"
+                      "Sec-WebSocket-Version: 13\\r\\n\\r\\n";
+                  REQUIRE(send_all(wrong_mount_client.get(), wrong_mount_request));
+                  const std::string wrong_mount_response = read_http_response(wrong_mount_client.get(), 3000);
+                  REQUIRE(wrong_mount_response.find("HTTP/1.1 404 Not Found\\r\\n") == 0);
+
+                  Fd client = connect_loopback(ws_port, 3000);
+                  REQUIRE(client.valid());
+
+                  const std::string request =''')
+
+          Path('.github/workflows/apply-signalk-http-discovery-fix.yml').unlink()
+      - name: Commit patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Add Signal K HTTP discovery and stream mounts"
+          git push origin HEAD:fix/signalk-http-discovery
