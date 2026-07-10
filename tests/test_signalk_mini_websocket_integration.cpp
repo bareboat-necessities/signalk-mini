@@ -154,6 +154,33 @@ std::vector<uint8_t> masked_client_text_frame(const char* text) {
     return frame;
 }
 
+bool wait_for_http_response(int fd, std::string& response, int timeout_ms) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    while (std::chrono::steady_clock::now() < deadline) {
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(fd, &rfds);
+        timeval tv{};
+        tv.tv_sec = 0;
+        tv.tv_usec = 50000;
+        const int rc = ::select(fd + 1, &rfds, nullptr, nullptr, &tv);
+        if (rc < 0) {
+            if (errno == EINTR) continue;
+            return false;
+        }
+        if (rc == 0) continue;
+        char chunk[512];
+        const ssize_t n = ::recv(fd, chunk, sizeof(chunk), 0);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            return false;
+        }
+        if (n == 0) return response.find("\r\n\r\n") != std::string::npos;
+        response.append(chunk, static_cast<size_t>(n));
+    }
+    return false;
+}
+
 bool wait_for_http_upgrade(int fd, std::vector<uint8_t>& leftover, int timeout_ms) {
     std::string buffer;
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
@@ -345,6 +372,42 @@ int main() {
 
     Fd nmea_connection = nmea_source.accept_with_timeout(3000);
     REQUIRE(nmea_connection.valid());
+
+    Fd discovery_client = connect_loopback(ws_port, 3000);
+    REQUIRE(discovery_client.valid());
+    char discovery_request[192];
+    std::snprintf(discovery_request,
+                  sizeof(discovery_request),
+                  "GET /signalk HTTP/1.1\r\nHost: 127.0.0.1:%u\r\nConnection: close\r\n\r\n",
+                  static_cast<unsigned>(ws_port));
+    REQUIRE(send_all(discovery_client.get(), std::string(discovery_request)));
+    std::string discovery_response;
+    REQUIRE(wait_for_http_response(discovery_client.get(), discovery_response, 3000));
+    REQUIRE(discovery_response.find("HTTP/1.1 200 OK\r\n") == 0);
+    const size_t body_pos = discovery_response.find("\r\n\r\n");
+    REQUIRE(body_pos != std::string::npos);
+    JsonDocument discovery_doc;
+    REQUIRE(!deserializeJson(discovery_doc, discovery_response.substr(body_pos + 4)));
+    char expected_ws[128];
+    std::snprintf(expected_ws,
+                  sizeof(expected_ws),
+                  "ws://127.0.0.1:%u/signalk/v1/stream",
+                  static_cast<unsigned>(ws_port));
+    REQUIRE(std::strcmp(discovery_doc["endpoints"]["v1"]["signalk-ws"] | "", expected_ws) == 0);
+
+    Fd wrong_mount = connect_loopback(ws_port, 3000);
+    REQUIRE(wrong_mount.valid());
+    const std::string wrong_request =
+        "GET /signalk HTTP/1.1\r\n"
+        "Host: 127.0.0.1:3000\r\n"
+        "Upgrade: websocket\r\n"
+        "Connection: Upgrade\r\n"
+        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+        "Sec-WebSocket-Version: 13\r\n\r\n";
+    REQUIRE(send_all(wrong_mount.get(), wrong_request));
+    std::string wrong_response;
+    REQUIRE(wait_for_http_response(wrong_mount.get(), wrong_response, 3000));
+    REQUIRE(wrong_response.find("HTTP/1.1 404 Not Found\r\n") == 0);
 
     Fd client = connect_loopback(ws_port, 3000);
     REQUIRE(client.valid());

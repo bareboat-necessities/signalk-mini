@@ -41,6 +41,22 @@ public:
         (void)len;
     }
 
+    virtual bool on_http_request(ITcpConnection& connection,
+                                 const TcpPeerInfo& peer,
+                                 const char* header,
+                                 size_t header_len) {
+        (void)connection;
+        (void)peer;
+        (void)header;
+        (void)header_len;
+        return false;
+    }
+
+    virtual bool accept_websocket_request(const websocket::HandshakeRequest& request) {
+        (void)request;
+        return true;
+    }
+
     virtual void on_websocket_close(ITcpConnection& connection) {
         (void)connection;
     }
@@ -206,7 +222,32 @@ private:
             websocket::HandshakeRequest request;
             const websocket::HandshakeResult parsed = websocket::parse_client_handshake(reinterpret_cast<const char*>(slot.input), header_len, request);
             if (parsed != websocket::HandshakeResult::Ok) {
+                if (handler_.on_http_request(*slot.connection,
+                                             slot.peer,
+                                             reinterpret_cast<const char*>(slot.input),
+                                             header_len)) {
+                    ITcpConnection* connection = slot.connection;
+                    release(*connection);
+                    connection->close();
+                    return false;
+                }
                 fail_and_close(slot, parsed == websocket::HandshakeResult::UnsupportedVersion ? WebSocketError::UnsupportedVersion : WebSocketError::BadHandshake);
+                return false;
+            }
+
+            if (!handler_.accept_websocket_request(request)) {
+                static constexpr char NotFound[] =
+                    "HTTP/1.1 404 Not Found
+Content-Length: 0
+Connection: close
+
+";
+                (void)write_all(*slot.connection,
+                                reinterpret_cast<const uint8_t*>(NotFound),
+                                sizeof(NotFound) - 1);
+                ITcpConnection* connection = slot.connection;
+                release(*connection);
+                connection->close();
                 return false;
             }
 
