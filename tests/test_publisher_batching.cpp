@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <ArduinoJson.h>
 #include <signalk_mini.hpp>
 
 #define REQUIRE(x) do { if (!(x)) { std::fprintf(stderr, "FAILED %s:%d: %s\n", __FILE__, __LINE__, #x); std::exit(1); } } while (0)
@@ -70,6 +71,7 @@ int main() {
     connector.label = "nmea-source";
 
     signalk_mini::SignalKMiniConfig config;
+    config.identity.self = "vessels.urn:mrn:imo:mmsi:123456789";
     config.publisher.max_changes_per_tick = 8;
     config.publisher.json_buffer_size = 512;
     config.connectors = &connector;
@@ -95,6 +97,15 @@ int main() {
     REQUIRE(std::strstr(connection.text(), "\"source\":{\"label\":\"nmea-source\"}") != nullptr);
     REQUIRE(std::strstr(connection.text(), "environment.wind.angleApparent") != nullptr);
     REQUIRE(std::strstr(connection.text(), "environment.wind.speedApparent") != nullptr);
+
+    JsonDocument doc;
+    REQUIRE(!deserializeJson(doc, connection.text()));
+    REQUIRE(std::strcmp(doc["context"] | "", "vessels.urn:mrn:imo:mmsi:123456789") == 0);
+    const char* timestamp = doc["updates"][0]["timestamp"].as<const char*>();
+    REQUIRE(timestamp != nullptr);
+    REQUIRE(std::strlen(timestamp) == 24);
+    REQUIRE(timestamp[4] == '-' && timestamp[7] == '-' && timestamp[10] == 'T');
+    REQUIRE(timestamp[23] == 'Z');
 
     return 0;
 }
