@@ -31,7 +31,6 @@ struct SignalKSubscription {
 inline bool signalk_path_matches(const char* pattern, const char* path) {
     if (!pattern || !path) return false;
     if (strcmp(pattern, "*") == 0) return true;
-
     const char* p = pattern;
     const char* v = path;
     while (*p || *v) {
@@ -39,13 +38,11 @@ inline bool signalk_path_matches(const char* pattern, const char* path) {
         const char* v_end = strchr(v, '.');
         const size_t p_len = p_end ? static_cast<size_t>(p_end - p) : strlen(p);
         const size_t v_len = v_end ? static_cast<size_t>(v_end - v) : strlen(v);
-
         if (p_len == 1 && p[0] == '*') {
             if (!p_end) return true;
         } else if (p_len != v_len || strncmp(p, v, p_len) != 0) {
             return false;
         }
-
         if (!p_end || !v_end) return !p_end && !v_end;
         p = p_end + 1;
         v = v_end + 1;
@@ -88,38 +85,33 @@ public:
 
     SubscriptionApplyResult apply_message(const char* json, size_t len) {
         if (!json || len == 0) return fallback_all();
-
         JsonDocument document;
         const DeserializationError error = deserializeJson(document, json, len);
         if (error) return fallback_all();
 
         JsonObjectConst root = document.as<JsonObjectConst>();
         if (root.isNull()) return fallback_all();
-
         const char* context = root["context"] | "vessels.self";
         if (!supported_context(context)) return fallback_all();
 
-        const JsonVariantConst subscribe_variant = root["subscribe"];
-        const JsonVariantConst unsubscribe_variant = root["unsubscribe"];
-        const bool has_subscribe = subscribe_variant.is<JsonArrayConst>();
-        const bool has_unsubscribe = unsubscribe_variant.is<JsonArrayConst>();
+        const JsonArrayConst subscribe = root["subscribe"].as<JsonArrayConst>();
+        const JsonArrayConst unsubscribe = root["unsubscribe"].as<JsonArrayConst>();
+        const bool has_subscribe = !subscribe.isNull();
+        const bool has_unsubscribe = !unsubscribe.isNull();
         if (has_subscribe == has_unsubscribe) return fallback_all();
 
         SignalKSubscriptionSet candidate = *this;
         const bool ok = has_subscribe
-            ? candidate.apply_subscribe_array(subscribe_variant.as<JsonArrayConst>())
-            : candidate.apply_unsubscribe_array(unsubscribe_variant.as<JsonArrayConst>());
+            ? candidate.apply_subscribe_array(subscribe)
+            : candidate.apply_unsubscribe_array(unsubscribe);
         if (!ok) return fallback_all();
-
         *this = candidate;
         return SubscriptionApplyResult::Applied;
     }
 
 private:
     static bool supported_context(const char* context) {
-        return context && (
-            strcmp(context, "vessels.self") == 0 ||
-            strcmp(context, "*") == 0);
+        return context && (strcmp(context, "vessels.self") == 0 || strcmp(context, "*") == 0);
     }
 
     SubscriptionApplyResult fallback_all() {
@@ -149,9 +141,9 @@ private:
     }
 
     static bool parse_entry(JsonObjectConst object, SignalKSubscription<MaxPathLength>& entry) {
+        if (object.isNull()) return false;
         const char* path = object["path"] | nullptr;
         if (!copy_path(path, entry.path)) return false;
-
         const uint64_t period = object["period"] | 1000ULL;
         const uint64_t min_period = object["minPeriod"] | 0ULL;
         if (period > UINT32_MAX || min_period > UINT32_MAX) return false;
@@ -163,12 +155,12 @@ private:
     }
 
     bool apply_subscribe_array(JsonArrayConst array) {
-        if (array.size() == 0) return false;
+        if (array.isNull() || array.size() == 0) return false;
         for (JsonVariantConst item : array) {
-            if (!item.is<JsonObjectConst>()) return false;
+            JsonObjectConst object = item.as<JsonObjectConst>();
+            if (object.isNull()) return false;
             SignalKSubscription<MaxPathLength> parsed{};
-            if (!parse_entry(item.as<JsonObjectConst>(), parsed)) return false;
-
+            if (!parse_entry(object, parsed)) return false;
             const int existing = find_exact(parsed.path);
             if (existing >= 0) {
                 entries_[existing] = parsed;
@@ -181,10 +173,11 @@ private:
     }
 
     bool apply_unsubscribe_array(JsonArrayConst array) {
-        if (array.size() == 0) return false;
+        if (array.isNull() || array.size() == 0) return false;
         for (JsonVariantConst item : array) {
-            if (!item.is<JsonObjectConst>()) return false;
-            const char* path = item["path"] | nullptr;
+            JsonObjectConst object = item.as<JsonObjectConst>();
+            if (object.isNull()) return false;
+            const char* path = object["path"] | nullptr;
             if (!path || !path[0]) return false;
             if (strcmp(path, "*") == 0) {
                 unsubscribe_all();
