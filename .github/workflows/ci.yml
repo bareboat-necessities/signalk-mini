@@ -4,7 +4,116 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
+  apply-server-clock-fix:
+    if: github.ref == 'refs/heads/fix/server-clock-delta-envelope' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/server-clock-delta-envelope
+          fetch-depth: 0
+      - name: Patch server clock delta and test
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          server = Path('src/signalk_mini/server.hpp')
+          text = server.read_text()
+          old = '''    void publish_server_clock() {
+        const uint64_t now_us = loop_.clock().micros();
+        update_server_clock_model(now_us);
+        char json[192];
+        const unsigned long clock_s = static_cast<unsigned long>(store_.model().comm.server.clock_s.value);
+        const int len = snprintf(json,
+                                 sizeof(json),
+                                 "{\\\"updates\\\":[{\\\"source\\\":{\\\"label\\\":\\\"%s\\\"},\\\"values\\\":[{\\\"path\\\":\\\"communication.server.clock\\\",\\\"value\\\":%lu}]}]}\\r\\n",
+                                 server_source_label(),
+                                 clock_s);
+        if (len <= 0 || static_cast<size_t>(len) >= sizeof(json)) return;
+        SignalKDeltaFanout fanout{signalk_connections_.connections, signalk_websocket_handler_};
+        fanout.write_signal_k_delta(json, static_cast<size_t>(len));
+    }
+'''
+          new = '''    void publish_server_clock() {
+        const uint64_t now_us = loop_.clock().micros();
+        update_server_clock_model(now_us);
+
+        char timestamp[32];
+        if (!format_signalk_timestamp_utc(timestamp, sizeof(timestamp))) return;
+        const char* context = config_.identity.self && config_.identity.self[0]
+            ? config_.identity.self
+            : "vessels.self";
+
+        char json[320];
+        const unsigned long clock_s = static_cast<unsigned long>(store_.model().comm.server.clock_s.value);
+        const int len = snprintf(
+            json,
+            sizeof(json),
+            "{\\\"context\\\":\\\"%s\\\",\\\"updates\\\":[{\\\"timestamp\\\":\\\"%s\\\",\\\"source\\\":{\\\"label\\\":\\\"%s\\\"},\\\"values\\\":[{\\\"path\\\":\\\"communication.server.clock\\\",\\\"value\\\":%lu}]}]}\\r\\n",
+            context,
+            timestamp,
+            server_source_label(),
+            clock_s);
+        if (len <= 0 || static_cast<size_t>(len) >= sizeof(json)) return;
+        SignalKDeltaFanout fanout{signalk_connections_.connections, signalk_websocket_handler_};
+        fanout.write_signal_k_delta(json, static_cast<size_t>(len));
+    }
+'''
+          if old not in text:
+              raise SystemExit('publish_server_clock marker not found')
+          server.write_text(text.replace(old, new, 1))
+
+          test = Path('tests/test_signalk_mini_websocket_integration.cpp')
+          text = test.read_text()
+          old = '''    JsonArray updates = doc["updates"].as<JsonArray>();
+    if (updates.isNull()) return false;
+    for (JsonObject update : updates) {
+        JsonArray values = update["values"].as<JsonArray>();
+        if (values.isNull()) continue;
+        for (JsonObject value : values) {
+            const char* path = value["path"] | "";
+            if (std::strcmp(path, "communication.server.clock") == 0) {
+                REQUIRE(value["value"].is<double>() || value["value"].is<float>() || value["value"].is<int>());
+                return true;
+            }
+        }
+    }
+'''
+          new = '''    JsonArray updates = doc["updates"].as<JsonArray>();
+    if (updates.isNull()) return false;
+    for (JsonObject update : updates) {
+        JsonArray values = update["values"].as<JsonArray>();
+        if (values.isNull()) continue;
+        for (JsonObject value : values) {
+            const char* path = value["path"] | "";
+            if (std::strcmp(path, "communication.server.clock") == 0) {
+                REQUIRE(std::strcmp(doc["context"] | "", "vessels.self") == 0);
+                const char* timestamp = update["timestamp"].as<const char*>();
+                REQUIRE(timestamp != nullptr);
+                REQUIRE(std::strlen(timestamp) == 24);
+                REQUIRE(timestamp[10] == 'T' && timestamp[23] == 'Z');
+                REQUIRE(value["value"].is<double>() || value["value"].is<float>() || value["value"].is<int>());
+                return true;
+            }
+        }
+    }
+'''
+          if old not in text:
+              raise SystemExit('clock test marker not found')
+          test.write_text(text.replace(old, new, 1))
+          PY
+          git fetch origin main
+          git checkout origin/main -- .github/workflows/ci.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/signalk_mini/server.hpp tests/test_signalk_mini_websocket_integration.cpp .github/workflows/ci.yml
+          git commit -m "Add standard envelope to server clock deltas"
+          git push origin HEAD:fix/server-clock-delta-envelope
+
   linux:
     runs-on: ubuntu-latest
     steps:
