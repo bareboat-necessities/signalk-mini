@@ -932,13 +932,22 @@ private:
     void publish_server_clock() {
         const uint64_t now_us = loop_.clock().micros();
         update_server_clock_model(now_us);
-        char json[192];
-        const unsigned long clock_s = static_cast<unsigned long>(store_.model().comm.server.clock_s.value);
-        const int len = snprintf(json,
-                                 sizeof(json),
-                                 "{\"updates\":[{\"source\":{\"label\":\"%s\"},\"values\":[{\"path\":\"communication.server.clock\",\"value\":%lu}]}]}\r\n",
-                                 server_source_label(),
-                                 clock_s);
+
+        char timestamp[32];
+        if (!format_signalk_timestamp_utc(timestamp, sizeof(timestamp))) return;
+
+        char json[384];
+        const double clock_s = static_cast<double>(store_.model().comm.server.clock_s.value);
+        const int len = signalk_write_scalar_delta(json,
+                                                   sizeof(json),
+                                                   config_.identity.self ? config_.identity.self : "vessels.self",
+                                                   timestamp,
+                                                   server_source_label(),
+                                                   "communication.server.clock",
+                                                   SignalKMappedValueKind::Number,
+                                                   clock_s,
+                                                   false,
+                                                   nullptr);
         if (len <= 0 || static_cast<size_t>(len) >= sizeof(json)) return;
         SignalKDeltaFanout fanout{signalk_connections_.connections, signalk_websocket_handler_};
         fanout.write_signal_k_delta(json, static_cast<size_t>(len));

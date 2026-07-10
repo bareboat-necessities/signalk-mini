@@ -259,10 +259,21 @@ bool has_clock_delta(const char* text) {
         if (values.isNull()) continue;
         for (JsonObject value : values) {
             const char* path = value["path"] | "";
-            if (std::strcmp(path, "communication.server.clock") == 0) {
-                REQUIRE(value["value"].is<double>() || value["value"].is<float>() || value["value"].is<int>());
-                return true;
-            }
+            if (std::strcmp(path, "communication.server.clock") != 0) continue;
+
+            REQUIRE(std::strcmp(doc["context"] | "", "vessels.self") == 0);
+            const char* timestamp = update["timestamp"] | "";
+            const size_t timestamp_len = std::strlen(timestamp);
+            REQUIRE(timestamp_len >= 20);
+            REQUIRE(timestamp[4] == '-');
+            REQUIRE(timestamp[7] == '-');
+            REQUIRE(timestamp[10] == 'T');
+            REQUIRE(timestamp[timestamp_len - 1] == 'Z');
+            JsonObject source = update["source"].as<JsonObject>();
+            REQUIRE(!source.isNull());
+            REQUIRE(std::strcmp(source["label"] | "", "integration-test") == 0);
+            REQUIRE(value["value"].is<double>() || value["value"].is<float>() || value["value"].is<int>());
+            return true;
         }
     }
     return false;
