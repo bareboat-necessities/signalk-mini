@@ -23,22 +23,44 @@ class IWebSocketServerHandler {
 public:
     virtual ~IWebSocketServerHandler() = default;
 
-    virtual void on_websocket_open(ITcpConnection& connection, const TcpPeerInfo& peer, const websocket::HandshakeRequest& request) {
+    virtual void on_websocket_open(ITcpConnection& connection,
+                                   const TcpPeerInfo& peer,
+                                   const websocket::HandshakeRequest& request) {
         (void)connection;
         (void)peer;
         (void)request;
     }
 
-    virtual void on_websocket_text(ITcpConnection& connection, const char* text, size_t len) {
+    virtual void on_websocket_text(ITcpConnection& connection,
+                                   const char* text,
+                                   size_t len) {
         (void)connection;
         (void)text;
         (void)len;
     }
 
-    virtual void on_websocket_binary(ITcpConnection& connection, const uint8_t* data, size_t len) {
+    virtual void on_websocket_binary(ITcpConnection& connection,
+                                     const uint8_t* data,
+                                     size_t len) {
         (void)connection;
         (void)data;
         (void)len;
+    }
+
+    virtual bool on_http_request(ITcpConnection& connection,
+                                 const TcpPeerInfo& peer,
+                                 const char* header,
+                                 size_t header_len) {
+        (void)connection;
+        (void)peer;
+        (void)header;
+        (void)header_len;
+        return false;
+    }
+
+    virtual bool accept_websocket_request(const websocket::HandshakeRequest& request) {
+        (void)request;
+        return true;
     }
 
     virtual void on_websocket_close(ITcpConnection& connection) {
@@ -56,10 +78,13 @@ template<size_t MaxConnections,
          size_t MaxPayloadSize = websocket::DefaultMaxPayloadSize>
 class WebSocketServerHandler final : public ITcpServerHandler {
 public:
-    explicit WebSocketServerHandler(IWebSocketServerHandler& handler,
-                                    TcpBackpressureOptions backpressure = TcpBackpressureOptions::server_default())
+    explicit WebSocketServerHandler(
+        IWebSocketServerHandler& handler,
+        TcpBackpressureOptions backpressure = TcpBackpressureOptions::server_default())
         : handler_(handler), backpressure_(backpressure) {
-        for (size_t i = 0; i < MaxConnections; ++i) slots_[i].backpressure.configure(backpressure_);
+        for (size_t i = 0; i < MaxConnections; ++i) {
+            slots_[i].backpressure.configure(backpressure_);
+        }
     }
 
     void on_accept(ITcpConnection& connection, const TcpPeerInfo& peer) override {
@@ -83,12 +108,20 @@ public:
     void on_data(ITcpConnection& connection) override {
         Slot* slot = find(connection);
         if (!slot) return;
+
+        if (slot->state == State::HttpClosing) {
+            drain_input(connection);
+            try_close_drained_http(*slot);
+            return;
+        }
+
         while (connection.valid() && connection.readable()) {
             if (slot->input_size >= sizeof(slot->input)) {
                 fail_and_close(*slot, WebSocketError::ProtocolError);
                 return;
             }
-            const int n = connection.read(slot->input + slot->input_size, sizeof(slot->input) - slot->input_size);
+            const int n = connection.read(slot->input + slot->input_size,
+                                          sizeof(slot->input) - slot->input_size);
             if (n < 0) {
                 fail_and_close(*slot, WebSocketError::ProtocolError);
                 return;
@@ -97,12 +130,17 @@ public:
             slot->input_size += static_cast<size_t>(n);
             if (!process_slot(*slot)) return;
         }
-        check_backpressure(*slot);
+        if (slot->connection) check_backpressure(*slot);
     }
 
     void on_write_ready(ITcpConnection& connection) override {
         Slot* slot = find(connection);
-        if (slot) check_backpressure(*slot);
+        if (!slot) return;
+        if (slot->state == State::HttpClosing) {
+            try_close_drained_http(*slot);
+            return;
+        }
+        check_backpressure(*slot);
     }
 
     void on_close(ITcpConnection& connection) override {
@@ -117,7 +155,9 @@ public:
         (void)error_code;
         Slot* slot = find(connection);
         if (!slot) return;
-        handler_.on_websocket_error(connection, WebSocketError::ProtocolError);
+        if (slot->state != State::HttpClosing) {
+            handler_.on_websocket_error(connection, WebSocketError::ProtocolError);
+        }
         release(connection);
     }
 
@@ -125,7 +165,9 @@ public:
         if (!is_open(connection) || !text) return false;
         uint8_t frame[MaxPayloadSize + 16];
         size_t frame_len = 0;
-        if (!websocket::encode_text_frame(text, text_len, frame, sizeof(frame), frame_len)) return false;
+        if (!websocket::encode_text_frame(text, text_len, frame, sizeof(frame), frame_len)) {
+            return false;
+        }
         return write_all(connection, frame, frame_len);
     }
 
@@ -133,13 +175,17 @@ public:
         return write_control(connection, websocket::Opcode::Close, nullptr, 0);
     }
 
-    bool write_pong(ITcpConnection& connection, const uint8_t* payload, size_t payload_len) {
+    bool write_pong(ITcpConnection& connection,
+                    const uint8_t* payload,
+                    size_t payload_len) {
         return write_control(connection, websocket::Opcode::Pong, payload, payload_len);
     }
 
     size_t active_count() const {
         size_t count = 0;
-        for (size_t i = 0; i < MaxConnections; ++i) if (slots_[i].connection) ++count;
+        for (size_t i = 0; i < MaxConnections; ++i) {
+            if (slots_[i].connection) ++count;
+        }
         return count;
     }
 
@@ -149,7 +195,12 @@ public:
     }
 
 private:
-    enum class State : uint8_t { Empty, Handshaking, Open };
+    enum class State : uint8_t {
+        Empty,
+        Handshaking,
+        Open,
+        HttpClosing,
+    };
 
     struct Slot {
         ITcpConnection* connection = nullptr;
@@ -162,12 +213,16 @@ private:
     };
 
     Slot* find(ITcpConnection& connection) {
-        for (size_t i = 0; i < MaxConnections; ++i) if (slots_[i].connection == &connection) return &slots_[i];
+        for (size_t i = 0; i < MaxConnections; ++i) {
+            if (slots_[i].connection == &connection) return &slots_[i];
+        }
         return nullptr;
     }
 
     const Slot* find_const(ITcpConnection& connection) const {
-        for (size_t i = 0; i < MaxConnections; ++i) if (slots_[i].connection == &connection) return &slots_[i];
+        for (size_t i = 0; i < MaxConnections; ++i) {
+            if (slots_[i].connection == &connection) return &slots_[i];
+        }
         return nullptr;
     }
 
@@ -196,23 +251,67 @@ private:
 
     bool process_slot(Slot& slot) {
         if (!slot.connection) return false;
+
         if (slot.state == State::Handshaking) {
             const size_t header_len = websocket_header_length(slot.input, slot.input_size);
             if (header_len == 0) {
-                if (slot.input_size >= HandshakeBufferSize) fail_and_close(slot, WebSocketError::BadHandshake);
+                if (slot.input_size >= HandshakeBufferSize) {
+                    fail_and_close(slot, WebSocketError::BadHandshake);
+                }
                 return slot.connection != nullptr;
             }
 
             websocket::HandshakeRequest request;
-            const websocket::HandshakeResult parsed = websocket::parse_client_handshake(reinterpret_cast<const char*>(slot.input), header_len, request);
+            const websocket::HandshakeResult parsed =
+                websocket::parse_client_handshake(
+                    reinterpret_cast<const char*>(slot.input),
+                    header_len,
+                    request);
+
             if (parsed != websocket::HandshakeResult::Ok) {
-                fail_and_close(slot, parsed == websocket::HandshakeResult::UnsupportedVersion ? WebSocketError::UnsupportedVersion : WebSocketError::BadHandshake);
+                if (handler_.on_http_request(*slot.connection,
+                                             slot.peer,
+                                             reinterpret_cast<const char*>(slot.input),
+                                             header_len)) {
+                    consume(slot, header_len);
+                    begin_http_close(slot);
+                    return slot.connection != nullptr;
+                }
+                fail_and_close(
+                    slot,
+                    parsed == websocket::HandshakeResult::UnsupportedVersion
+                        ? WebSocketError::UnsupportedVersion
+                        : WebSocketError::BadHandshake);
                 return false;
             }
 
+            if (!handler_.accept_websocket_request(request)) {
+                static constexpr char NotFound[] =
+                    "HTTP/1.1 404 Not Found\r\n"
+                    "Content-Length: 0\r\n"
+                    "Connection: close\r\n"
+                    "\r\n";
+                if (!write_all(*slot.connection,
+                               reinterpret_cast<const uint8_t*>(NotFound),
+                               sizeof(NotFound) - 1)) {
+                    fail_and_close(slot, WebSocketError::WriteFailed);
+                    return false;
+                }
+                consume(slot, header_len);
+                begin_http_close(slot);
+                return slot.connection != nullptr;
+            }
+
             char response[192];
-            const websocket::HandshakeResult written = websocket::write_server_handshake_response(request.key, response, sizeof(response));
-            if (written != websocket::HandshakeResult::Ok || !write_all(*slot.connection, reinterpret_cast<const uint8_t*>(response), strlen(response))) {
+            const websocket::HandshakeResult written =
+                websocket::write_server_handshake_response(
+                    request.key,
+                    response,
+                    sizeof(response));
+            if (written != websocket::HandshakeResult::Ok ||
+                !write_all(*slot.connection,
+                           reinterpret_cast<const uint8_t*>(response),
+                           strlen(response))) {
                 fail_and_close(slot, WebSocketError::WriteFailed);
                 return false;
             }
@@ -222,10 +321,19 @@ private:
             consume(slot, header_len);
         }
 
-        while (slot.connection && slot.state == State::Open && slot.input_size > 0) {
+        while (slot.connection &&
+               slot.state == State::Open &&
+               slot.input_size > 0) {
             websocket::FrameView frame;
             size_t consumed = 0;
-            const websocket::FrameDecodeResult decoded = websocket::decode_frame(slot.input, slot.input_size, slot.payload, MaxPayloadSize, frame, consumed, true);
+            const websocket::FrameDecodeResult decoded =
+                websocket::decode_frame(slot.input,
+                                        slot.input_size,
+                                        slot.payload,
+                                        MaxPayloadSize,
+                                        frame,
+                                        consumed,
+                                        true);
             if (decoded == websocket::FrameDecodeResult::NeedMore) return true;
             if (decoded == websocket::FrameDecodeResult::PayloadTooLarge) {
                 fail_and_close(slot, WebSocketError::PayloadTooLarge);
@@ -250,46 +358,96 @@ private:
                 return false;
             }
             slot.payload[frame.payload_len] = '\0';
-            handler_.on_websocket_text(*slot.connection, reinterpret_cast<const char*>(slot.payload), frame.payload_len);
+            handler_.on_websocket_text(
+                *slot.connection,
+                reinterpret_cast<const char*>(slot.payload),
+                frame.payload_len);
             return true;
+
         case websocket::Opcode::Binary:
             if (!frame.fin) {
                 fail_and_close(slot, WebSocketError::ProtocolError);
                 return false;
             }
-            handler_.on_websocket_binary(*slot.connection, frame.payload, frame.payload_len);
+            handler_.on_websocket_binary(
+                *slot.connection,
+                frame.payload,
+                frame.payload_len);
             return true;
+
         case websocket::Opcode::Ping:
             if (!write_pong(*slot.connection, frame.payload, frame.payload_len)) {
                 fail_and_close(slot, WebSocketError::WriteFailed);
                 return false;
             }
             return true;
+
         case websocket::Opcode::Pong:
             return true;
+
         case websocket::Opcode::Close: {
             ITcpConnection& connection = *slot.connection;
-            write_control(connection, websocket::Opcode::Close, frame.payload, frame.payload_len);
+            (void)write_control(connection,
+                                websocket::Opcode::Close,
+                                frame.payload,
+                                frame.payload_len);
             close_slot(slot, true);
             return false;
         }
+
         default:
             fail_and_close(slot, WebSocketError::ProtocolError);
             return false;
         }
     }
 
-    bool write_control(ITcpConnection& connection, websocket::Opcode opcode, const uint8_t* payload, size_t payload_len) {
+    bool write_control(ITcpConnection& connection,
+                       websocket::Opcode opcode,
+                       const uint8_t* payload,
+                       size_t payload_len) {
         uint8_t frame[128];
         size_t frame_len = 0;
-        if (!websocket::encode_control_frame(opcode, payload, payload_len, frame, sizeof(frame), frame_len)) return false;
+        if (!websocket::encode_control_frame(opcode,
+                                             payload,
+                                             payload_len,
+                                             frame,
+                                             sizeof(frame),
+                                             frame_len)) {
+            return false;
+        }
         return write_all(connection, frame, frame_len);
     }
 
-    bool write_all(ITcpConnection& connection, const uint8_t* data, size_t length) {
-        if (!data || length == 0 || !connection.valid() || !connection.writable()) return false;
+    bool write_all(ITcpConnection& connection,
+                   const uint8_t* data,
+                   size_t length) {
+        if (!data || length == 0 || !connection.valid() || !connection.writable()) {
+            return false;
+        }
         const int n = connection.write(data, length);
         return n == static_cast<int>(length);
+    }
+
+    void begin_http_close(Slot& slot) {
+        if (!slot.connection) return;
+        slot.state = State::HttpClosing;
+        try_close_drained_http(slot);
+    }
+
+    void try_close_drained_http(Slot& slot) {
+        if (!slot.connection || slot.state != State::HttpClosing) return;
+        if (slot.connection->output_size() != 0) return;
+        ITcpConnection* connection = slot.connection;
+        release(*connection);
+        connection->close();
+    }
+
+    static void drain_input(ITcpConnection& connection) {
+        uint8_t discard[64];
+        while (connection.valid() && connection.readable()) {
+            const int n = connection.read(discard, sizeof(discard));
+            if (n <= 0) break;
+        }
     }
 
     void fail_and_close(Slot& slot, WebSocketError error) {
@@ -303,14 +461,17 @@ private:
         if (!connection) return;
         const bool was_open = slot.state == State::Open;
         release(*connection);
-        if (notify_close && was_open) handler_.on_websocket_close(*connection);
+        if (notify_close && was_open) {
+            handler_.on_websocket_close(*connection);
+        }
         connection->close();
     }
 
     void check_backpressure(Slot& slot) {
         if (!slot.connection || !slot.connection->valid()) return;
         TcpBackpressureInfo info;
-        if (slot.backpressure.check(*slot.connection, &info) && info.close_on_limit) {
+        if (slot.backpressure.check(*slot.connection, &info) &&
+            info.close_on_limit) {
             fail_and_close(slot, WebSocketError::Backpressure);
         }
     }
@@ -318,7 +479,12 @@ private:
     static size_t websocket_header_length(const uint8_t* data, size_t size) {
         if (!data || size < 4) return 0;
         for (size_t i = 3; i < size; ++i) {
-            if (data[i - 3] == '\r' && data[i - 2] == '\n' && data[i - 1] == '\r' && data[i] == '\n') return i + 1;
+            if (data[i - 3] == '\r' &&
+                data[i - 2] == '\n' &&
+                data[i - 1] == '\r' &&
+                data[i] == '\n') {
+                return i + 1;
+            }
         }
         return 0;
     }
@@ -328,7 +494,9 @@ private:
             slot.input_size = 0;
             return;
         }
-        memmove(slot.input, slot.input + count, slot.input_size - count);
+        memmove(slot.input,
+                slot.input + count,
+                slot.input_size - count);
         slot.input_size -= count;
     }
 

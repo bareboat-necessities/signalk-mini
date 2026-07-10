@@ -441,6 +441,93 @@ private:
         return signalk_websocket_protocol_.write_text(connection, hello, text_len);
     }
 
+    static bool http_header_name_matches(const char* begin, size_t len, const char* expected) {
+        if (!begin || !expected || len != strlen(expected)) return false;
+        for (size_t i = 0; i < len; ++i) {
+            char a = begin[i];
+            char b = expected[i];
+            if (a >= 'A' && a <= 'Z') a = static_cast<char>(a - 'A' + 'a');
+            if (b >= 'A' && b <= 'Z') b = static_cast<char>(b - 'A' + 'a');
+            if (a != b) return false;
+        }
+        return true;
+    }
+
+    static bool copy_http_host(const char* header, size_t header_len, char* dst, size_t dst_size) {
+        if (!header || !dst || dst_size == 0) return false;
+        const char* cursor = header;
+        const char* end = header + header_len;
+        while (cursor < end) {
+            const char* line_end = cursor;
+            while (line_end + 1 < end && !(line_end[0] == '\r' && line_end[1] == '\n')) ++line_end;
+            const char* colon = cursor;
+            while (colon < line_end && *colon != ':') ++colon;
+            if (colon < line_end && http_header_name_matches(cursor, static_cast<size_t>(colon - cursor), "Host")) {
+                const char* value = colon + 1;
+                while (value < line_end && (*value == ' ' || *value == '\t')) ++value;
+                const size_t len = static_cast<size_t>(line_end - value);
+                if (len == 0 || len >= dst_size) return false;
+                memcpy(dst, value, len);
+                dst[len] = '\0';
+                return true;
+            }
+            if (line_end + 1 >= end) break;
+            cursor = line_end + 2;
+        }
+        return false;
+    }
+
+    bool handle_signalk_http_request(async_event_loop::ITcpConnection& connection,
+                                     const char* header,
+                                     size_t header_len) {
+        if (!header || header_len < 16 || strncmp(header, "GET ", 4) != 0) return false;
+        const char* target = header + 4;
+        const char* end = header + header_len;
+        const char* target_end = target;
+        while (target_end < end && *target_end != ' ') ++target_end;
+        const size_t target_len = static_cast<size_t>(target_end - target);
+        const bool discovery =
+            (target_len == 8 && strncmp(target, "/signalk", 8) == 0) ||
+            (target_len == 9 && strncmp(target, "/signalk/", 9) == 0);
+        if (!discovery) return false;
+
+        char host[128];
+        if (!copy_http_host(header, header_len, host, sizeof(host))) {
+            snprintf(host, sizeof(host), "127.0.0.1:%u", static_cast<unsigned>(config_.signalk.websocket.port));
+        }
+
+        char body[512];
+        const int body_len = snprintf(
+            body,
+            sizeof(body),
+            "{\"endpoints\":{\"v1\":{\"signalk-http\":\"http://%s/signalk/v1/api/\",\"signalk-ws\":\"ws://%s/signalk/v1/stream\"}},\"server\":{\"id\":\"%s\",\"version\":\"%s\"}}",
+            host,
+            host,
+            config_.identity.server_name ? config_.identity.server_name : "signalk-mini",
+            config_.identity.server_version ? config_.identity.server_version : "0.1.0");
+        if (body_len <= 0 || static_cast<size_t>(body_len) >= sizeof(body)) return false;
+
+        char response[768];
+        const int response_len = snprintf(
+            response,
+            sizeof(response),
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %u\r\nConnection: close\r\nAccess-Control-Allow-Origin: *\r\n\r\n%s",
+            static_cast<unsigned>(body_len),
+            body);
+        if (response_len <= 0 || static_cast<size_t>(response_len) >= sizeof(response)) return false;
+        return write_all(connection,
+                         reinterpret_cast<const uint8_t*>(response),
+                         static_cast<size_t>(response_len));
+    }
+
+    static bool is_signalk_stream_resource(const char* resource) {
+        if (!resource) return false;
+        static constexpr char StreamPath[] = "/signalk/v1/stream";
+        const size_t path_len = sizeof(StreamPath) - 1;
+        return strncmp(resource, StreamPath, path_len) == 0 &&
+               (resource[path_len] == '\0' || resource[path_len] == '?');
+    }
+
     struct SignalKConnectionHandler : async_event_loop::ITcpLineServerHandler {
         explicit SignalKConnectionHandler(MiniSignalKServer& owner_ref) : owner(owner_ref) {}
         MiniSignalKServer& owner;
@@ -481,6 +568,17 @@ private:
         explicit SignalKWebSocketHandler(MiniSignalKServer& owner_ref) : owner(owner_ref) {}
         MiniSignalKServer& owner;
         ConnectionRegistry<MaxSignalKConnections> connections;
+
+        bool on_http_request(async_event_loop::ITcpConnection& connection,
+                             const async_event_loop::TcpPeerInfo&,
+                             const char* header,
+                             size_t header_len) override {
+            return owner.handle_signalk_http_request(connection, header, header_len);
+        }
+
+        bool accept_websocket_request(const async_event_loop::websocket::HandshakeRequest& request) override {
+            return owner.is_signalk_stream_resource(request.resource);
+        }
 
         void on_websocket_open(async_event_loop::ITcpConnection& connection,
                                const async_event_loop::TcpPeerInfo&,
