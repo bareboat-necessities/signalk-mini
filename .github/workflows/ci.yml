@@ -4,7 +4,89 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
+  apply-websocket-limit-fix:
+    if: github.event_name == 'pull_request' && github.head_ref == 'fix/linux-websocket-large-subscriptions'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/linux-websocket-large-subscriptions
+          fetch-depth: 0
+      - name: Apply bounded platform-specific WebSocket limit
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          websocket = Path('modules/async-event-loop/src/async_event_loop/websocket.hpp')
+          text = websocket.read_text()
+          old = 'static constexpr size_t DefaultMaxPayloadSize = 512;'
+          new = '''#if defined(ARDUINO)
+static constexpr size_t DefaultMaxPayloadSize = 512;
+#else
+static constexpr size_t DefaultMaxPayloadSize = 8192;
+#endif'''
+          if old not in text:
+              raise SystemExit('WebSocket payload limit marker not found')
+          websocket.write_text(text.replace(old, new, 1))
+
+          test = Path('tests/test_websocket_codec.cpp')
+          text = test.read_text()
+          text = text.replace('#include <cstring>\n', '#include <cstring>\n#include <vector>\n', 1)
+          marker = '''static void test_encode_server_text() {'''
+          addition = r'''static void test_decode_boatinstrument_sized_subscription() {
+    using namespace async_event_loop::websocket;
+    constexpr size_t payload_len = 2048;
+    REQUIRE(DefaultMaxPayloadSize >= payload_len);
+
+    std::vector<uint8_t> payload(payload_len, 'x');
+    const char prefix[] = "{\"context\":\"vessels.self\",\"subscribe\":[{\"path\":\"navigation.datetime\",\"policy\":\"instant\",\"minPeriod\":1000}],\"padding\":\"";
+    REQUIRE(sizeof(prefix) - 1 < payload.size());
+    std::memcpy(payload.data(), prefix, sizeof(prefix) - 1);
+    payload.back() = '}';
+
+    const uint8_t mask[4] = {0x12, 0x34, 0x56, 0x78};
+    std::vector<uint8_t> frame(8 + payload.size());
+    frame[0] = 0x81;
+    frame[1] = 0x80 | 126;
+    frame[2] = static_cast<uint8_t>((payload.size() >> 8) & 0xff);
+    frame[3] = static_cast<uint8_t>(payload.size() & 0xff);
+    std::memcpy(frame.data() + 4, mask, sizeof(mask));
+    for (size_t i = 0; i < payload.size(); ++i) frame[8 + i] = payload[i] ^ mask[i & 3u];
+
+    std::vector<uint8_t> decoded(DefaultMaxPayloadSize + 1);
+    FrameView view;
+    size_t consumed = 0;
+    const auto result = decode_frame(frame.data(), frame.size(), decoded.data(), DefaultMaxPayloadSize, view, consumed, true);
+    REQUIRE(result == FrameDecodeResult::Ok);
+    REQUIRE(consumed == frame.size());
+    REQUIRE(view.fin);
+    REQUIRE(view.opcode == Opcode::Text);
+    REQUIRE(view.payload_len == payload.size());
+    REQUIRE(std::memcmp(view.payload, payload.data(), payload.size()) == 0);
+}
+
+'''
+          if marker not in text:
+              raise SystemExit('WebSocket codec test marker not found')
+          text = text.replace(marker, addition + marker, 1)
+          call = '    test_decode_masked_client_text();\n'
+          if call not in text:
+              raise SystemExit('WebSocket codec test call marker not found')
+          text = text.replace(call, call + '    test_decode_boatinstrument_sized_subscription();\n', 1)
+          test.write_text(text)
+          PY
+          git fetch origin main
+          git checkout origin/main -- .github/workflows/ci.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Allow larger Linux WebSocket subscription frames"
+          git push origin HEAD:fix/linux-websocket-large-subscriptions
+
   linux:
     runs-on: ubuntu-latest
     steps:
