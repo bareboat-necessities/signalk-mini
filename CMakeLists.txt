@@ -48,6 +48,7 @@ if(BUILD_TESTING)
   add_signalk_mini_test(test_signalk_subscription tests/test_signalk_subscription.cpp)
   add_signalk_mini_test(test_websocket_codec tests/test_websocket_codec.cpp)
   add_signalk_mini_test(test_websocket_server_adapter tests/test_websocket_server_adapter.cpp)
+  add_signalk_mini_test(test_units_timestamp tests/test_units_timestamp.cpp)
   add_signalk_mini_test(test_linux_default_config tests/test_linux_default_config.cpp)
   target_compile_definitions(test_linux_default_config PRIVATE SIGNALK_MINI_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
