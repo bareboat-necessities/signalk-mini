@@ -6,9 +6,9 @@
 #include <unistd.h>
 
 #include <ArduinoJson.h>
+#include <async_event_loop/websocket.hpp>
 #include <nmea0183_connector.hpp>
 #include <signalk_mini.hpp>
-#include <signalk_mini/websocket.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -193,15 +193,15 @@ bool wait_for_ws_text(int fd, std::vector<uint8_t>& buffer, int timeout_ms, Pred
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
     while (std::chrono::steady_clock::now() < deadline) {
         while (!buffer.empty()) {
-            uint8_t payload[signalk_mini::websocket::DefaultMaxPayloadSize + 1];
-            signalk_mini::websocket::FrameView frame;
+            uint8_t payload[async_event_loop::websocket::DefaultMaxPayloadSize + 1];
+            async_event_loop::websocket::FrameView frame;
             size_t consumed = 0;
-            const auto decoded = signalk_mini::websocket::decode_frame(buffer.data(), buffer.size(), payload, signalk_mini::websocket::DefaultMaxPayloadSize, frame, consumed, false);
-            if (decoded == signalk_mini::websocket::FrameDecodeResult::NeedMore) break;
-            REQUIRE(decoded == signalk_mini::websocket::FrameDecodeResult::Ok);
+            const auto decoded = async_event_loop::websocket::decode_frame(buffer.data(), buffer.size(), payload, async_event_loop::websocket::DefaultMaxPayloadSize, frame, consumed, false);
+            if (decoded == async_event_loop::websocket::FrameDecodeResult::NeedMore) break;
+            REQUIRE(decoded == async_event_loop::websocket::FrameDecodeResult::Ok);
             REQUIRE(consumed > 0);
             buffer.erase(buffer.begin(), buffer.begin() + static_cast<std::vector<uint8_t>::difference_type>(consumed));
-            if (frame.opcode != signalk_mini::websocket::Opcode::Text) continue;
+            if (frame.opcode != async_event_loop::websocket::Opcode::Text) continue;
             REQUIRE(frame.payload_len < sizeof(payload));
             payload[frame.payload_len] = 0;
             if (predicate(reinterpret_cast<const char*>(payload))) return true;
