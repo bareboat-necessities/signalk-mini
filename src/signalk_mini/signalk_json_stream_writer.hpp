@@ -5,7 +5,7 @@
 #include <string.h>
 
 #include "signalk_mapper.hpp"
-#include "signalk_timestamp.hpp"
+#include "units.hpp"
 
 namespace signalk_mini {
 
