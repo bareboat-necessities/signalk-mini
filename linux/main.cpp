@@ -40,6 +40,8 @@ const char* startup_error_to_string(signalk_mini::MiniSignalKServer<float>::Star
     case StartupError::UnsupportedConnectorProtocol: return "unsupported connector protocol";
     case StartupError::UnsupportedConnectorTransport: return "unsupported connector transport";
     case StartupError::InvalidConnectorTransportConfig: return "invalid connector transport config";
+    case StartupError::InvalidConnectorProtocolConfig: return "invalid connector protocol config";
+    case StartupError::InvalidConnectorReconnectConfig: return "invalid connector reconnect config";
     case StartupError::ConnectorStartFailed: return "connector or listener start failed";
     }
     return "unknown startup error";
@@ -50,6 +52,8 @@ const char* protocol_to_string(signalk_mini::ConnectorProtocol protocol) {
     case signalk_mini::ConnectorProtocol::None: return "none";
     case signalk_mini::ConnectorProtocol::Nmea0183: return "nmea0183";
     case signalk_mini::ConnectorProtocol::SeaTalk1: return "seatalk1";
+    case signalk_mini::ConnectorProtocol::Ubx: return "ubx";
+    case signalk_mini::ConnectorProtocol::Gpsd: return "gpsd";
     case signalk_mini::ConnectorProtocol::Nmea2000: return "nmea2000";
     case signalk_mini::ConnectorProtocol::SignalK: return "signalk";
     case signalk_mini::ConnectorProtocol::GenericSensor: return "generic_sensor";
@@ -257,8 +261,13 @@ void print_connector_summary(const signalk_mini::ConnectorConfig& connector, siz
     }
 
     std::cout << " rx=" << (connector.access.allow_rx ? "yes" : "no")
-              << " tx=" << (connector.access.allow_tx ? "yes" : "no")
-              << "\n";
+              << " tx=" << (connector.access.allow_tx ? "yes" : "no");
+    if (connector.transport.kind == signalk_mini::ConnectorTransport::TcpClient) {
+        std::cout << " reconnect=" << (connector.reconnect.enabled ? "yes" : "no")
+                  << " reconnect_initial_ms=" << connector.reconnect.initial_delay_ms
+                  << " reconnect_max_ms=" << connector.reconnect.maximum_delay_ms;
+    }
+    std::cout << "\n";
 }
 
 void print_startup_summary(const signalk_mini::SignalKMiniConfig& config, const ConfigDiscoveryResult& discovery) {

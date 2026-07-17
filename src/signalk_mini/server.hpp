@@ -23,11 +23,13 @@
 #include <async_event_loop.hpp>
 #include <nmea0183_connector.hpp>
 #include <seatalk.hpp>
+#include <ubx.hpp>
 #include "config.hpp"
 #include "connection_registry.hpp"
 #include "nmea0183_input.hpp"
 #include "publisher.hpp"
 #include "seatalk_input.hpp"
+#include "ubx_input.hpp"
 #include "signalk_hello_writer.hpp"
 
 namespace signalk_mini {
@@ -193,6 +195,8 @@ public:
         UnsupportedConnectorProtocol,
         UnsupportedConnectorTransport,
         InvalidConnectorTransportConfig,
+        InvalidConnectorProtocolConfig,
+        InvalidConnectorReconnectConfig,
         ConnectorStartFailed,
     };
 
@@ -228,6 +232,7 @@ public:
     const ModelStore<Real>& store() const { return store_; }
     Nmea0183Input<Real>& nmea0183() { return nmea_; }
     SeaTalkInput<Real>& seatalk() { return seatalk_; }
+    UbxInput<Real>& ubx() { return ubx_; }
 
     uint64_t dropped_change_count() const { return store_.dropped_change_count(); }
     uint64_t dropped_publish_count() const { return publisher_.dropped_publish_count(); }
@@ -235,6 +240,31 @@ public:
     StartupError last_startup_error() const { return last_startup_error_; }
     size_t last_failed_connector_index() const { return last_failed_connector_index_; }
     uint32_t connector_start_failure_count() const { return connector_start_failure_count_; }
+    uint32_t connector_reconnect_count() const {
+        uint32_t total = 0;
+        for (const auto& slot : connector_slots_) if (slot) total += slot->reconnect_count;
+        return total;
+    }
+    uint32_t ubx_frame_count() const {
+        uint32_t total = ubx_.receiver().diagnostics().frame_count;
+        for (const auto& slot : connector_slots_) if (slot && slot->ubx_input) total += slot->ubx_input->receiver().diagnostics().frame_count;
+        return total;
+    }
+    uint32_t ubx_checksum_error_count() const {
+        uint32_t total = ubx_.receiver().diagnostics().checksum_error_count;
+        for (const auto& slot : connector_slots_) if (slot && slot->ubx_input) total += slot->ubx_input->receiver().diagnostics().checksum_error_count;
+        return total;
+    }
+    uint32_t ubx_oversized_frame_count() const {
+        uint32_t total = ubx_.receiver().diagnostics().oversized_frame_count;
+        for (const auto& slot : connector_slots_) if (slot && slot->ubx_input) total += slot->ubx_input->receiver().diagnostics().oversized_frame_count;
+        return total;
+    }
+    uint32_t ubx_unsupported_frame_count() const {
+        uint32_t total = ubx_.receiver().diagnostics().unsupported_frame_count;
+        for (const auto& slot : connector_slots_) if (slot && slot->ubx_input) total += slot->ubx_input->receiver().diagnostics().unsupported_frame_count;
+        return total;
+    }
 
     bool transmit_seatalk_frame(const seatalk::SeaTalkFrame& frame) {
         if (frame.length == 0) return false;
@@ -329,8 +359,10 @@ private:
         return len;
     }
 
-    static ship_data_model::SensorSource sensor_source_for_transport(ConnectorTransport transport) {
-        switch (transport) {
+    static ship_data_model::SensorSource sensor_source_for_connector(const ConnectorConfig& connector) {
+        if (connector.protocol.kind == ConnectorProtocol::Ubx) return ship_data_model::SensorSource::ubx;
+        if (connector.protocol.kind == ConnectorProtocol::Gpsd) return ship_data_model::SensorSource::gpsd;
+        switch (connector.transport.kind) {
         case ConnectorTransport::Serial: return ship_data_model::SensorSource::serial;
         case ConnectorTransport::TcpClient:
         case ConnectorTransport::TcpServer:
@@ -340,7 +372,7 @@ private:
     }
 
     static bool supported_protocol(ConnectorProtocol protocol) {
-        return protocol == ConnectorProtocol::Nmea0183 || protocol == ConnectorProtocol::SeaTalk1;
+        return protocol == ConnectorProtocol::Nmea0183 || protocol == ConnectorProtocol::SeaTalk1 || protocol == ConnectorProtocol::Ubx;
     }
 
     static bool supported_transport(ConnectorTransport transport) {
@@ -395,6 +427,7 @@ private:
         }
         if (config_.publisher.interval_us == 0) return set_startup_error(StartupError::InvalidPublisherInterval, config_.connector_count);
         if (!config_.connectors && config_.connector_count != 0) return set_startup_error(StartupError::InvalidConnectorList, config_.connector_count);
+        if (config_.connector_count > MaxConnectorSourceCount) return set_startup_error(StartupError::InvalidConnectorList, config_.connector_count);
 
         for (size_t i = 0; i < config_.connector_count; ++i) {
             const ConnectorConfig& connector = config_.connectors[i];
@@ -402,6 +435,11 @@ private:
             if (!supported_protocol(connector.protocol.kind)) return set_startup_error(StartupError::UnsupportedConnectorProtocol, i);
             if (!supported_transport(connector.transport.kind)) return set_startup_error(StartupError::UnsupportedConnectorTransport, i);
             if (!validate_transport_config(connector)) return set_startup_error(StartupError::InvalidConnectorTransportConfig, i);
+            if (connector.protocol.kind == ConnectorProtocol::Ubx && connector.protocol.ubx.configure_receiver) return set_startup_error(StartupError::InvalidConnectorProtocolConfig, i);
+            if (connector.transport.kind == ConnectorTransport::TcpClient && connector.reconnect.enabled &&
+                (connector.reconnect.initial_delay_ms == 0 || connector.reconnect.maximum_delay_ms < connector.reconnect.initial_delay_ms)) {
+                return set_startup_error(StartupError::InvalidConnectorReconnectConfig, i);
+            }
         }
         return true;
     }
@@ -682,14 +720,25 @@ private:
         ConnectionRegistry<MaxConnectionsPerConnector> connections;
 
         void on_accept(async_event_loop::ITcpConnection& connection, const async_event_loop::TcpPeerInfo&) override {
-            if (!connections.add(connection, owner.connector_connection_flags(index))) connection.close();
+            if ((owner.connector_protocol(index) == ConnectorProtocol::Ubx && connections.size() != 0) ||
+                !connections.add(connection, owner.connector_connection_flags(index))) {
+                connection.close();
+                return;
+            }
+            owner.on_connector_raw_connected(index);
         }
         void on_data(async_event_loop::ITcpConnection& connection) override {
             if (!connections.allow_rx(connection)) return;
             owner.handle_connector_stream_bytes(index, connection);
         }
-        void on_close(async_event_loop::ITcpConnection& connection) override { connections.remove(connection); }
-        void on_error(async_event_loop::ITcpConnection& connection, int) override { connections.remove(connection); }
+        void on_close(async_event_loop::ITcpConnection& connection) override {
+            connections.remove(connection);
+            owner.on_connector_raw_disconnected(index);
+        }
+        void on_error(async_event_loop::ITcpConnection& connection, int) override {
+            connections.remove(connection);
+            owner.on_connector_raw_disconnected(index);
+        }
     };
 
     struct ConnectorTcpClientHandler : async_event_loop::ITcpClientHandler {
@@ -697,17 +746,20 @@ private:
         MiniSignalKServer& owner;
         size_t index;
 
+        void on_connect(async_event_loop::ITcpConnection&, const async_event_loop::TcpPeerInfo&) override {
+            owner.on_connector_tcp_connected(index);
+        }
         void on_data(async_event_loop::ITcpConnection& connection) override {
             if (!owner.connector_allow_rx(index)) return;
-            if (owner.connector_protocol(index) == ConnectorProtocol::SeaTalk1) {
+            if (owner.connector_protocol(index) == ConnectorProtocol::SeaTalk1 || owner.connector_protocol(index) == ConnectorProtocol::Ubx) {
                 owner.handle_connector_stream_bytes(index, connection);
                 return;
             }
             char text[160];
             while (connection.read_line(text, sizeof(text))) owner.handle_connector_nmea_line(index, text);
         }
-        void on_close(async_event_loop::ITcpConnection&) override {}
-        void on_error(int) override {}
+        void on_close(async_event_loop::ITcpConnection&) override { owner.schedule_connector_reconnect(index); }
+        void on_error(int) override { owner.schedule_connector_reconnect(index); }
     };
 
     struct ConnectorRuntimeSlot {
@@ -736,18 +788,22 @@ private:
         ConnectionFlags connection_flags{true, false};
         bool nmea0183_validate_checksum = false;
         bool started = false;
+        uint32_t reconnect_delay_ms = 0;
+        uint32_t reconnect_count = 0;
         async_event_loop::NativeTcpServer tcp_server;
         async_event_loop::NativeTcpClient tcp_client;
         async_event_loop::NativeSerialStream serial_stream;
         async_event_loop::LineProtocolReader<192> serial_reader;
         UdpListenerStream udp_listener;
         SeaTalkInput<Real> seatalk_input;
+        std::unique_ptr<UbxInput<Real>> ubx_input;
         ConnectorTcpServerHandler tcp_server_handler;
         ConnectorTcpRawServerHandler tcp_raw_server_handler;
         ConnectorTcpClientHandler tcp_client_handler;
         async_event_loop::TcpLineServerHandler<192, MaxConnectionsPerConnector> tcp_line_handler;
         async_event_loop::EventHandle serial_event{};
         async_event_loop::EventHandle udp_event{};
+        async_event_loop::EventHandle reconnect_event{};
     };
 
     ConnectorRuntimeSlot& connector_slot(size_t index) { return *connector_slots_[index]; }
@@ -755,7 +811,7 @@ private:
     const ConnectionFlags& connector_connection_flags(size_t index) const { return connector_slot(index).connection_flags; }
     bool connector_allow_rx(size_t index) const { return connector_slot(index).connection_flags.allow_rx; }
     ConnectorProtocol connector_protocol(size_t index) const { return connector_slot(index).config.protocol.kind; }
-    ship_data_model::SensorSource connector_sensor_source(size_t index) const { return sensor_source_for_transport(connector_slot(index).config.transport.kind); }
+    ship_data_model::SensorSource connector_sensor_source(size_t index) const { return sensor_source_for_connector(connector_slot(index).config); }
 
     bool start_configured_connectors() {
         connector_slots_.clear();
@@ -769,11 +825,14 @@ private:
             slot->nmea0183_validate_checksum = connector.protocol.kind == ConnectorProtocol::Nmea0183
                 ? effective_nmea0183_validate_checksum(connector.protocol.nmea0183, connector.transport.kind)
                 : false;
+            slot->reconnect_delay_ms = connector.reconnect.initial_delay_ms;
+            if (connector.protocol.kind == ConnectorProtocol::Ubx) slot->ubx_input.reset(new UbxInput<Real>(store_));
             connector_slots_.push_back(std::move(slot));
             ConnectorRuntimeSlot& runtime = *connector_slots_.back();
             if (!connector.enabled) continue;
             if (connector.protocol.kind == ConnectorProtocol::Nmea0183) runtime.started = start_nmea0183_connector(runtime);
             else if (connector.protocol.kind == ConnectorProtocol::SeaTalk1) runtime.started = start_seatalk_connector(runtime);
+            else if (connector.protocol.kind == ConnectorProtocol::Ubx) runtime.started = start_ubx_connector(runtime);
             if (!runtime.started) {
                 ++connector_start_failure_count_;
                 return set_startup_error(StartupError::ConnectorStartFailed, i);
@@ -784,12 +843,7 @@ private:
 
     bool start_nmea0183_connector(ConnectorRuntimeSlot& slot) {
         switch (slot.config.transport.kind) {
-        case ConnectorTransport::TcpClient: {
-            async_event_loop::TcpConnectOptions options;
-            options.host = slot.config.transport.tcp_client.host;
-            options.port = slot.config.transport.tcp_client.port;
-            return slot.tcp_client.connect(options, slot.tcp_client_handler);
-        }
+        case ConnectorTransport::TcpClient: return connect_tcp_client(slot);
         case ConnectorTransport::TcpServer: return listen(slot.tcp_server, slot.tcp_line_handler, slot.config.transport.tcp_server.host, slot.config.transport.tcp_server.port);
         case ConnectorTransport::Serial: return start_nmea0183_serial_connector(slot);
         case ConnectorTransport::Udp: return start_udp_listener(slot);
@@ -799,17 +853,63 @@ private:
 
     bool start_seatalk_connector(ConnectorRuntimeSlot& slot) {
         switch (slot.config.transport.kind) {
-        case ConnectorTransport::TcpClient: {
-            async_event_loop::TcpConnectOptions options;
-            options.host = slot.config.transport.tcp_client.host;
-            options.port = slot.config.transport.tcp_client.port;
-            return slot.tcp_client.connect(options, slot.tcp_client_handler);
-        }
+        case ConnectorTransport::TcpClient: return connect_tcp_client(slot);
         case ConnectorTransport::TcpServer: return listen(slot.tcp_server, slot.tcp_raw_server_handler, slot.config.transport.tcp_server.host, slot.config.transport.tcp_server.port);
-        case ConnectorTransport::Serial: return start_seatalk_serial_connector(slot);
+        case ConnectorTransport::Serial: return start_raw_serial_connector(slot);
         case ConnectorTransport::Udp: return start_udp_listener(slot);
         default: return false;
         }
+    }
+
+    bool start_ubx_connector(ConnectorRuntimeSlot& slot) {
+        switch (slot.config.transport.kind) {
+        case ConnectorTransport::TcpClient: return connect_tcp_client(slot);
+        case ConnectorTransport::TcpServer: return listen(slot.tcp_server, slot.tcp_raw_server_handler, slot.config.transport.tcp_server.host, slot.config.transport.tcp_server.port);
+        case ConnectorTransport::Serial: return start_raw_serial_connector(slot);
+        case ConnectorTransport::Udp: return start_udp_listener(slot);
+        default: return false;
+        }
+    }
+
+    bool connect_tcp_client(ConnectorRuntimeSlot& slot) {
+        async_event_loop::TcpConnectOptions options;
+        options.host = slot.config.transport.tcp_client.host;
+        options.port = slot.config.transport.tcp_client.port;
+        const bool accepted = slot.tcp_client.connect(options, slot.tcp_client_handler);
+        if (accepted) return true;
+        return schedule_connector_reconnect(slot.index);
+    }
+
+    void reset_connector_binary_stream(size_t index) {
+        ConnectorRuntimeSlot& slot = connector_slot(index);
+        if (slot.ubx_input) slot.ubx_input->reset_stream();
+        slot.seatalk_input.reset_stream();
+    }
+
+    void on_connector_tcp_connected(size_t index) {
+        ConnectorRuntimeSlot& slot = connector_slot(index);
+        slot.reconnect_delay_ms = slot.config.reconnect.initial_delay_ms;
+        reset_connector_binary_stream(index);
+    }
+
+    void on_connector_raw_connected(size_t index) { reset_connector_binary_stream(index); }
+    void on_connector_raw_disconnected(size_t index) { reset_connector_binary_stream(index); }
+
+    bool schedule_connector_reconnect(size_t index) {
+        ConnectorRuntimeSlot& slot = connector_slot(index);
+        if (slot.config.transport.kind != ConnectorTransport::TcpClient || !slot.config.reconnect.enabled) return false;
+        if (loop_.valid(slot.reconnect_event)) return true;
+        const uint32_t delay_ms = slot.reconnect_delay_ms == 0 ? slot.config.reconnect.initial_delay_ms : slot.reconnect_delay_ms;
+        slot.reconnect_event = loop_.on_delay(delay_ms, [this, index]() {
+            ConnectorRuntimeSlot& reconnecting = connector_slot(index);
+            reconnecting.reconnect_event = async_event_loop::EventHandle{};
+            if (reconnecting.reconnect_count < UINT32_MAX) ++reconnecting.reconnect_count;
+            connect_tcp_client(reconnecting);
+        });
+        if (!slot.reconnect_event) return false;
+        const uint64_t doubled = static_cast<uint64_t>(delay_ms) * 2ULL;
+        slot.reconnect_delay_ms = static_cast<uint32_t>(doubled > slot.config.reconnect.maximum_delay_ms ? slot.config.reconnect.maximum_delay_ms : doubled);
+        return true;
     }
 
     bool start_nmea0183_serial_connector(ConnectorRuntimeSlot& slot) {
@@ -826,7 +926,7 @@ private:
         return static_cast<bool>(slot.serial_event);
     }
 
-    bool start_seatalk_serial_connector(ConnectorRuntimeSlot& slot) {
+    bool start_raw_serial_connector(ConnectorRuntimeSlot& slot) {
 #if defined(ARDUINO)
         Serial.begin(slot.config.transport.serial.baud);
 #else
@@ -866,14 +966,18 @@ private:
 
     void handle_connector_stream_bytes(size_t index, async_event_loop::IByteStream& stream) {
         ConnectorRuntimeSlot& slot = connector_slot(index);
-        const SourceId source_id = static_cast<SourceId>(10 + index);
+        const SourceId source_id = static_cast<SourceId>(FirstConnectorSourceId + index);
         const ship_data_model::SensorSource source = connector_sensor_source(index);
         uint8_t buf[128];
         bool changed = false;
         while (stream.readable()) {
             const int n = stream.read(buf, sizeof(buf));
             if (n <= 0) break;
-            if (slot.seatalk_input.feed_octets(buf, static_cast<size_t>(n), source_id, loop_.clock().micros(), source)) changed = true;
+            if (slot.config.protocol.kind == ConnectorProtocol::SeaTalk1) {
+                if (slot.seatalk_input.feed_octets(buf, static_cast<size_t>(n), source_id, loop_.clock().micros(), source)) changed = true;
+            } else if (slot.config.protocol.kind == ConnectorProtocol::Ubx) {
+                if (slot.ubx_input && slot.ubx_input->feed_octets(buf, static_cast<size_t>(n), source_id, loop_.clock().micros(), source)) changed = true;
+            }
         }
         if (changed) publish();
     }
@@ -882,12 +986,16 @@ private:
         ConnectorRuntimeSlot& slot = connector_slot(index);
         if (!slot.connection_flags.allow_rx) return;
         const ship_data_model::SensorSource source = connector_sensor_source(index);
-        uint8_t buf[512];
+        uint8_t buf[ubx::DefaultMaxPayload + 9];
         while (slot.udp_listener.readable()) {
             const int n = slot.udp_listener.read(buf, sizeof(buf) - 1);
             if (n <= 0) break;
             if (slot.config.protocol.kind == ConnectorProtocol::SeaTalk1) {
-                if (slot.seatalk_input.feed_datagram(buf, static_cast<size_t>(n), static_cast<SourceId>(10 + index), loop_.clock().micros(), source)) publish();
+                if (slot.seatalk_input.feed_datagram(buf, static_cast<size_t>(n), static_cast<SourceId>(FirstConnectorSourceId + index), loop_.clock().micros(), source)) publish();
+                continue;
+            }
+            if (slot.config.protocol.kind == ConnectorProtocol::Ubx) {
+                if (slot.ubx_input && slot.ubx_input->feed_datagram(buf, static_cast<size_t>(n), static_cast<SourceId>(FirstConnectorSourceId + index), loop_.clock().micros(), source)) publish();
                 continue;
             }
             buf[n] = 0;
@@ -905,7 +1013,7 @@ private:
 
     void handle_connector_nmea_line(size_t index, const char* text) {
         const ConnectorRuntimeSlot& slot = connector_slot(index);
-        const SourceId source_id = static_cast<SourceId>(10 + index);
+        const SourceId source_id = static_cast<SourceId>(FirstConnectorSourceId + index);
         if (nmea_.feed_line(text, source_id, loop_.clock().micros(), slot.nmea0183_validate_checksum, connector_sensor_source(index))) publish();
     }
 
@@ -1000,6 +1108,7 @@ private:
     ModelStore<Real> store_{};
     Nmea0183Input<Real> nmea_{store_};
     SeaTalkInput<Real> seatalk_{store_};
+    UbxInput<Real> ubx_{store_};
     SignalKPublisher<Real> publisher_;
     SignalKConnectionHandler signalk_connections_;
     SignalKWebSocketHandler signalk_websocket_handler_;

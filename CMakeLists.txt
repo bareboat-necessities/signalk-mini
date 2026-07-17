@@ -21,6 +21,7 @@ target_include_directories(signalk_mini_core INTERFACE
   modules/data-model/src
   modules/nmea0183/src
   modules/seatalk/src
+  modules/ubx/src
   ${LIBEVENT_INCLUDE_DIRS}
 )
 target_compile_features(signalk_mini_core INTERFACE cxx_std_17)
@@ -81,6 +82,14 @@ if(BUILD_TESTING)
   add_signalk_mini_test(test_nmea_st_tunnel tests/test_nmea_seatalk_tunnel.cpp)
   add_signalk_mini_test(test_nmea_publish_audit tests/test_nmea_publish_audit.cpp)
   add_signalk_mini_test(test_nmea_mapping tests/test_nmea_signalk_mapping.cpp)
+  add_signalk_mini_test(test_ubx_parser tests/test_ubx_parser.cpp)
+  add_signalk_mini_test(test_ubx_model_apply tests/test_ubx_model_apply.cpp)
+  add_executable(test_connector_config tests/test_connector_config.cpp)
+  target_include_directories(test_connector_config PRIVATE ${LIBCONFIG_INCLUDE_DIRS})
+  target_link_directories(test_connector_config PRIVATE ${LIBCONFIG_LIBRARY_DIRS})
+  target_compile_options(test_connector_config PRIVATE ${LIBCONFIG_CFLAGS_OTHER})
+  target_link_libraries(test_connector_config PRIVATE signalk_mini_core ${LIBCONFIG_LIBRARIES})
+  add_test(NAME test_connector_config COMMAND test_connector_config)
   add_signalk_mini_test(test_seatalk_decoder tests/test_seatalk_decoder.cpp)
   add_signalk_mini_test(test_seatalk_model_apply tests/test_seatalk_model_apply.cpp)
   add_signalk_mini_test(test_seatalk_real_fixtures tests/test_seatalk_real_fixtures.cpp)
@@ -98,6 +107,10 @@ if(BUILD_TESTING)
   add_executable(test_signalk_http_discovery tests/test_signalk_http_discovery.cpp)
   target_link_libraries(test_signalk_http_discovery PRIVATE signalk_mini_core Threads::Threads)
   add_test(NAME test_signalk_http_discovery COMMAND test_signalk_http_discovery)
+
+  add_executable(test_ubx_runtime tests/test_ubx_runtime.cpp)
+  target_link_libraries(test_ubx_runtime PRIVATE signalk_mini_core Threads::Threads)
+  add_test(NAME test_ubx_runtime COMMAND test_ubx_runtime)
 
   add_executable(test_seatalk_native_routing tests/test_seatalk_native_routing.cpp)
   target_link_libraries(test_seatalk_native_routing PRIVATE signalk_mini_core Threads::Threads)

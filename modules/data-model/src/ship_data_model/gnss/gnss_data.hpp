@@ -149,9 +149,13 @@ struct GnssFixAccuracyData {
     Stamped<Real> semi_major_accuracy_m;
     Stamped<Real> semi_minor_accuracy_m;
     Stamped<Real> semi_major_orientation_deg;
+    Stamped<Real> gdop;
     Stamped<Real> pdop;
+    Stamped<Real> tdop;
     Stamped<Real> hdop;
     Stamped<Real> vdop;
+    Stamped<Real> north_dop;
+    Stamped<Real> east_dop;
     Stamped<int32_t> system_id;
     Stamped<int32_t> signal_id;
     Stamped<int32_t> field_count;
@@ -190,9 +194,13 @@ struct GnssDopActiveSatellitesData {
     char selection_mode = 0;
     Stamped<int32_t> fix_mode;
     Stamped<int32_t> satellite_prn[12];
+    Stamped<Real> gdop;
     Stamped<Real> pdop;
+    Stamped<Real> tdop;
     Stamped<Real> hdop;
     Stamped<Real> vdop;
+    Stamped<Real> north_dop;
+    Stamped<Real> east_dop;
     Stamped<int32_t> system_id;
     Stamped<int32_t> signal_id;
     uint64_t last_update_us = 0;

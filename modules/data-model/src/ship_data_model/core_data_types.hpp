@@ -6,19 +6,21 @@
 namespace ship_data_model {
 
 enum class SensorSource : uint8_t {
-    gpsd,
-    servo,
-    serial,
-    tcp,
-    signalk,
-    water_wind,
-    gps_wind,
-    none
+    gpsd = 0,
+    servo = 1,
+    serial = 2,
+    tcp = 3,
+    signalk = 4,
+    water_wind = 5,
+    gps_wind = 6,
+    none = 7,
+    ubx = 8,
 };
 
 inline int source_priority(SensorSource source) {
     switch (source) {
     case SensorSource::gpsd:       return 1;
+    case SensorSource::ubx:        return 1;
     case SensorSource::servo:      return 1;
     case SensorSource::serial:     return 2;
     case SensorSource::tcp:        return 3;
