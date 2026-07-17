@@ -44,6 +44,71 @@ int main() {
     signalk_mini::ModelStore<float> store;
     signalk_mini::SignalKMappedValue<float> mapped;
 
+    store.model().gnss.fix.fix_alt_msl_m.set(12.3f, 1000);
+    mark(store, signalk_mini::ModelField::GnssFixAltitudeMslM);
+    REQUIRE(pop_path(store, "navigation.gnss.antennaAltitude", mapped));
+    NEAR(mapped.number, 12.3f, 0.0001f);
+
+    store.model().gnss.fix.fix_alt_hae_m.set(58.9f, 1000);
+    mark(store, signalk_mini::ModelField::GnssFixAltitudeHaeM);
+    REQUIRE(pop_path(store, "navigation.position.value.altitude", mapped));
+    NEAR(mapped.number, 58.9f, 0.0001f);
+
+    store.model().gnss.fix.vertical_speed_m_s.set(-0.4f, 1000);
+    mark(store, signalk_mini::ModelField::GnssVerticalSpeedMs);
+    REQUIRE(pop_path(store, "navigation.verticalSpeed", mapped));
+    NEAR(mapped.number, -0.4f, 0.0001f);
+
+    store.model().gnss.fix.fix_valid.set(true, 1000);
+    mark(store, signalk_mini::ModelField::GnssFixValid);
+    REQUIRE(pop_path(store, "navigation.gnss.fixValid", mapped));
+    REQUIRE(mapped.kind == signalk_mini::SignalKMappedValueKind::Bool);
+    REQUIRE(mapped.boolean);
+
+    store.model().gnss.fix.fix_type.set(3, 1000);
+    mark(store, signalk_mini::ModelField::GnssFixType);
+    REQUIRE(pop_path(store, "navigation.gnss.fixType", mapped));
+    NEAR(mapped.number, 3.0f, 0.0001f);
+
+    store.model().gnss.fix_accuracy.speed_accuracy_m_s.set(0.25f, 1000);
+    mark(store, signalk_mini::ModelField::GnssFixAccuracySpeedMs);
+    REQUIRE(pop_path(store, "navigation.gnss.speedAccuracy", mapped));
+    NEAR(mapped.number, 0.25f, 0.0001f);
+
+    store.model().gnss.fix_accuracy.track_accuracy_deg.set(2.0f, 1000);
+    mark(store, signalk_mini::ModelField::GnssFixAccuracyTrackDeg);
+    REQUIRE(pop_path(store, "navigation.gnss.trackAccuracy", mapped));
+    NEAR(mapped.number, 2.0f * 3.14159265358979323846f / 180.0f, 0.0001f);
+
+    store.model().gnss.fix_accuracy.time_accuracy_s.set(0.015f, 1000);
+    mark(store, signalk_mini::ModelField::GnssFixAccuracyTimeS);
+    REQUIRE(pop_path(store, "navigation.gnss.timeAccuracy", mapped));
+    NEAR(mapped.number, 0.015f, 0.0001f);
+
+    auto& sky = store.model().gnss.sky_view;
+    sky.satellites_in_view.set(8, 1000);
+    sky.observation_count = 1;
+    sky.observations[0].satellite_id = 22;
+    sky.observations[0].satellite_id_valid = true;
+    sky.observations[0].elevation_deg = 30.0f;
+    sky.observations[0].elevation_valid = true;
+    sky.observations[0].azimuth_true_deg = 120.0f;
+    sky.observations[0].azimuth_valid = true;
+    sky.observations[0].cn0_db_hz = 41.0f;
+    sky.observations[0].cn0_valid = true;
+
+    mark(store, signalk_mini::ModelField::GnssSatellitesInView);
+    REQUIRE(pop_path(store, "navigation.gnss.satellitesInView", mapped));
+    NEAR(mapped.number, 8.0f, 0.0001f);
+
+    mark(store, signalk_mini::ModelField::GnssSatellitePrn0);
+    REQUIRE(pop_path(store, "navigation.gnss.satellite.0.prn", mapped));
+    NEAR(mapped.number, 22.0f, 0.0001f);
+
+    mark(store, signalk_mini::ModelField::GnssSatelliteElevationDeg0);
+    REQUIRE(pop_path(store, "navigation.gnss.satellite.0.elevation", mapped));
+    NEAR(mapped.number, 30.0f * 3.14159265358979323846f / 180.0f, 0.0001f);
+
     store.model().env.barometric_pressure_bar.set(1.012f, 1000);
     mark(store, signalk_mini::ModelField::EnvBarometricPressureBar);
     REQUIRE(pop_path(store, "environment.outside.pressure", mapped));

@@ -169,6 +169,7 @@ public:
         const NmeaSentenceId sentence_id = classify_nmea_sentence_id(sentence);
         const bool magnetic_heading_only = sentence_id == NmeaSentenceId::HDM || sentence_id == NmeaSentenceId::HDG;
         const auto previous_heading_deg = store_.model().ins.imu.heading_deg;
+        const uint32_t sky_view_sequence_before = store_.model().gnss.sky_view.sequence;
 
         const uint32_t decoded_before = rx_.seatalk_receiver().decoded_count();
         const bool applied = rx_.apply_sentence(sentence, store_.model(), now_us, source);
@@ -180,7 +181,7 @@ public:
 
         if (rx_.seatalk_receiver().decoded_count() != decoded_before) {
             mark_seatalk_changes(store_, rx_.seatalk_receiver().last_decoded(), source_id, now_us);
-        } else {
+        } else if (sentence_id != NmeaSentenceId::GSV || store_.model().gnss.sky_view.sequence != sky_view_sequence_before) {
             mark_changed_from_sentence(sentence_id, sentence, source_id, now_us);
         }
         return true;
@@ -198,8 +199,8 @@ private:
     void mark_gnss_time(SourceId source_id, uint64_t now_us) { mark(ModelField::GnssTimestampS, source_id, now_us); }
     void mark_gnss_date(SourceId source_id, uint64_t now_us) { mark(ModelField::GnssDateDay, source_id, now_us); mark(ModelField::GnssDateMonth, source_id, now_us); mark(ModelField::GnssDateYear, source_id, now_us); }
     void mark_gnss_fix_quality(SourceId source_id, uint64_t now_us) {
-        mark(ModelField::GnssFixQuality, source_id, now_us); mark(ModelField::GnssSatellitesUsed, source_id, now_us); mark(ModelField::GnssHdop, source_id, now_us);
-        mark(ModelField::GnssFixAltitudeM, source_id, now_us); mark(ModelField::GnssGeoidalSeparationM, source_id, now_us); mark(ModelField::GnssDgpsAgeS, source_id, now_us); mark(ModelField::GnssDgpsStationId, source_id, now_us);
+        mark(ModelField::GnssFixQuality, source_id, now_us); mark(ModelField::GnssFixValid, source_id, now_us); mark(ModelField::GnssSatellitesUsed, source_id, now_us); mark(ModelField::GnssHdop, source_id, now_us);
+        mark(ModelField::GnssFixAltitudeMslM, source_id, now_us); mark(ModelField::GnssFixAltitudeHaeM, source_id, now_us); mark(ModelField::GnssGeoidalSeparationM, source_id, now_us); mark(ModelField::GnssDgpsAgeS, source_id, now_us); mark(ModelField::GnssDgpsStationId, source_id, now_us);
     }
     void mark_route_course(SourceId source_id, uint64_t now_us) {
         mark(ModelField::RouteApbXteNmi, source_id, now_us); mark(ModelField::RouteApbOriginToDestinationBearingDeg, source_id, now_us); mark(ModelField::RouteApbPresentToDestinationBearingDeg, source_id, now_us);
@@ -225,13 +226,13 @@ private:
 
     void mark_changed_from_sentence(NmeaSentenceId id, const nmea0183_connector::NmeaSentence& sentence, SourceId source_id, uint64_t now_us) {
         switch (id) {
-        case NmeaSentenceId::RMC: mark_gnss_position(source_id, now_us); mark_gnss_time(source_id, now_us); mark_gnss_date(source_id, now_us); mark(ModelField::GnssSpeedKn, source_id, now_us); mark(ModelField::GnssTrackDeg, source_id, now_us); break;
+        case NmeaSentenceId::RMC: mark_gnss_position(source_id, now_us); mark_gnss_time(source_id, now_us); mark_gnss_date(source_id, now_us); mark(ModelField::GnssSpeedKn, source_id, now_us); mark(ModelField::GnssTrackDeg, source_id, now_us); mark(ModelField::GnssFixValid, source_id, now_us); break;
         case NmeaSentenceId::GGA: mark_gnss_position(source_id, now_us); mark_gnss_time(source_id, now_us); mark_gnss_fix_quality(source_id, now_us); break;
-        case NmeaSentenceId::GLL: mark_gnss_position(source_id, now_us); mark_gnss_time(source_id, now_us); break;
+        case NmeaSentenceId::GLL: mark_gnss_position(source_id, now_us); mark_gnss_time(source_id, now_us); mark(ModelField::GnssFixValid, source_id, now_us); break;
         case NmeaSentenceId::GNS: mark_gnss_position(source_id, now_us); mark_gnss_time(source_id, now_us); mark_gnss_fix_quality(source_id, now_us); break;
         case NmeaSentenceId::ZDA: mark_gnss_time(source_id, now_us); mark_gnss_date(source_id, now_us); break;
         case NmeaSentenceId::VTG: mark(ModelField::GnssSpeedKn, source_id, now_us); mark(ModelField::GnssTrackDeg, source_id, now_us); break;
-        case NmeaSentenceId::GSA: mark(ModelField::GnssDopActiveFixMode, source_id, now_us); mark(ModelField::GnssDopActivePdop, source_id, now_us); mark(ModelField::GnssHdop, source_id, now_us); mark(ModelField::GnssDopActiveVdop, source_id, now_us); break;
+        case NmeaSentenceId::GSA: mark(ModelField::GnssFixType, source_id, now_us); mark(ModelField::GnssFixValid, source_id, now_us); mark(ModelField::GnssDopActiveFixMode, source_id, now_us); mark(ModelField::GnssDopActivePdop, source_id, now_us); mark(ModelField::GnssHdop, source_id, now_us); mark(ModelField::GnssDopActiveVdop, source_id, now_us); break;
         case NmeaSentenceId::GFA: mark(ModelField::GnssFixAccuracyHorizontalM, source_id, now_us); mark(ModelField::GnssFixAccuracyVerticalM, source_id, now_us); mark(ModelField::GnssFixAccuracyPdop, source_id, now_us); mark(ModelField::GnssHdop, source_id, now_us); mark(ModelField::GnssFixAccuracyVdop, source_id, now_us); break;
         case NmeaSentenceId::GSV: mark(ModelField::GnssSatellitesInView, source_id, now_us); mark(ModelField::GnssSatellitePrn0, source_id, now_us); mark(ModelField::GnssSatelliteElevationDeg0, source_id, now_us); mark(ModelField::GnssSatelliteAzimuthDeg0, source_id, now_us); mark(ModelField::GnssSatelliteSnrDb0, source_id, now_us); break;
         case NmeaSentenceId::HDT: mark(ModelField::ImuHeadingTrueDeg, source_id, now_us); break;

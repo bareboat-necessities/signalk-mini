@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstring>
+
 #include "nmea0183_connector/nmea0183_helpers.hpp"
 #include "nmea0183_connector/special_sentence_hooks.hpp"
 #include "nmea0183_connector/nmea_tokenizer.hpp"
