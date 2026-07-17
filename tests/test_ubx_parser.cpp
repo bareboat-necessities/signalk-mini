@@ -25,6 +25,18 @@ int main() {
     receiver.accept_octets(bad.data(), bad.size(), model, 2000);
     REQUIRE(receiver.diagnostics().checksum_error_count == 1);
 
+    ubx::Receiver<float> missing_checksum_a;
+    missing_checksum_a.accept_octets(ack.data(), ack.size() - 2, model, 2100);
+    missing_checksum_a.accept_octets(ack.data(), ack.size(), model, 2101);
+    REQUIRE(missing_checksum_a.diagnostics().checksum_error_count == 1);
+    REQUIRE(missing_checksum_a.diagnostics().frame_count == 1);
+
+    ubx::Receiver<float> missing_checksum_b;
+    missing_checksum_b.accept_octets(ack.data(), ack.size() - 1, model, 2200);
+    missing_checksum_b.accept_octets(ack.data(), ack.size(), model, 2201);
+    REQUIRE(missing_checksum_b.diagnostics().checksum_error_count == 1);
+    REQUIRE(missing_checksum_b.diagnostics().frame_count == 1);
+
     const uint8_t noise[] = {0x00, 0x11, 0xB5, 0x00, 0xB5};
     receiver.accept_octets(noise, sizeof(noise), model, 3000);
     receiver.accept_octets(ack.data() + 1, ack.size() - 1, model, 3001);

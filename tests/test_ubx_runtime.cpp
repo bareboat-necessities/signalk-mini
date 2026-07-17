@@ -138,6 +138,18 @@ void test_startup_validation() {
     REQUIRE(configured_app.last_startup_error() == signalk_mini::MiniSignalKServer<float>::StartupError::InvalidConnectorProtocolConfig);
 
     connector.protocol.ubx.configure_receiver = false;
+    connector.access.allow_tx = true;
+    signalk_mini::SignalKMiniApp<float> transmit_app(config);
+    REQUIRE(!transmit_app.begin());
+    REQUIRE(transmit_app.last_startup_error() == signalk_mini::MiniSignalKServer<float>::StartupError::InvalidConnectorProtocolConfig);
+
+    connector.access.allow_tx = false;
+    connector.access.allow_rx = false;
+    signalk_mini::SignalKMiniApp<float> receive_disabled_app(config);
+    REQUIRE(!receive_disabled_app.begin());
+    REQUIRE(receive_disabled_app.last_startup_error() == signalk_mini::MiniSignalKServer<float>::StartupError::InvalidConnectorProtocolConfig);
+
+    connector.access.allow_rx = true;
     connector.reconnect.initial_delay_ms = 0;
     signalk_mini::SignalKMiniApp<float> reconnect_app(config);
     REQUIRE(!reconnect_app.begin());

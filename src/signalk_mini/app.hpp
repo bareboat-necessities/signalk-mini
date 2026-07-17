@@ -8,9 +8,24 @@ template<typename Real = float>
 class SignalKMiniApp {
 public:
     explicit SignalKMiniApp(const SignalKMiniConfig& config = SignalKMiniConfig{})
-        : server_(config) {}
+        : config_(config), server_(config_) {}
 
-    bool begin() { return server_.begin(); }
+    bool begin() {
+        app_startup_error_ = MiniSignalKServer<Real>::StartupError::None;
+        app_failed_connector_index_ = config_.connector_count;
+        if (config_.connectors) {
+            for (size_t i = 0; i < config_.connector_count; ++i) {
+                const ConnectorConfig& connector = config_.connectors[i];
+                if (!connector.enabled || connector.protocol.kind != ConnectorProtocol::Ubx) continue;
+                if (connector.protocol.ubx.configure_receiver || connector.access.allow_tx || !connector.access.allow_rx) {
+                    app_startup_error_ = MiniSignalKServer<Real>::StartupError::InvalidConnectorProtocolConfig;
+                    app_failed_connector_index_ = i;
+                    return false;
+                }
+            }
+        }
+        return server_.begin();
+    }
     void tick() { server_.tick(); }
     void run_forever() { server_.run_forever(); }
     ModelStore<Real>& store() { return server_.store(); }
@@ -22,8 +37,12 @@ public:
     uint64_t dropped_change_count() const { return server_.dropped_change_count(); }
     uint64_t dropped_publish_count() const { return server_.dropped_publish_count(); }
     uint64_t published_delta_count() const { return server_.published_delta_count(); }
-    typename MiniSignalKServer<Real>::StartupError last_startup_error() const { return server_.last_startup_error(); }
-    size_t last_failed_connector_index() const { return server_.last_failed_connector_index(); }
+    typename MiniSignalKServer<Real>::StartupError last_startup_error() const {
+        return app_startup_error_ != MiniSignalKServer<Real>::StartupError::None ? app_startup_error_ : server_.last_startup_error();
+    }
+    size_t last_failed_connector_index() const {
+        return app_startup_error_ != MiniSignalKServer<Real>::StartupError::None ? app_failed_connector_index_ : server_.last_failed_connector_index();
+    }
     uint32_t connector_start_failure_count() const { return server_.connector_start_failure_count(); }
     uint32_t connector_reconnect_count() const { return server_.connector_reconnect_count(); }
     uint32_t ubx_frame_count() const { return server_.ubx_frame_count(); }
@@ -56,7 +75,10 @@ public:
     }
 
 private:
+    SignalKMiniConfig config_;
     MiniSignalKServer<Real> server_;
+    typename MiniSignalKServer<Real>::StartupError app_startup_error_ = MiniSignalKServer<Real>::StartupError::None;
+    size_t app_failed_connector_index_ = 0;
 };
 
 } // namespace signalk_mini

@@ -219,18 +219,22 @@ private:
             break;
         case State::ChecksumA:
             received_ck_a_ = value;
-            state_ = State::ChecksumB;
-            break;
-        case State::ChecksumB: {
-            const bool checksum_ok = received_ck_a_ == ck_a_ && value == ck_b_;
-            state_ = State::Sync1;
-            if (!checksum_ok) {
+            if (received_ck_a_ != ck_a_) {
                 ++diagnostics_.checksum_error_count;
+                state_ = value == Sync1 ? State::Sync2 : State::Sync1;
                 return UpdateKind::None;
             }
+            state_ = State::ChecksumB;
+            break;
+        case State::ChecksumB:
+            if (value != ck_b_) {
+                ++diagnostics_.checksum_error_count;
+                state_ = value == Sync1 ? State::Sync2 : State::Sync1;
+                return UpdateKind::None;
+            }
+            state_ = State::Sync1;
             ++diagnostics_.frame_count;
             return dispatch(model, now_us, source);
-        }
         }
         return UpdateKind::None;
     }
