@@ -4,13 +4,16 @@ namespace signalk_mini::signalk_path {
 
 inline constexpr char NavigationPositionLatitude[] = "navigation.position.value.latitude";
 inline constexpr char NavigationPositionLongitude[] = "navigation.position.value.longitude";
+inline constexpr char NavigationPositionAltitude[] = "navigation.position.value.altitude";
 inline constexpr char NavigationSpeedOverGround[] = "navigation.speedOverGround";
 inline constexpr char NavigationCourseOverGroundTrue[] = "navigation.courseOverGroundTrue";
+inline constexpr char NavigationVerticalSpeed[] = "navigation.verticalSpeed";
 inline constexpr char NavigationDateTimeTimeOfDay[] = "navigation.datetime.timeOfDay";
 inline constexpr char NavigationDateTimeDay[] = "navigation.datetime.day";
 inline constexpr char NavigationDateTimeMonth[] = "navigation.datetime.month";
 inline constexpr char NavigationDateTimeYear[] = "navigation.datetime.year";
 inline constexpr char NavigationGnssMethodQuality[] = "navigation.gnss.methodQuality";
+inline constexpr char NavigationGnssFixValid[] = "navigation.gnss.fixValid";
 inline constexpr char NavigationGnssSatellites[] = "navigation.gnss.satellites";
 inline constexpr char NavigationGnssHorizontalDilution[] = "navigation.gnss.horizontalDilution";
 inline constexpr char NavigationGnssDifferentialReference[] = "navigation.gnss.differentialReference";
@@ -20,6 +23,9 @@ inline constexpr char NavigationGnssGeoidalSeparation[] = "navigation.gnss.geoid
 inline constexpr char NavigationGnssDifferentialAge[] = "navigation.gnss.differentialAge";
 inline constexpr char NavigationGnssHorizontalAccuracy[] = "navigation.gnss.horizontalAccuracy";
 inline constexpr char NavigationGnssVerticalAccuracy[] = "navigation.gnss.verticalAccuracy";
+inline constexpr char NavigationGnssSpeedAccuracy[] = "navigation.gnss.speedAccuracy";
+inline constexpr char NavigationGnssTrackAccuracy[] = "navigation.gnss.trackAccuracy";
+inline constexpr char NavigationGnssTimeAccuracy[] = "navigation.gnss.timeAccuracy";
 inline constexpr char NavigationGnssPositionDilution[] = "navigation.gnss.positionDilution";
 inline constexpr char NavigationGnssVerticalDilution[] = "navigation.gnss.verticalDilution";
 inline constexpr char NavigationGnssFixType[] = "navigation.gnss.fixType";
