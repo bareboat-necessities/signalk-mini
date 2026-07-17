@@ -29,9 +29,14 @@ static void feed_gga_for_talker(signalk_mini::SignalKMiniApp<float>& app, const 
     char body[128];
     std::snprintf(body, sizeof(body), "%sGGA,123519,4807.038,N,01131.000,E,1,08,0.9,10.0,M,46.9,M,,", talker);
     feed(app, body, now_us);
-    REQUIRE(std::strcmp(app.store().model().gnss.fix.talker_id, talker) == 0);
-    NEAR(app.store().model().gnss.fix.fix_lat_deg.value, 48.1173f, 0.001f);
-    NEAR(app.store().model().gnss.fix.fix_lon_deg.value, 11.516666f, 0.001f);
+    const auto& fix = app.store().model().gnss.fix;
+    REQUIRE(std::strcmp(fix.talker_id, talker) == 0);
+    REQUIRE(fix.fix_valid.valid && fix.fix_valid.value);
+    NEAR(fix.fix_lat_deg.value, 48.1173f, 0.001f);
+    NEAR(fix.fix_lon_deg.value, 11.516666f, 0.001f);
+    NEAR(fix.fix_alt_msl_m.value, 10.0f, 0.001f);
+    NEAR(fix.geoidal_separation_m.value, 46.9f, 0.001f);
+    NEAR(fix.fix_alt_hae_m.value, 56.9f, 0.001f);
 }
 
 int main() {
@@ -39,12 +44,17 @@ int main() {
     uint64_t now_us = 0;
 
     feed(app, "GNGNS,112257.00,3844.24011,N,00908.43828,W,AN,03,10.5,100.1,45.6,2.5,1234,S,1,5", now_us);
-    REQUIRE(std::strcmp(app.store().model().gnss.fix.talker_id, "GN") == 0);
-    REQUIRE(app.store().model().gnss.fix.navigational_status == 'S');
-    REQUIRE(app.store().model().gnss.fix.system_id.value == 1);
-    REQUIRE(app.store().model().gnss.fix.signal_id.value == 5);
-    NEAR(app.store().model().gnss.fix.fix_lat_deg.value, 38.737335f, 0.001f);
-    NEAR(app.store().model().gnss.fix.fix_lon_deg.value, -9.140638f, 0.001f);
+    const auto& gns_fix = app.store().model().gnss.fix;
+    REQUIRE(std::strcmp(gns_fix.talker_id, "GN") == 0);
+    REQUIRE(gns_fix.navigational_status == 'S');
+    REQUIRE(gns_fix.system_id.value == 1);
+    REQUIRE(gns_fix.signal_id.value == 5);
+    REQUIRE(gns_fix.fix_valid.valid && gns_fix.fix_valid.value);
+    NEAR(gns_fix.fix_lat_deg.value, 38.737335f, 0.001f);
+    NEAR(gns_fix.fix_lon_deg.value, -9.140638f, 0.001f);
+    NEAR(gns_fix.fix_alt_msl_m.value, 100.1f, 0.001f);
+    NEAR(gns_fix.geoidal_separation_m.value, 45.6f, 0.001f);
+    NEAR(gns_fix.fix_alt_hae_m.value, 145.7f, 0.001f);
 
     feed(app, "GNGBS,123519,1.1,2.2,3.3,07,0.1,4.4,5.5,1,7", now_us);
     REQUIRE(std::strcmp(app.store().model().gnss.fault_detection.talker_id, "GN") == 0);
@@ -65,13 +75,38 @@ int main() {
     REQUIRE(std::strcmp(app.store().model().gnss.dop_active_satellites.talker_id, "GN") == 0);
     REQUIRE(app.store().model().gnss.dop_active_satellites.system_id.value == 1);
     REQUIRE(app.store().model().gnss.dop_active_satellites.signal_id.value == 7);
+    REQUIRE(app.store().model().gnss.fix.fix_type.valid);
+    REQUIRE(app.store().model().gnss.fix.fix_type.value == 3);
+    REQUIRE(app.store().model().gnss.fix.fix_valid.valid && app.store().model().gnss.fix.fix_valid.value);
     NEAR(app.store().model().gnss.dop_active_satellites.hdop.value, 1.0f, 0.001f);
 
-    feed(app, "GBGSV,1,1,04,01,40,083,45,02,17,123,40,03,11,233,30,04,09,300,28,6,3", now_us);
-    REQUIRE(std::strcmp(app.store().model().gnss.satellites_in_view.talker_id, "GB") == 0);
-    REQUIRE(app.store().model().gnss.satellites_in_view.signal_id.value == 6);
-    REQUIRE(app.store().model().gnss.satellites_in_view.system_id.value == 3);
-    REQUIRE(app.store().model().gnss.satellites_in_view.satellite_prn[3].value == 4);
+    auto& sky = app.store().model().gnss.sky_view;
+    const uint32_t initial_sequence = sky.sequence;
+    feed(app, "GPGSV,2,1,08,04,40,083,45,05,17,123,40,09,11,233,30,12,09,300,28,1,1", now_us);
+    REQUIRE(!sky.complete);
+    REQUIRE(sky.sequence == initial_sequence);
+    REQUIRE(sky.observation_count == 4);
+
+    feed(app, "GPGSV,2,2,08,24,60,010,50,25,50,020,48,29,40,030,46,31,30,040,44,1,1", now_us);
+    REQUIRE(std::strcmp(app.store().model().gnss.satellites_in_view.talker_id, "GP") == 0);
+    REQUIRE(app.store().model().gnss.satellites_in_view.signal_id.value == 1);
+    REQUIRE(app.store().model().gnss.satellites_in_view.system_id.value == 1);
+    REQUIRE(app.store().model().gnss.satellites_in_view.satellite_prn[3].value == 31);
+    REQUIRE(sky.complete);
+    REQUIRE(sky.sequence == initial_sequence + 1);
+    REQUIRE(sky.capacity() >= 8);
+    REQUIRE(sky.observation_count == 8);
+    REQUIRE(sky.satellites_in_view.value == 8);
+    REQUIRE(sky.satellites_used.value == 8);
+    REQUIRE(sky.observations[0].satellite_id_valid);
+    REQUIRE(sky.observations[0].satellite_id == 4);
+    REQUIRE(sky.observations[0].used);
+    NEAR(sky.observations[0].elevation_deg, 40.0f, 0.001f);
+    NEAR(sky.observations[0].azimuth_true_deg, 83.0f, 0.001f);
+    NEAR(sky.observations[0].cn0_db_hz, 45.0f, 0.001f);
+    REQUIRE(sky.observations[7].satellite_id == 31);
+    REQUIRE(sky.observations[7].system_id == 1);
+    REQUIRE(sky.observations[7].signal_id == 1);
 
     feed_gga_for_talker(app, "GP", now_us);
     feed_gga_for_talker(app, "GL", now_us);
