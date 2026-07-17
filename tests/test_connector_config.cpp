@@ -35,18 +35,21 @@ int main() {
     REQUIRE(loader.load_file(path.c_str(), error));
     ::unlink(path.c_str());
     REQUIRE(loader.config.connector_count == 2);
+
     const auto& ubx = loader.config.connectors[0];
     REQUIRE(ubx.protocol.kind == signalk_mini::ConnectorProtocol::Ubx);
     REQUIRE(!ubx.protocol.ubx.configure_receiver);
+    REQUIRE(ubx.transport.kind == signalk_mini::ConnectorTransport::TcpClient);
+    REQUIRE(std::string(ubx.transport.tcp_client.host) == "127.0.0.1");
+    REQUIRE(ubx.transport.tcp_client.port == 4242);
     REQUIRE(ubx.reconnect.enabled);
     REQUIRE(ubx.reconnect.initial_delay_ms == 25);
     REQUIRE(ubx.reconnect.maximum_delay_ms == 200);
+
     const auto& gpsd = loader.config.connectors[1];
     REQUIRE(gpsd.protocol.kind == signalk_mini::ConnectorProtocol::Gpsd);
     REQUIRE(std::string(gpsd.protocol.gpsd.device) == "/dev/ttyACM0");
     REQUIRE(!gpsd.protocol.gpsd.include_sky);
     REQUIRE(gpsd.protocol.gpsd.include_gst);
-
-
     return 0;
 }
