@@ -1,8 +1,56 @@
 #pragma once
 
+#include <stddef.h>
 #include "../core_data_types.hpp"
 
 namespace ship_data_model {
+
+#if defined(ARDUINO)
+inline constexpr size_t DefaultGnssSkyViewCapacity = 24;
+#else
+inline constexpr size_t DefaultGnssSkyViewCapacity = 64;
+#endif
+
+template<typename Real = float>
+struct GnssSatelliteObservation {
+    int16_t satellite_id = -1;
+    int16_t system_id = -1;
+    int16_t signal_id = -1;
+
+    Real elevation_deg{};
+    Real azimuth_true_deg{};
+    Real cn0_db_hz{};
+
+    bool satellite_id_valid = false;
+    bool elevation_valid = false;
+    bool azimuth_valid = false;
+    bool cn0_valid = false;
+    bool used = false;
+    bool healthy = false;
+    bool differential_corrections = false;
+};
+
+template<typename Real = float, size_t Capacity = DefaultGnssSkyViewCapacity>
+struct GnssSkyViewData {
+    Setting<SensorSource> source;
+    char talker_id[3] = {0};
+
+    Stamped<int32_t> satellites_in_view;
+    Stamped<int32_t> satellites_used;
+    GnssSatelliteObservation<Real> observations[Capacity]{};
+    uint16_t observation_count = 0;
+    bool complete = false;
+    uint32_t sequence = 0;
+    uint64_t last_update_us = 0;
+
+    static constexpr size_t capacity() { return Capacity; }
+
+    void clear_observations() {
+        for (size_t i = 0; i < Capacity; ++i) observations[i] = GnssSatelliteObservation<Real>{};
+        observation_count = 0;
+        complete = false;
+    }
+};
 
 template<typename Real = float>
 struct GnssData {
@@ -18,11 +66,15 @@ struct GnssData {
     Stamped<int32_t> local_zone_minutes;
     Stamped<Real> track_deg;
     Stamped<Real> speed_kn;
+    Stamped<Real> vertical_speed_m_s;
 
     Stamped<Real> fix_lat_deg;
     Stamped<Real> fix_lon_deg;
-    Stamped<Real> fix_alt_m;
+    Stamped<Real> fix_alt_msl_m;
+    Stamped<Real> fix_alt_hae_m;
     Stamped<int32_t> fix_quality;
+    Stamped<int32_t> fix_type;
+    Stamped<bool> fix_valid;
     char fix_mode_indicator[8] = {0};
     char navigational_status = 0;
     char mode_indicator = 0;
@@ -91,6 +143,9 @@ struct GnssFixAccuracyData {
     char status = 0;
     Stamped<Real> horizontal_accuracy_m;
     Stamped<Real> vertical_accuracy_m;
+    Stamped<Real> speed_accuracy_m_s;
+    Stamped<Real> track_accuracy_deg;
+    Stamped<Real> time_accuracy_s;
     Stamped<Real> semi_major_accuracy_m;
     Stamped<Real> semi_minor_accuracy_m;
     Stamped<Real> semi_major_orientation_deg;
@@ -169,6 +224,7 @@ struct GnssModelData {
     GnssNoiseStatisticsData<Real> noise_statistics;
     GnssDopActiveSatellitesData<Real> dop_active_satellites;
     GnssSatellitesInViewData<Real> satellites_in_view;
+    GnssSkyViewData<Real> sky_view;
 };
 
 } // namespace ship_data_model
