@@ -958,12 +958,13 @@ private:
         if (slot.gpsd_input) {
             slot.gpsd_input->on_connected();
             char watch[384];
-            if (!gpsd::make_watch_command(watch, sizeof(watch), slot.config.protocol.gpsd.device)) {
+            const bool encoded = gpsd::make_watch_command(watch, sizeof(watch), slot.config.protocol.gpsd.device);
+            const size_t length = encoded ? strlen(watch) : 0;
+            if (!encoded || connection.write(reinterpret_cast<const uint8_t*>(watch), length) != static_cast<int>(length)) {
                 connection.close();
-                return;
+                on_connector_tcp_disconnected(index);
+                schedule_connector_reconnect(index);
             }
-            const size_t length = strlen(watch);
-            if (connection.write(reinterpret_cast<const uint8_t*>(watch), length) != static_cast<int>(length)) connection.close();
         }
 #endif
     }
