@@ -48,6 +48,7 @@ jobs:
           apply_status=$?
           echo "git_apply_status=$apply_status" >> "$diag"
           [ "$apply_status" -eq 0 ] || exit "$apply_status"
+          git checkout HEAD -- .github/workflows/ci.yml
           rm -rf agent-patch .github/workflows/apply-agent-patch.yml .github/workflows/apply-agent-patch-parts.yml
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
