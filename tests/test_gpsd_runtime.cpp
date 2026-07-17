@@ -144,6 +144,8 @@ int main() {
     REQUIRE(wait_until(app, [&] { return app.store().model().gnss.fix.fix_lat_deg.valid && app.store().model().gnss.sky_view.observation_count == 1; }, 1200));
     NEAR(app.store().model().gnss.fix.fix_lat_deg.value, 40.7654321f, 0.00001);
     REQUIRE(app.store().model().gnss.fix.source.value == ship_data_model::SensorSource::gpsd);
+    REQUIRE(app.store().model().gnss.fix.satellites_used.value == 1);
+    NEAR(app.store().model().gnss.fix.hdop.value, 0.8f, 0.001);
     REQUIRE(app.gpsd_record_count() >= 3);
 
     accepted.reset();
