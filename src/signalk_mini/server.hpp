@@ -720,7 +720,8 @@ private:
         ConnectionRegistry<MaxConnectionsPerConnector> connections;
 
         void on_accept(async_event_loop::ITcpConnection& connection, const async_event_loop::TcpPeerInfo&) override {
-            if (connections.size() != 0 || !connections.add(connection, owner.connector_connection_flags(index))) {
+            if ((owner.connector_protocol(index) == ConnectorProtocol::Ubx && connections.size() != 0) ||
+                !connections.add(connection, owner.connector_connection_flags(index))) {
                 connection.close();
                 return;
             }
@@ -985,7 +986,7 @@ private:
         ConnectorRuntimeSlot& slot = connector_slot(index);
         if (!slot.connection_flags.allow_rx) return;
         const ship_data_model::SensorSource source = connector_sensor_source(index);
-        uint8_t buf[512];
+        uint8_t buf[ubx::DefaultMaxPayload + 9];
         while (slot.udp_listener.readable()) {
             const int n = slot.udp_listener.read(buf, sizeof(buf) - 1);
             if (n <= 0) break;
