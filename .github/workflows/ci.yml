@@ -14,7 +14,16 @@ jobs:
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
       - name: Build
-        run: cmake --build build --parallel
+        run: |
+          set -o pipefail
+          cmake --build build --parallel 2>&1 | tee build.log
+      - name: Upload build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build-diagnostics
+          path: build.log
+          if-no-files-found: ignore
       - name: Test
         run: ctest --test-dir build --output-on-failure
       - name: Upload CTest diagnostics
