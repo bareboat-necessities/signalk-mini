@@ -54,30 +54,37 @@ public:
         case ModelField::GnssFixLonDeg: return map_number(model.gnss.fix.fix_lon_deg, signalk_path::NavigationPositionLongitude, out);
         case ModelField::GnssSpeedKn: return map_number(model.gnss.fix.speed_kn, signalk_path::NavigationSpeedOverGround, out, UnitTransform::KnotsToMps);
         case ModelField::GnssTrackDeg: return map_number(model.gnss.fix.track_deg, signalk_path::NavigationCourseOverGroundTrue, out, UnitTransform::DegToRad);
+        case ModelField::GnssVerticalSpeedMs: return map_number(model.gnss.fix.vertical_speed_m_s, signalk_path::NavigationVerticalSpeed, out);
         case ModelField::GnssTimestampS: return map_number(model.gnss.fix.timestamp_s, signalk_path::NavigationDateTimeTimeOfDay, out);
         case ModelField::GnssDateDay: return map_int(model.gnss.fix.date_day, signalk_path::NavigationDateTimeDay, out);
         case ModelField::GnssDateMonth: return map_int(model.gnss.fix.date_month, signalk_path::NavigationDateTimeMonth, out);
         case ModelField::GnssDateYear: return map_int(model.gnss.fix.date_year, signalk_path::NavigationDateTimeYear, out);
         case ModelField::GnssFixQuality: return map_int(model.gnss.fix.fix_quality, signalk_path::NavigationGnssMethodQuality, out);
+        case ModelField::GnssFixType: return map_int(model.gnss.fix.fix_type, signalk_path::NavigationGnssFixType, out);
+        case ModelField::GnssFixValid: return map_stamped_bool(model.gnss.fix.fix_valid, signalk_path::NavigationGnssFixValid, out);
         case ModelField::GnssSatellitesUsed: return map_int(model.gnss.fix.satellites_used, signalk_path::NavigationGnssSatellites, out);
         case ModelField::GnssHdop: return map_number(model.gnss.fix.hdop, signalk_path::NavigationGnssHorizontalDilution, out);
         case ModelField::GnssDgpsStationId: return map_int(model.gnss.fix.dgps_station_id, signalk_path::NavigationGnssDifferentialReference, out);
         case ModelField::GnssDeclinationDeg: return map_number(model.gnss.fix.declination_deg, signalk_path::NavigationGnssDeclination, out, UnitTransform::DegToRad);
-        case ModelField::GnssFixAltitudeM: return map_number(model.gnss.fix.fix_alt_m, signalk_path::NavigationGnssAntennaAltitude, out);
+        case ModelField::GnssFixAltitudeMslM: return map_number(model.gnss.fix.fix_alt_msl_m, signalk_path::NavigationGnssAntennaAltitude, out);
+        case ModelField::GnssFixAltitudeHaeM: return map_number(model.gnss.fix.fix_alt_hae_m, signalk_path::NavigationPositionAltitude, out);
         case ModelField::GnssGeoidalSeparationM: return map_number(model.gnss.fix.geoidal_separation_m, signalk_path::NavigationGnssGeoidalSeparation, out);
         case ModelField::GnssDgpsAgeS: return map_number(model.gnss.fix.dgps_age_s, signalk_path::NavigationGnssDifferentialAge, out);
         case ModelField::GnssFixAccuracyHorizontalM: return map_number(model.gnss.fix_accuracy.horizontal_accuracy_m, signalk_path::NavigationGnssHorizontalAccuracy, out);
         case ModelField::GnssFixAccuracyVerticalM: return map_number(model.gnss.fix_accuracy.vertical_accuracy_m, signalk_path::NavigationGnssVerticalAccuracy, out);
+        case ModelField::GnssFixAccuracySpeedMs: return map_number(model.gnss.fix_accuracy.speed_accuracy_m_s, signalk_path::NavigationGnssSpeedAccuracy, out);
+        case ModelField::GnssFixAccuracyTrackDeg: return map_number(model.gnss.fix_accuracy.track_accuracy_deg, signalk_path::NavigationGnssTrackAccuracy, out, UnitTransform::DegToRad);
+        case ModelField::GnssFixAccuracyTimeS: return map_number(model.gnss.fix_accuracy.time_accuracy_s, signalk_path::NavigationGnssTimeAccuracy, out);
         case ModelField::GnssFixAccuracyPdop: return map_number(model.gnss.fix_accuracy.pdop, signalk_path::NavigationGnssPositionDilution, out);
         case ModelField::GnssFixAccuracyVdop: return map_number(model.gnss.fix_accuracy.vdop, signalk_path::NavigationGnssVerticalDilution, out);
         case ModelField::GnssDopActiveFixMode: return map_int(model.gnss.dop_active_satellites.fix_mode, signalk_path::NavigationGnssFixType, out);
         case ModelField::GnssDopActivePdop: return map_number(model.gnss.dop_active_satellites.pdop, signalk_path::NavigationGnssPositionDilution, out);
         case ModelField::GnssDopActiveVdop: return map_number(model.gnss.dop_active_satellites.vdop, signalk_path::NavigationGnssVerticalDilution, out);
-        case ModelField::GnssSatellitesInView: return map_int(model.gnss.satellites_in_view.satellites_in_view, signalk_path::NavigationGnssSatellitesInView, out);
-        case ModelField::GnssSatellitePrn0: return map_int(model.gnss.satellites_in_view.satellite_prn[0], signalk_path::NavigationGnssSatellite0Prn, out);
-        case ModelField::GnssSatelliteElevationDeg0: return map_number(model.gnss.satellites_in_view.elevation_deg[0], signalk_path::NavigationGnssSatellite0Elevation, out, UnitTransform::DegToRad);
-        case ModelField::GnssSatelliteAzimuthDeg0: return map_number(model.gnss.satellites_in_view.azimuth_true_deg[0], signalk_path::NavigationGnssSatellite0Azimuth, out, UnitTransform::DegToRad);
-        case ModelField::GnssSatelliteSnrDb0: return map_number(model.gnss.satellites_in_view.snr_db[0], signalk_path::NavigationGnssSatellite0Snr, out);
+        case ModelField::GnssSatellitesInView: return map_satellites_in_view(model, out);
+        case ModelField::GnssSatellitePrn0: return map_sky_satellite_id(model, 0, signalk_path::NavigationGnssSatellite0Prn, out);
+        case ModelField::GnssSatelliteElevationDeg0: return map_sky_satellite_number(model, 0, SkyField::Elevation, signalk_path::NavigationGnssSatellite0Elevation, out, UnitTransform::DegToRad);
+        case ModelField::GnssSatelliteAzimuthDeg0: return map_sky_satellite_number(model, 0, SkyField::Azimuth, signalk_path::NavigationGnssSatellite0Azimuth, out, UnitTransform::DegToRad);
+        case ModelField::GnssSatelliteSnrDb0: return map_sky_satellite_number(model, 0, SkyField::Cn0, signalk_path::NavigationGnssSatellite0Snr, out);
         case ModelField::ImuHeadingTrueDeg: return map_number(model.ins.imu.heading_true_deg, signalk_path::NavigationHeadingTrue, out, UnitTransform::DegToRad);
         case ModelField::ImuHeadingMagneticDeg: return map_number(model.ins.imu.heading_magnetic_deg, signalk_path::NavigationHeadingMagnetic, out, UnitTransform::DegToRad);
         case ModelField::ImuMagneticVariationDeg: return map_number(model.ins.imu.magnetic_variation_deg, signalk_path::NavigationMagneticVariation, out, UnitTransform::DegToRad);
@@ -202,31 +209,37 @@ private:
         InHgToPa,
     };
 
+    enum class SkyField : uint8_t { Elevation, Azimuth, Cn0 };
+
     template<typename StampedReal>
     bool map_number(const StampedReal& stamped, const char* path, SignalKMappedValue<Real>& out, UnitTransform transform = UnitTransform::None) const {
         if (!stamped.valid) return false;
+        return map_number_value(static_cast<Real>(stamped.value), path, out, transform);
+    }
+
+    bool map_number_value(Real value, const char* path, SignalKMappedValue<Real>& out, UnitTransform transform = UnitTransform::None) const {
         out.path = path;
         out.kind = SignalKMappedValueKind::Number;
-        out.number = transform_number(static_cast<Real>(stamped.value), transform);
+        out.number = transform_number(value, transform);
         return true;
     }
 
     template<typename StampedInt>
     bool map_int(const StampedInt& stamped, const char* path, SignalKMappedValue<Real>& out) const {
         if (!stamped.valid) return false;
-        out.path = path;
-        out.kind = SignalKMappedValueKind::Number;
-        out.number = static_cast<Real>(stamped.value);
-        return true;
+        return map_number_value(static_cast<Real>(stamped.value), path, out);
     }
 
     template<typename StampedUInt>
     bool map_uint(const StampedUInt& stamped, const char* path, SignalKMappedValue<Real>& out) const {
         if (!stamped.valid) return false;
-        out.path = path;
-        out.kind = SignalKMappedValueKind::Number;
-        out.number = static_cast<Real>(stamped.value);
-        return true;
+        return map_number_value(static_cast<Real>(stamped.value), path, out);
+    }
+
+    template<typename StampedBool>
+    bool map_stamped_bool(const StampedBool& stamped, const char* path, SignalKMappedValue<Real>& out) const {
+        if (!stamped.valid) return false;
+        return map_bool(stamped.value, path, out);
     }
 
     bool map_bool(bool value, const char* path, SignalKMappedValue<Real>& out) const {
@@ -249,6 +262,41 @@ private:
         out.kind = SignalKMappedValueKind::Object;
         out.object_kind = kind;
         return true;
+    }
+
+    bool map_satellites_in_view(const ship_data_model::DataModel<Real>& model, SignalKMappedValue<Real>& out) const {
+        if (model.gnss.sky_view.satellites_in_view.valid) {
+            return map_int(model.gnss.sky_view.satellites_in_view, signalk_path::NavigationGnssSatellitesInView, out);
+        }
+        return map_int(model.gnss.satellites_in_view.satellites_in_view, signalk_path::NavigationGnssSatellitesInView, out);
+    }
+
+    bool map_sky_satellite_id(const ship_data_model::DataModel<Real>& model, size_t index, const char* path, SignalKMappedValue<Real>& out) const {
+        const auto& sky = model.gnss.sky_view;
+        if (index < sky.observation_count && sky.observations[index].satellite_id_valid) {
+            return map_number_value(static_cast<Real>(sky.observations[index].satellite_id), path, out);
+        }
+        if (index < 4) return map_int(model.gnss.satellites_in_view.satellite_prn[index], path, out);
+        return false;
+    }
+
+    bool map_sky_satellite_number(const ship_data_model::DataModel<Real>& model,
+                                  size_t index,
+                                  SkyField field,
+                                  const char* path,
+                                  SignalKMappedValue<Real>& out,
+                                  UnitTransform transform = UnitTransform::None) const {
+        const auto& sky = model.gnss.sky_view;
+        if (index < sky.observation_count) {
+            const auto& observation = sky.observations[index];
+            if (field == SkyField::Elevation && observation.elevation_valid) return map_number_value(observation.elevation_deg, path, out, transform);
+            if (field == SkyField::Azimuth && observation.azimuth_valid) return map_number_value(observation.azimuth_true_deg, path, out, transform);
+            if (field == SkyField::Cn0 && observation.cn0_valid) return map_number_value(observation.cn0_db_hz, path, out, transform);
+        }
+        if (index >= 4) return false;
+        if (field == SkyField::Elevation) return map_number(model.gnss.satellites_in_view.elevation_deg[index], path, out, transform);
+        if (field == SkyField::Azimuth) return map_number(model.gnss.satellites_in_view.azimuth_true_deg[index], path, out, transform);
+        return map_number(model.gnss.satellites_in_view.snr_db[index], path, out, transform);
     }
 
     Real transform_number(Real value, UnitTransform transform) const {
