@@ -10,6 +10,9 @@
 #include "signalk_mini/nmea0183_input.hpp"
 #include "signalk_mini/seatalk_input.hpp"
 #include "signalk_mini/ubx_input.hpp"
+#if !defined(ARDUINO)
+#include "signalk_mini/gpsd_input.hpp"
+#endif
 #include "signalk_mini/signalk_mapper.hpp"
 #include "signalk_mini/signalk_json_stream_writer.hpp"
 #include "signalk_mini/signalk_delta_writer.hpp"

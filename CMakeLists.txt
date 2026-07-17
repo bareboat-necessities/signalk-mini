@@ -22,6 +22,7 @@ target_include_directories(signalk_mini_core INTERFACE
   modules/nmea0183/src
   modules/seatalk/src
   modules/ubx/src
+  modules/gpsd/src
   ${LIBEVENT_INCLUDE_DIRS}
 )
 target_compile_features(signalk_mini_core INTERFACE cxx_std_17)
@@ -84,6 +85,8 @@ if(BUILD_TESTING)
   add_signalk_mini_test(test_nmea_mapping tests/test_nmea_signalk_mapping.cpp)
   add_signalk_mini_test(test_ubx_parser tests/test_ubx_parser.cpp)
   add_signalk_mini_test(test_ubx_model_apply tests/test_ubx_model_apply.cpp)
+  add_signalk_mini_test(test_gpsd_parser tests/test_gpsd_parser.cpp)
+  add_signalk_mini_test(test_gpsd_model_apply tests/test_gpsd_model_apply.cpp)
   add_executable(test_connector_config tests/test_connector_config.cpp)
   target_include_directories(test_connector_config PRIVATE ${LIBCONFIG_INCLUDE_DIRS})
   target_link_directories(test_connector_config PRIVATE ${LIBCONFIG_LIBRARY_DIRS})
@@ -111,6 +114,10 @@ if(BUILD_TESTING)
   add_executable(test_ubx_runtime tests/test_ubx_runtime.cpp)
   target_link_libraries(test_ubx_runtime PRIVATE signalk_mini_core Threads::Threads)
   add_test(NAME test_ubx_runtime COMMAND test_ubx_runtime)
+
+  add_executable(test_gpsd_runtime tests/test_gpsd_runtime.cpp)
+  target_link_libraries(test_gpsd_runtime PRIVATE signalk_mini_core Threads::Threads)
+  add_test(NAME test_gpsd_runtime COMMAND test_gpsd_runtime)
 
   add_executable(test_seatalk_native_routing tests/test_seatalk_native_routing.cpp)
   target_link_libraries(test_seatalk_native_routing PRIVATE signalk_mini_core Threads::Threads)
