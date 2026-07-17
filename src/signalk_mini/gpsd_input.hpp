@@ -88,7 +88,10 @@ private:
     }
 
     void mark_sky(SourceId source_id, uint64_t now_us) {
+        const auto& fix = store_.model().gnss.fix;
         const auto& sky = store_.model().gnss.sky_view;
+        mark_if_updated(fix.satellites_used, ModelField::GnssSatellitesUsed, source_id, now_us);
+        mark_if_updated(fix.hdop, ModelField::GnssHdop, source_id, now_us);
         mark_if_updated(sky.satellites_in_view, ModelField::GnssSatellitesInView, source_id, now_us);
         if (sky.last_update_us == now_us && sky.observation_count > 0) {
             mark(ModelField::GnssSatellitePrn0, source_id, now_us);

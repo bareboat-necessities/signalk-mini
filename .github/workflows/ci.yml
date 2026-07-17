@@ -4,36 +4,7 @@ on:
   push:
   pull_request:
 
-permissions:
-  contents: write
-
 jobs:
-  apply-gpsd-audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: agent/gpsd-connector
-          fetch-depth: 0
-      - name: Apply GPSD audit fixes once
-        run: |
-          if [ ! -f gpsd-audit.patch.gz.b64 ]; then
-            echo 'No GPSD audit patch present.'
-            exit 0
-          fi
-          base64 -d gpsd-audit.patch.gz.b64 > /tmp/gpsd-audit.patch.gz
-          gzip -dc /tmp/gpsd-audit.patch.gz > /tmp/gpsd-audit.patch
-          patch --dry-run -p1 < /tmp/gpsd-audit.patch
-          patch -p1 < /tmp/gpsd-audit.patch
-          rm gpsd-audit.patch.gz.b64
-          git fetch origin main
-          git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -A
-          git commit -m 'Complete GPSD interoperability audit'
-          git push origin HEAD:agent/gpsd-connector
-
   linux:
     runs-on: ubuntu-latest
     steps:

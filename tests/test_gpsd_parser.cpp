@@ -43,5 +43,9 @@ int main() {
     const char* watch_response = "{\"class\":\"WATCH\",\"enable\":true}\n";
     small.accept_octets(reinterpret_cast<const uint8_t*>(watch_response), std::strlen(watch_response), model, 4001);
     REQUIRE(small.state() == gpsd::SessionState::Watching);
+    const char* watch_disabled = "{\"class\":\"WATCH\",\"enable\":false}\n";
+    small.on_connected();
+    small.accept_octets(reinterpret_cast<const uint8_t*>(watch_disabled), std::strlen(watch_disabled), model, 4002);
+    REQUIRE(small.state() == gpsd::SessionState::WaitingForVersion);
     return 0;
 }

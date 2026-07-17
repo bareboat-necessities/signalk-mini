@@ -154,5 +154,21 @@ int main() {
         return accepted_again.valid();
     }, 1500));
     REQUIRE(app.connector_reconnect_count() > 0);
+    char reconnect_watch[512]{};
+    REQUIRE(wait_until(app, [&] {
+        const ssize_t n = ::recv(accepted_again.get(), reconnect_watch, sizeof(reconnect_watch) - 1, MSG_DONTWAIT);
+        if (n > 0) reconnect_watch[n] = '\0';
+        return n > 0;
+    }, 1000));
+    REQUIRE(std::strstr(reconnect_watch, "?WATCH=") != nullptr);
+    REQUIRE(std::strstr(reconnect_watch, "/dev/ttyACM0") != nullptr);
+
+    signalk_mini::ConnectorConfig invalid_connector = connector;
+    invalid_connector.protocol.gpsd.device = "/dev/bad\"device";
+    signalk_mini::SignalKMiniConfig invalid_config = config;
+    invalid_config.connectors = &invalid_connector;
+    signalk_mini::SignalKMiniApp<float> invalid_app(invalid_config);
+    REQUIRE(!invalid_app.begin());
+    REQUIRE(invalid_app.last_startup_error() == signalk_mini::MiniSignalKServer<float>::StartupError::InvalidConnectorProtocolConfig);
     return 0;
 }

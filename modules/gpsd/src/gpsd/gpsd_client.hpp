@@ -170,7 +170,7 @@ public:
 
         if (strcmp(message_class, "VERSION") == 0) return apply_version(object);
         if (strcmp(message_class, "WATCH") == 0) {
-            state_ = SessionState::Watching;
+            if (object["enable"] | false) state_ = SessionState::Watching;
             return UpdateKind::Session;
         }
         if (strcmp(message_class, "DEVICE") == 0 || strcmp(message_class, "DEVICES") == 0) return UpdateKind::Session;
@@ -275,9 +275,11 @@ private:
                          ship_data_model::DataModel<Real>& model,
                          uint64_t now_us,
                          ship_data_model::SensorSource source) {
+        auto& fix = model.gnss.fix;
         auto& sky = model.gnss.sky_view;
         auto& dop = model.gnss.dop_active_satellites;
         auto& accuracy = model.gnss.fix_accuracy;
+        fix.source.value = source;
         sky.source.value = source;
         dop.source.value = source;
         accuracy.source.value = source;
@@ -311,6 +313,7 @@ private:
         sky.observation_count = static_cast<uint16_t>(total);
         sky.satellites_in_view.set(static_cast<int32_t>(satellites.size()), now_us);
         sky.satellites_used.set(used_count, now_us);
+        fix.satellites_used.set(used_count, now_us);
         sky.complete = true;
         ++sky.sequence;
         sky.last_update_us = now_us;
@@ -320,7 +323,12 @@ private:
         GPSD_SET_DOP("gdop", gdop)
         GPSD_SET_DOP("pdop", pdop)
         GPSD_SET_DOP("tdop", tdop)
-        GPSD_SET_DOP("hdop", hdop)
+        if (read_number(object, "hdop", value)) {
+            const Real hdop = static_cast<Real>(value);
+            dop.hdop.set(hdop, now_us);
+            accuracy.hdop.set(hdop, now_us);
+            fix.hdop.set(hdop, now_us);
+        }
         GPSD_SET_DOP("vdop", vdop)
         if (read_number(object, "xdop", value)) { dop.east_dop.set(static_cast<Real>(value), now_us); accuracy.east_dop.set(static_cast<Real>(value), now_us); }
         if (read_number(object, "ydop", value)) { dop.north_dop.set(static_cast<Real>(value), now_us); accuracy.north_dop.set(static_cast<Real>(value), now_us); }

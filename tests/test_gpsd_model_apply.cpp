@@ -35,6 +35,8 @@ int main() {
     REQUIRE(input.feed_octets(reinterpret_cast<const uint8_t*>(sky), std::strlen(sky), 10, 1200));
     REQUIRE(model.gnss.sky_view.observation_count == 2);
     REQUIRE(model.gnss.sky_view.satellites_used.value == 1);
+    REQUIRE(model.gnss.fix.satellites_used.value == 1);
+    NEAR(model.gnss.fix.hdop.value, 0.9f, 0.001);
     REQUIRE(model.gnss.sky_view.observations[0].satellite_id == 3);
     NEAR(model.gnss.dop_active_satellites.pdop.value, 1.2f, 0.001);
 
