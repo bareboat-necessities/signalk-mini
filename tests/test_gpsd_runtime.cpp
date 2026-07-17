@@ -172,5 +172,13 @@ int main() {
     signalk_mini::SignalKMiniApp<float> invalid_app(invalid_config);
     REQUIRE(!invalid_app.begin());
     REQUIRE(invalid_app.last_startup_error() == signalk_mini::MiniSignalKServer<float>::StartupError::InvalidConnectorProtocolConfig);
+
+    std::string long_device(400, 'x');
+    invalid_connector.protocol.gpsd.device = long_device.c_str();
+    signalk_mini::SignalKMiniConfig long_device_config = config;
+    long_device_config.connectors = &invalid_connector;
+    signalk_mini::SignalKMiniApp<float> long_device_app(long_device_config);
+    REQUIRE(!long_device_app.begin());
+    REQUIRE(long_device_app.last_startup_error() == signalk_mini::MiniSignalKServer<float>::StartupError::InvalidConnectorProtocolConfig);
     return 0;
 }

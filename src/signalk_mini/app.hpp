@@ -25,7 +25,7 @@ public:
                 }
 #if !defined(ARDUINO)
                 if (connector.protocol.kind == ConnectorProtocol::Gpsd) {
-                    char watch_command[512];
+                    char watch_command[384];
                     if (connector.transport.kind != ConnectorTransport::TcpClient || connector.access.allow_tx ||
                         !connector.access.allow_rx ||
                         !gpsd::make_watch_command(watch_command, sizeof(watch_command), connector.protocol.gpsd.device)) {

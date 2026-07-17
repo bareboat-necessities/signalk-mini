@@ -26,6 +26,20 @@ public:
                      uint64_t now_us,
                      ship_data_model::SensorSource source = ship_data_model::SensorSource::gpsd) {
         const gpsd::UpdateKind updates = client_.accept_octets(bytes, length, store_.model(), now_us, source);
+        if (gpsd::has_update(updates, gpsd::UpdateKind::Sky)) {
+            auto& model = store_.model();
+            auto& fix = model.gnss.fix;
+            const auto& sky = model.gnss.sky_view;
+            const auto& dop = model.gnss.dop_active_satellites;
+            if (sky.satellites_used.valid && sky.satellites_used.last_update_us == now_us) {
+                fix.source.value = source;
+                fix.satellites_used.set(sky.satellites_used.value, now_us);
+            }
+            if (dop.hdop.valid && dop.hdop.last_update_us == now_us) {
+                fix.source.value = source;
+                fix.hdop.set(dop.hdop.value, now_us);
+            }
+        }
         mark_changes(updates, source_id, now_us);
         return updates != gpsd::UpdateKind::None;
     }
