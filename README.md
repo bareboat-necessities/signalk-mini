@@ -7,6 +7,8 @@ This stage vendors only source trees from the uploaded modules:
 - `modules/async-event-loop/src`
 - `modules/nmea0183/src`
 - `modules/data-model/src`
+- `modules/seatalk/src`
+- `modules/ubx/src`
 
 The main project code is split under `src/signalk_mini/`.
 
@@ -124,6 +126,43 @@ Implemented NMEA0183 transports in this stage:
 - `tcp_server`
 - `serial`
 
+## UBX GNSS connectors
+
+Native u-blox UBX input is available with `protocol = "ubx"` over `serial`, `tcp_client`, `tcp_server`, or `udp`. The initial implementation is receive-only and accepts NAV-PVT, NAV-DOP, NAV-SAT, MON-VER, ACK-ACK, and ACK-NAK messages. It applies complete values directly to the typed GNSS model; raw frames are not retained.
+
+```text
+enabled = true;
+label = "ublox-main";
+protocol = "ubx";
+transport = "serial";
+
+access: {
+  allow_rx = true;
+  allow_tx = false;
+};
+
+ubx: {
+  configure_receiver = false;
+};
+
+serial: {
+  device = "/dev/ttyACM0";
+  baud = 115200;
+};
+```
+
+TCP client connectors use bounded reconnect backoff by default. The policy can be configured for NMEA0183, SeaTalk 1, or UBX TCP clients:
+
+```text
+reconnect: {
+  enabled = true;
+  initial_delay_ms = 1000;
+  maximum_delay_ms = 30000;
+};
+```
+
+`gpsd` is recognized by the configuration model so its protocol-specific settings can be loaded, but GPSD runtime support is intentionally not enabled in this stage.
+
 ## Minimal Signal K subscribe-all
 
 The main Signal K TCP server sends a hello line immediately after a client connects. Deltas are not sent to that client until it sends a minimal subscribe-all line.
@@ -214,6 +253,7 @@ On MCU targets, board-specific sketch code owns hardware I/O for now. The core a
 
 ```cpp
 app.nmea0183().feed_line(line, signalk_mini::SourceId(1), micros(), true);
+app.ubx().feed_octets(bytes, length, signalk_mini::SourceId(2), micros());
 ```
 
 Use `make_sketch_owned_io_config(...)` for this mode. It disables configured core connectors by setting `connectors = nullptr` and `connector_count = 0`, while keeping the Signal K TCP server and publisher enabled.

@@ -46,6 +46,8 @@ enum class ConnectorProtocol : uint8_t {
     None = 0,
     Nmea0183,
     SeaTalk1,
+    Ubx,
+    Gpsd,
     Nmea2000,
     SignalK,
     GenericSensor,
@@ -72,9 +74,21 @@ struct Nmea0183ProtocolConfig {
     bool validate_checksum_configured = false;
 };
 
+struct UbxProtocolConfig {
+    bool configure_receiver = false;
+};
+
+struct GpsdProtocolConfig {
+    const char* device = nullptr;
+    bool include_sky = true;
+    bool include_gst = true;
+};
+
 struct ConnectorProtocolConfig {
     ConnectorProtocol kind = ConnectorProtocol::None;
     Nmea0183ProtocolConfig nmea0183;
+    UbxProtocolConfig ubx;
+    GpsdProtocolConfig gpsd;
 };
 
 struct TcpClientTransportConfig {
@@ -128,12 +142,19 @@ inline bool effective_nmea0183_validate_checksum(const Nmea0183ProtocolConfig& p
     return protocol.validate_checksum_configured ? protocol.validate_checksum : default_nmea0183_validate_checksum(transport);
 }
 
+struct ConnectorReconnectConfig {
+    bool enabled = true;
+    uint32_t initial_delay_ms = 1000;
+    uint32_t maximum_delay_ms = 30000;
+};
+
 struct ConnectorConfig {
     bool enabled = false;
     const char* label = nullptr;
     ConnectorAccessConfig access;
     ConnectorProtocolConfig protocol;
     ConnectorTransportConfig transport;
+    ConnectorReconnectConfig reconnect;
 };
 
 inline ConnectorConfig make_default_nmea0183_udp_listener_connector() {

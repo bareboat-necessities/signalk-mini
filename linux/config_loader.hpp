@@ -79,6 +79,8 @@ private:
         const std::string text = value ? value : "";
         if (text == "nmea0183") return signalk_mini::ConnectorProtocol::Nmea0183;
         if (text == "seatalk" || text == "seatalk1" || text == "seatalk_1") return signalk_mini::ConnectorProtocol::SeaTalk1;
+        if (text == "ubx") return signalk_mini::ConnectorProtocol::Ubx;
+        if (text == "gpsd") return signalk_mini::ConnectorProtocol::Gpsd;
         if (text == "nmea2000") return signalk_mini::ConnectorProtocol::Nmea2000;
         if (text == "signalk") return signalk_mini::ConnectorProtocol::SignalK;
         if (text == "generic_sensor") return signalk_mini::ConnectorProtocol::GenericSensor;
@@ -163,6 +165,9 @@ private:
         if (config_setting_lookup_string(connector_setting, "transport", &value)) connector.transport.kind = transport_from_string(value);
         load_connector_access(connector_setting, connector);
         load_nmea0183_protocol(connector_setting, connector);
+        load_ubx_protocol(connector_setting, connector);
+        load_gpsd_protocol(connector_setting, connector);
+        load_reconnect(connector_setting, connector);
         load_transport(connector_setting, connector);
     }
 
@@ -185,6 +190,31 @@ private:
         } else if (read_bool(connector_setting, "validate_checksum", connector.protocol.nmea0183.validate_checksum)) {
             connector.protocol.nmea0183.validate_checksum_configured = true;
         }
+    }
+
+    void load_ubx_protocol(config_setting_t* connector_setting, signalk_mini::ConnectorConfig& connector) {
+        if (connector.protocol.kind != signalk_mini::ConnectorProtocol::Ubx) return;
+        config_setting_t* ubx = config_setting_lookup(connector_setting, "ubx");
+        if (!ubx) ubx = connector_setting;
+        read_bool(ubx, "configure_receiver", connector.protocol.ubx.configure_receiver);
+    }
+
+    void load_gpsd_protocol(config_setting_t* connector_setting, signalk_mini::ConnectorConfig& connector) {
+        if (connector.protocol.kind != signalk_mini::ConnectorProtocol::Gpsd) return;
+        config_setting_t* gpsd = config_setting_lookup(connector_setting, "gpsd");
+        if (!gpsd) gpsd = connector_setting;
+        const char* value = nullptr;
+        if (config_setting_lookup_string(gpsd, "device", &value)) connector.protocol.gpsd.device = keep(value);
+        read_bool(gpsd, "include_sky", connector.protocol.gpsd.include_sky);
+        read_bool(gpsd, "include_gst", connector.protocol.gpsd.include_gst);
+    }
+
+    void load_reconnect(config_setting_t* connector_setting, signalk_mini::ConnectorConfig& connector) {
+        config_setting_t* reconnect = config_setting_lookup(connector_setting, "reconnect");
+        if (!reconnect) return;
+        read_bool(reconnect, "enabled", connector.reconnect.enabled);
+        read_u32(reconnect, "initial_delay_ms", connector.reconnect.initial_delay_ms);
+        read_u32(reconnect, "maximum_delay_ms", connector.reconnect.maximum_delay_ms);
     }
 
     void load_transport(config_setting_t* connector_setting, signalk_mini::ConnectorConfig& connector) {

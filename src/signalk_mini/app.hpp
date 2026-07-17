@@ -17,6 +17,7 @@ public:
     const ModelStore<Real>& store() const { return server_.store(); }
     Nmea0183Input<Real>& nmea0183() { return server_.nmea0183(); }
     SeaTalkInput<Real>& seatalk() { return server_.seatalk(); }
+    UbxInput<Real>& ubx() { return server_.ubx(); }
 
     uint64_t dropped_change_count() const { return server_.dropped_change_count(); }
     uint64_t dropped_publish_count() const { return server_.dropped_publish_count(); }
@@ -24,6 +25,11 @@ public:
     typename MiniSignalKServer<Real>::StartupError last_startup_error() const { return server_.last_startup_error(); }
     size_t last_failed_connector_index() const { return server_.last_failed_connector_index(); }
     uint32_t connector_start_failure_count() const { return server_.connector_start_failure_count(); }
+    uint32_t connector_reconnect_count() const { return server_.connector_reconnect_count(); }
+    uint32_t ubx_frame_count() const { return server_.ubx_frame_count(); }
+    uint32_t ubx_checksum_error_count() const { return server_.ubx_checksum_error_count(); }
+    uint32_t ubx_oversized_frame_count() const { return server_.ubx_oversized_frame_count(); }
+    uint32_t ubx_unsupported_frame_count() const { return server_.ubx_unsupported_frame_count(); }
 
     bool transmit_seatalk_frame(const seatalk::SeaTalkFrame& frame) {
         return server_.transmit_seatalk_frame(frame);

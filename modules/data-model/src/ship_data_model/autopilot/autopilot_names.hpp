@@ -9,6 +9,7 @@ namespace ship_data_model {
 inline bool sensor_source_from_name(const char* name, SensorSource& out) {
     if (!name) return false;
     if (strcmp(name, "gpsd") == 0) out = SensorSource::gpsd;
+    else if (strcmp(name, "ubx") == 0) out = SensorSource::ubx;
     else if (strcmp(name, "servo") == 0) out = SensorSource::servo;
     else if (strcmp(name, "serial") == 0) out = SensorSource::serial;
     else if (strcmp(name, "tcp") == 0) out = SensorSource::tcp;
