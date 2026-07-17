@@ -161,7 +161,13 @@ void test_udp() {
     REQUIRE(send_udp(ubx_port, frame));
     REQUIRE(wait_until(app, [&] { return app.store().model().gnss.fix.fix_lat_deg.valid; }, 1000));
     NEAR(app.store().model().gnss.fix.fix_lat_deg.value, 40.7654321f, 0.00001f);
-    REQUIRE(app.ubx_frame_count() == 1);
+
+    const auto large_sky_frame = ubx_test::nav_sat(42);
+    REQUIRE(large_sky_frame.size() > 512);
+    REQUIRE(send_udp(ubx_port, large_sky_frame));
+    REQUIRE(wait_until(app, [&] { return app.store().model().gnss.sky_view.observation_count == 42; }, 1000));
+    REQUIRE(app.store().model().gnss.sky_view.complete);
+    REQUIRE(app.ubx_frame_count() == 2);
 }
 
 void test_tcp_server() {
