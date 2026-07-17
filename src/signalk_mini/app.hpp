@@ -16,12 +16,25 @@ public:
         if (config_.connectors) {
             for (size_t i = 0; i < config_.connector_count; ++i) {
                 const ConnectorConfig& connector = config_.connectors[i];
-                if (!connector.enabled || connector.protocol.kind != ConnectorProtocol::Ubx) continue;
-                if (connector.protocol.ubx.configure_receiver || connector.access.allow_tx || !connector.access.allow_rx) {
+                if (!connector.enabled) continue;
+                if (connector.protocol.kind == ConnectorProtocol::Ubx &&
+                    (connector.protocol.ubx.configure_receiver || connector.access.allow_tx || !connector.access.allow_rx)) {
                     app_startup_error_ = MiniSignalKServer<Real>::StartupError::InvalidConnectorProtocolConfig;
                     app_failed_connector_index_ = i;
                     return false;
                 }
+#if !defined(ARDUINO)
+                if (connector.protocol.kind == ConnectorProtocol::Gpsd) {
+                    char watch_command[384];
+                    if (connector.transport.kind != ConnectorTransport::TcpClient || connector.access.allow_tx ||
+                        !connector.access.allow_rx ||
+                        !gpsd::make_watch_command(watch_command, sizeof(watch_command), connector.protocol.gpsd.device)) {
+                        app_startup_error_ = MiniSignalKServer<Real>::StartupError::InvalidConnectorProtocolConfig;
+                        app_failed_connector_index_ = i;
+                        return false;
+                    }
+                }
+#endif
             }
         }
         return server_.begin();
@@ -49,6 +62,12 @@ public:
     uint32_t ubx_checksum_error_count() const { return server_.ubx_checksum_error_count(); }
     uint32_t ubx_oversized_frame_count() const { return server_.ubx_oversized_frame_count(); }
     uint32_t ubx_unsupported_frame_count() const { return server_.ubx_unsupported_frame_count(); }
+#if !defined(ARDUINO)
+    uint32_t gpsd_record_count() const { return server_.gpsd_record_count(); }
+    uint32_t gpsd_malformed_record_count() const { return server_.gpsd_malformed_record_count(); }
+    uint32_t gpsd_oversized_record_count() const { return server_.gpsd_oversized_record_count(); }
+    uint32_t gpsd_device_mismatch_count() const { return server_.gpsd_device_mismatch_count(); }
+#endif
 
     bool transmit_seatalk_frame(const seatalk::SeaTalkFrame& frame) {
         return server_.transmit_seatalk_frame(frame);

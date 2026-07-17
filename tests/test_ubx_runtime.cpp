@@ -126,11 +126,6 @@ void test_startup_validation() {
     connector.transport.tcp_client.port = 2947;
     auto config = base_config(signal_port, connector);
 
-    connector.protocol.kind = signalk_mini::ConnectorProtocol::Gpsd;
-    signalk_mini::SignalKMiniApp<float> gpsd_app(config);
-    REQUIRE(!gpsd_app.begin());
-    REQUIRE(gpsd_app.last_startup_error() == signalk_mini::MiniSignalKServer<float>::StartupError::UnsupportedConnectorProtocol);
-
     connector.protocol.kind = signalk_mini::ConnectorProtocol::Ubx;
     connector.protocol.ubx.configure_receiver = true;
     signalk_mini::SignalKMiniApp<float> configured_app(config);

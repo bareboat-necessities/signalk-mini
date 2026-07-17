@@ -24,12 +24,18 @@
 #include <nmea0183_connector.hpp>
 #include <seatalk.hpp>
 #include <ubx.hpp>
+#if !defined(ARDUINO)
+#include <gpsd.hpp>
+#endif
 #include "config.hpp"
 #include "connection_registry.hpp"
 #include "nmea0183_input.hpp"
 #include "publisher.hpp"
 #include "seatalk_input.hpp"
 #include "ubx_input.hpp"
+#if !defined(ARDUINO)
+#include "gpsd_input.hpp"
+#endif
 #include "signalk_hello_writer.hpp"
 
 namespace signalk_mini {
@@ -265,6 +271,28 @@ public:
         for (const auto& slot : connector_slots_) if (slot && slot->ubx_input) total += slot->ubx_input->receiver().diagnostics().unsupported_frame_count;
         return total;
     }
+#if !defined(ARDUINO)
+    uint32_t gpsd_record_count() const {
+        uint32_t total = 0;
+        for (const auto& slot : connector_slots_) if (slot && slot->gpsd_input) total += slot->gpsd_input->client().diagnostics().record_count;
+        return total;
+    }
+    uint32_t gpsd_malformed_record_count() const {
+        uint32_t total = 0;
+        for (const auto& slot : connector_slots_) if (slot && slot->gpsd_input) total += slot->gpsd_input->client().diagnostics().malformed_record_count;
+        return total;
+    }
+    uint32_t gpsd_oversized_record_count() const {
+        uint32_t total = 0;
+        for (const auto& slot : connector_slots_) if (slot && slot->gpsd_input) total += slot->gpsd_input->client().diagnostics().oversized_record_count;
+        return total;
+    }
+    uint32_t gpsd_device_mismatch_count() const {
+        uint32_t total = 0;
+        for (const auto& slot : connector_slots_) if (slot && slot->gpsd_input) total += slot->gpsd_input->client().diagnostics().device_mismatch_count;
+        return total;
+    }
+#endif
 
     bool transmit_seatalk_frame(const seatalk::SeaTalkFrame& frame) {
         if (frame.length == 0) return false;
@@ -372,7 +400,11 @@ private:
     }
 
     static bool supported_protocol(ConnectorProtocol protocol) {
-        return protocol == ConnectorProtocol::Nmea0183 || protocol == ConnectorProtocol::SeaTalk1 || protocol == ConnectorProtocol::Ubx;
+        if (protocol == ConnectorProtocol::Nmea0183 || protocol == ConnectorProtocol::SeaTalk1 || protocol == ConnectorProtocol::Ubx) return true;
+#if !defined(ARDUINO)
+        if (protocol == ConnectorProtocol::Gpsd) return true;
+#endif
+        return false;
     }
 
     static bool supported_transport(ConnectorTransport transport) {
@@ -435,6 +467,10 @@ private:
             if (!supported_protocol(connector.protocol.kind)) return set_startup_error(StartupError::UnsupportedConnectorProtocol, i);
             if (!supported_transport(connector.transport.kind)) return set_startup_error(StartupError::UnsupportedConnectorTransport, i);
             if (!validate_transport_config(connector)) return set_startup_error(StartupError::InvalidConnectorTransportConfig, i);
+            if (connector.protocol.kind == ConnectorProtocol::Gpsd &&
+                (connector.transport.kind != ConnectorTransport::TcpClient || !connector.access.allow_rx || connector.access.allow_tx)) {
+                return set_startup_error(StartupError::InvalidConnectorProtocolConfig, i);
+            }
             if (connector.protocol.kind == ConnectorProtocol::Ubx && connector.protocol.ubx.configure_receiver) return set_startup_error(StartupError::InvalidConnectorProtocolConfig, i);
             if (connector.transport.kind == ConnectorTransport::TcpClient && connector.reconnect.enabled &&
                 (connector.reconnect.initial_delay_ms == 0 || connector.reconnect.maximum_delay_ms < connector.reconnect.initial_delay_ms)) {
@@ -746,20 +782,27 @@ private:
         MiniSignalKServer& owner;
         size_t index;
 
-        void on_connect(async_event_loop::ITcpConnection&, const async_event_loop::TcpPeerInfo&) override {
-            owner.on_connector_tcp_connected(index);
+        void on_connect(async_event_loop::ITcpConnection& connection, const async_event_loop::TcpPeerInfo&) override {
+            owner.on_connector_tcp_connected(index, connection);
         }
         void on_data(async_event_loop::ITcpConnection& connection) override {
             if (!owner.connector_allow_rx(index)) return;
-            if (owner.connector_protocol(index) == ConnectorProtocol::SeaTalk1 || owner.connector_protocol(index) == ConnectorProtocol::Ubx) {
+            const ConnectorProtocol protocol = owner.connector_protocol(index);
+            if (protocol == ConnectorProtocol::SeaTalk1 || protocol == ConnectorProtocol::Ubx || protocol == ConnectorProtocol::Gpsd) {
                 owner.handle_connector_stream_bytes(index, connection);
                 return;
             }
             char text[160];
             while (connection.read_line(text, sizeof(text))) owner.handle_connector_nmea_line(index, text);
         }
-        void on_close(async_event_loop::ITcpConnection&) override { owner.schedule_connector_reconnect(index); }
-        void on_error(int) override { owner.schedule_connector_reconnect(index); }
+        void on_close(async_event_loop::ITcpConnection&) override {
+            owner.on_connector_tcp_disconnected(index);
+            owner.schedule_connector_reconnect(index);
+        }
+        void on_error(int) override {
+            owner.on_connector_tcp_disconnected(index);
+            owner.schedule_connector_reconnect(index);
+        }
     };
 
     struct ConnectorRuntimeSlot {
@@ -797,6 +840,9 @@ private:
         UdpListenerStream udp_listener;
         SeaTalkInput<Real> seatalk_input;
         std::unique_ptr<UbxInput<Real>> ubx_input;
+#if !defined(ARDUINO)
+        std::unique_ptr<GpsdInput<Real>> gpsd_input;
+#endif
         ConnectorTcpServerHandler tcp_server_handler;
         ConnectorTcpRawServerHandler tcp_raw_server_handler;
         ConnectorTcpClientHandler tcp_client_handler;
@@ -827,12 +873,22 @@ private:
                 : false;
             slot->reconnect_delay_ms = connector.reconnect.initial_delay_ms;
             if (connector.protocol.kind == ConnectorProtocol::Ubx) slot->ubx_input.reset(new UbxInput<Real>(store_));
+#if !defined(ARDUINO)
+            if (connector.protocol.kind == ConnectorProtocol::Gpsd) {
+                slot->gpsd_input.reset(new GpsdInput<Real>(store_, connector.protocol.gpsd.device,
+                                                          connector.protocol.gpsd.include_sky,
+                                                          connector.protocol.gpsd.include_gst));
+            }
+#endif
             connector_slots_.push_back(std::move(slot));
             ConnectorRuntimeSlot& runtime = *connector_slots_.back();
             if (!connector.enabled) continue;
             if (connector.protocol.kind == ConnectorProtocol::Nmea0183) runtime.started = start_nmea0183_connector(runtime);
             else if (connector.protocol.kind == ConnectorProtocol::SeaTalk1) runtime.started = start_seatalk_connector(runtime);
             else if (connector.protocol.kind == ConnectorProtocol::Ubx) runtime.started = start_ubx_connector(runtime);
+#if !defined(ARDUINO)
+            else if (connector.protocol.kind == ConnectorProtocol::Gpsd) runtime.started = start_gpsd_connector(runtime);
+#endif
             if (!runtime.started) {
                 ++connector_start_failure_count_;
                 return set_startup_error(StartupError::ConnectorStartFailed, i);
@@ -870,6 +926,11 @@ private:
         default: return false;
         }
     }
+#if !defined(ARDUINO)
+    bool start_gpsd_connector(ConnectorRuntimeSlot& slot) {
+        return slot.config.transport.kind == ConnectorTransport::TcpClient && connect_tcp_client(slot);
+    }
+#endif
 
     bool connect_tcp_client(ConnectorRuntimeSlot& slot) {
         async_event_loop::TcpConnectOptions options;
@@ -883,13 +944,38 @@ private:
     void reset_connector_binary_stream(size_t index) {
         ConnectorRuntimeSlot& slot = connector_slot(index);
         if (slot.ubx_input) slot.ubx_input->reset_stream();
+#if !defined(ARDUINO)
+        if (slot.gpsd_input) slot.gpsd_input->on_disconnected();
+#endif
         slot.seatalk_input.reset_stream();
     }
 
-    void on_connector_tcp_connected(size_t index) {
+    void on_connector_tcp_connected(size_t index, async_event_loop::ITcpConnection& connection) {
         ConnectorRuntimeSlot& slot = connector_slot(index);
         slot.reconnect_delay_ms = slot.config.reconnect.initial_delay_ms;
         reset_connector_binary_stream(index);
+#if !defined(ARDUINO)
+        if (slot.gpsd_input) {
+            slot.gpsd_input->on_connected();
+            char watch[384];
+            const bool encoded = gpsd::make_watch_command(watch, sizeof(watch), slot.config.protocol.gpsd.device);
+            const size_t length = encoded ? strlen(watch) : 0;
+            if (!encoded || connection.write(reinterpret_cast<const uint8_t*>(watch), length) != static_cast<int>(length)) {
+                connection.close();
+                on_connector_tcp_disconnected(index);
+                schedule_connector_reconnect(index);
+            }
+        }
+#endif
+    }
+
+    void on_connector_tcp_disconnected(size_t index) {
+#if !defined(ARDUINO)
+        ConnectorRuntimeSlot& slot = connector_slot(index);
+        if (slot.gpsd_input) slot.gpsd_input->on_disconnected();
+#else
+        (void)index;
+#endif
     }
 
     void on_connector_raw_connected(size_t index) { reset_connector_binary_stream(index); }
@@ -977,6 +1063,10 @@ private:
                 if (slot.seatalk_input.feed_octets(buf, static_cast<size_t>(n), source_id, loop_.clock().micros(), source)) changed = true;
             } else if (slot.config.protocol.kind == ConnectorProtocol::Ubx) {
                 if (slot.ubx_input && slot.ubx_input->feed_octets(buf, static_cast<size_t>(n), source_id, loop_.clock().micros(), source)) changed = true;
+#if !defined(ARDUINO)
+            } else if (slot.config.protocol.kind == ConnectorProtocol::Gpsd) {
+                if (slot.gpsd_input && slot.gpsd_input->feed_octets(buf, static_cast<size_t>(n), source_id, loop_.clock().micros(), source)) changed = true;
+#endif
             }
         }
         if (changed) publish();

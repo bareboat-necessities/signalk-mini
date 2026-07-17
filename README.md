@@ -161,7 +161,48 @@ reconnect: {
 };
 ```
 
-`gpsd` is recognized by the configuration model so its protocol-specific settings can be loaded, but GPSD runtime support is intentionally not enabled in this stage.
+## Native GPSD connector
+
+Native GPSD input is available on Linux with `protocol = "gpsd"` and `transport = "tcp_client"`. The connector sends the GPSD JSON WATCH command after each connection, parses newline-delimited reports incrementally, and automatically re-subscribes after reconnecting.
+
+Supported reports:
+
+- `VERSION` for daemon/protocol diagnostics
+- `TPV` for fix mode, UTC date/time, position, MSL/HAE altitude, speed, track, climb, and error estimates
+- `SKY` for DOP and bounded satellite observations
+- `GST` for position error estimates
+- `WATCH`, `DEVICE`, and `DEVICES` for session state
+
+```text
+enabled = true;
+label = "gpsd-main";
+protocol = "gpsd";
+transport = "tcp_client";
+
+access: {
+  allow_rx = true;
+  allow_tx = false;
+};
+
+tcp_client: {
+  host = "127.0.0.1";
+  port = 2947;
+};
+
+gpsd: {
+  device = "/dev/ttyACM0";
+  include_sky = true;
+  include_gst = true;
+};
+
+reconnect: {
+  enabled = true;
+  initial_delay_ms = 1000;
+  maximum_delay_ms = 30000;
+};
+```
+
+The optional `device` filter keeps one connector mapped to one logical GPS source. Leave it unset for a single-device GPSD daemon. GPSD reports are parsed into the typed GNSS model; raw JSON is not retained. Oversized or malformed records are discarded without corrupting the following report.
 
 ## Minimal Signal K subscribe-all
 
