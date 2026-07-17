@@ -20,12 +20,26 @@ jobs:
         with:
           fetch-depth: 0
           ref: agent/ubx-connectors
-      - name: Apply patch
+          show-progress: false
+      - name: Assemble and apply patch
         run: |
+          set +e
+          : > /tmp/agent-patch-diagnostics.txt
+          sha256sum agent-patch/part-* >> /tmp/agent-patch-diagnostics.txt
           cat agent-patch/part-* > /tmp/agent-ubx.patch.gz.b64
-          base64 -d /tmp/agent-ubx.patch.gz.b64 > /tmp/agent-ubx.patch.gz
-          gzip -dc /tmp/agent-ubx.patch.gz > /tmp/agent-ubx.patch
-          git apply --check /tmp/agent-ubx.patch
+          sha256sum /tmp/agent-ubx.patch.gz.b64 >> /tmp/agent-patch-diagnostics.txt
+          actual=$(sha256sum /tmp/agent-ubx.patch.gz.b64 | cut -d' ' -f1)
+          expected=22d59c3b67ecf2e359ccf234bfd9cc61806af8dde05d4897b4493e521b785ebe
+          if [ "$actual" != "$expected" ]; then
+            echo "assembled checksum mismatch: expected=$expected actual=$actual" >> /tmp/agent-patch-diagnostics.txt
+            exit 1
+          fi
+          base64 -d /tmp/agent-ubx.patch.gz.b64 > /tmp/agent-ubx.patch.gz 2>> /tmp/agent-patch-diagnostics.txt || exit 1
+          gzip -t /tmp/agent-ubx.patch.gz 2>> /tmp/agent-patch-diagnostics.txt || exit 1
+          gzip -dc /tmp/agent-ubx.patch.gz > /tmp/agent-ubx.patch 2>> /tmp/agent-patch-diagnostics.txt || exit 1
+          sha256sum /tmp/agent-ubx.patch.gz /tmp/agent-ubx.patch >> /tmp/agent-patch-diagnostics.txt
+          git apply --check /tmp/agent-ubx.patch >> /tmp/agent-patch-diagnostics.txt 2>&1 || exit 1
+          set -e
           git apply /tmp/agent-ubx.patch
           rm -rf agent-patch .github/workflows/apply-agent-patch.yml .github/workflows/apply-agent-patch-parts.yml
           git config user.name github-actions[bot]
@@ -33,3 +47,9 @@ jobs:
           git add -A
           git commit -m 'Add UBX connector lifecycle, parser, and runtime'
           git push origin HEAD:agent/ubx-connectors
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ubx-patch-diagnostics
+          path: /tmp/agent-patch-diagnostics.txt
