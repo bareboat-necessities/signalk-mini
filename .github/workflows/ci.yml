@@ -9,7 +9,6 @@ permissions:
 
 jobs:
   fix-ubx-build:
-    if: github.event_name == 'push' && github.event.head_commit.message == 'Prepare UBX build fix'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,6 +16,10 @@ jobs:
           ref: agent/ubx-connectors
       - name: Fix raw connector connection check
         run: |
+          if [ ! -f fix-server-empty.sed ]; then
+            echo 'Build fix already applied.'
+            exit 0
+          fi
           sed -i -f fix-server-empty.sed src/signalk_mini/server.hpp
           rm fix-server-empty.sed
           git config user.name github-actions[bot]
