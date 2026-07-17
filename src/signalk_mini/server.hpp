@@ -720,7 +720,7 @@ private:
         ConnectionRegistry<MaxConnectionsPerConnector> connections;
 
         void on_accept(async_event_loop::ITcpConnection& connection, const async_event_loop::TcpPeerInfo&) override {
-            if (!connections.empty() || !connections.add(connection, owner.connector_connection_flags(index))) {
+            if (connections.size() != 0 || !connections.add(connection, owner.connector_connection_flags(index))) {
                 connection.close();
                 return;
             }
