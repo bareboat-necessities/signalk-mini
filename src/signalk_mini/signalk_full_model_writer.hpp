@@ -100,21 +100,26 @@ private:
         return false;
     }
 
-    bool earlier_segment_exists(const SignalKTypedModelView<Real>& view,
-                                size_t current_index,
-                                const char* prefix,
-                                const char* segment,
-                                size_t segment_len) const {
-        for (size_t i = 1; i < current_index; ++i) {
-            SignalKMappedValue<Real> previous;
+    bool is_selected_segment_candidate(const SignalKTypedModelView<Real>& view,
+                                       size_t current_index,
+                                       const SignalKMappedValue<Real>& current,
+                                       const char* prefix,
+                                       const char* segment,
+                                       size_t segment_len) const {
+        const size_t count = static_cast<size_t>(ModelField::Count);
+        for (size_t i = 1; i < count; ++i) {
+            if (i == current_index) continue;
+            SignalKMappedValue<Real> candidate;
             const ModelField field = static_cast<ModelField>(i);
-            if (!view.current_value(field, previous) || skip_from_self_projection(field, previous)) continue;
+            if (!view.current_value(field, candidate) || skip_from_self_projection(field, candidate)) continue;
             const char* remainder = nullptr;
-            if (!path_under_prefix(previous.path, prefix, remainder)) continue;
-            const size_t previous_len = next_segment_length(remainder);
-            if (previous_len == segment_len && strncmp(remainder, segment, segment_len) == 0) return true;
+            if (!path_under_prefix(candidate.path, prefix, remainder)) continue;
+            const size_t candidate_len = next_segment_length(remainder);
+            if (candidate_len != segment_len || strncmp(remainder, segment, segment_len) != 0) continue;
+            if (candidate.last_update_us > current.last_update_us) return false;
+            if (candidate.last_update_us == current.last_update_us && i < current_index) return false;
         }
-        return false;
+        return true;
     }
 
     bool write_branch(SignalKJsonStreamWriter& out,
@@ -130,7 +135,7 @@ private:
             const char* remainder = nullptr;
             if (!path_under_prefix(mapped.path, prefix, remainder)) continue;
             const size_t segment_len = next_segment_length(remainder);
-            if (segment_len == 0 || earlier_segment_exists(view, i, prefix, remainder, segment_len)) continue;
+            if (segment_len == 0 || !is_selected_segment_candidate(view, i, mapped, prefix, remainder, segment_len)) continue;
 
             if (!first && !out.append_char(',')) return false;
             first = false;
@@ -212,12 +217,15 @@ private:
                            const SignalKTypedModelView<Real>& view,
                            const char* timestamp) const {
         const auto& table = view.model().ais.targets;
+        if (!table.target_count.valid ||
+            !view.field_is_current(ModelField::AisTargetsObject, table.target_count.last_update_us)) return true;
         const SourceId source_id = view.current_value_source(ModelField::AisTargetsObject);
         char source_key[24];
         if (!view.source_key(source_id, source_key, sizeof(source_key))) return false;
         for (uint8_t i = 0; i < ship_data_model::AIS_TARGET_TABLE_CAPACITY; ++i) {
             const auto& target = table.targets[i];
-            if (!target.occupied || !target.mmsi.valid || !is_vessel_mmsi(target.mmsi.value)) continue;
+            if (!target.occupied || !view.ais_target_is_current(target) ||
+                !target.mmsi.valid || !is_vessel_mmsi(target.mmsi.value)) continue;
             char mmsi[10];
             if (!format_mmsi(mmsi, sizeof(mmsi), target.mmsi.value)) continue;
             char vessel_key[48];
@@ -235,14 +243,14 @@ private:
                 first = false;
                 if (!out.append_raw("\"mmsi\":" ) || !out.append_quoted(mmsi)) return false;
             }
-            const bool has_navigation = target.latitude_deg.valid || target.longitude_deg.valid ||
-                                        target.speed_over_ground_kn.valid || target.course_over_ground_deg.valid ||
-                                        target.true_heading_deg.valid;
+            const bool has_position = target.latitude_deg.valid && target.longitude_deg.valid;
+            const bool has_navigation = has_position || target.speed_over_ground_kn.valid ||
+                                        target.course_over_ground_deg.valid || target.true_heading_deg.valid;
             if (has_navigation) {
                 if (!first && !out.append_char(',')) return false;
                 if (!out.append_raw("\"navigation\":{")) return false;
                 bool nav_first = true;
-                if (target.latitude_deg.valid || target.longitude_deg.valid) {
+                if (has_position) {
                     if (!out.append_raw("\"position\":{\"value\":{")) return false;
                     bool pos_first = true;
                     if (target.latitude_deg.valid) {
