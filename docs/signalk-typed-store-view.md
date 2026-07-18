@@ -10,6 +10,7 @@ This design keeps MCU memory use predictable:
 - only compact field-presence and source bookkeeping is retained;
 - snapshot output uses caller-provided fixed-capacity buffers;
 - reading a snapshot does not consume the live model-change queue;
-- no dynamic Signal K DOM is required.
+- no dynamic Signal K DOM is required;
+- no serialized-value cache exists alongside the typed model.
 
 New TCP or WebSocket clients can receive current values by walking this live view. The values are therefore always generated from the authoritative typed store rather than from stale serialized copies.
