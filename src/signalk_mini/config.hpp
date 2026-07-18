@@ -198,10 +198,12 @@ inline SignalKMiniConfig make_sketch_owned_io_config(const char* server_name,
                                                      uint16_t signalk_port = 20223,
                                                      uint32_t publisher_interval_us = 10000,
                                                      uint16_t max_changes_per_tick = DefaultMaxChangesPerTick,
-                                                     uint16_t json_buffer_size = static_cast<uint16_t>(DefaultSignalKJsonBufferSize)) {
+                                                     uint16_t json_buffer_size = static_cast<uint16_t>(DefaultSignalKJsonBufferSize),
+                                                     const char* self_context = nullptr) {
     SignalKMiniConfig cfg;
     cfg.identity.server_name = server_name ? server_name : "signalk-mini";
     cfg.identity.server_version = "0.1.0";
+    if (self_context && self_context[0]) cfg.identity.self = self_context;
     cfg.signalk.host = "0.0.0.0";
     cfg.signalk.port = signalk_port;
     cfg.signalk.allow_rx = true;
