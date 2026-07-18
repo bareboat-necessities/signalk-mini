@@ -24,6 +24,9 @@ public:
 
     bool current_value(ModelField field, SignalKMappedValue<Real>& out) const {
         if (!mapper_.map_field(store_.model(), field, out) || !out.path) return false;
+        if (out.last_update_us == 0 && strcmp(out.path, signalk_path::SteeringAutopilotState) == 0) {
+            out.last_update_us = store_.autopilot_state_last_update_us();
+        }
         if (out.last_update_us == 0 && !store_.has_value(field)) return false;
         if (!is_current(out)) return false;
         out.source_id = source_for(field, out);
@@ -37,7 +40,7 @@ public:
             const ModelField field = static_cast<ModelField>(i);
             SignalKMappedValue<Real> mapped;
             if (!current_value(field, mapped)) continue;
-            if (has_earlier_current_path(i, mapped.path)) continue;
+            if (!is_selected_path_candidate(i, mapped)) continue;
             callback(field, mapped);
         }
     }
@@ -56,6 +59,18 @@ public:
     SourceId current_value_source(ModelField field) const {
         SignalKMappedValue<Real> mapped;
         return current_value(field, mapped) ? mapped.source_id : store_.source_id_for(field);
+    }
+
+    bool field_is_current(ModelField field, uint64_t last_update_us) const {
+        return store_.has_value(field) && timestamp_is_current(last_update_us);
+    }
+
+    template<typename Target>
+    bool ais_target_is_current(const Target& target) const {
+        uint64_t last_update_us = target.last_seen_us;
+        if (target.last_position_update_us > last_update_us) last_update_us = target.last_position_update_us;
+        if (target.last_static_update_us > last_update_us) last_update_us = target.last_static_update_us;
+        return timestamp_is_current(last_update_us);
     }
 
     const char* source_label(SourceId source_id) const {
@@ -85,29 +100,39 @@ public:
     }
 
 private:
-    bool is_current(const SignalKMappedValue<Real>& mapped) const {
+    bool timestamp_is_current(uint64_t last_update_us) const {
         const uint32_t timeout_ms = config_.publisher.current_value_timeout_ms;
-        if (timeout_ms == 0 || now_us_ == 0 || mapped.last_update_us == 0 || now_us_ <= mapped.last_update_us) return true;
-        const uint64_t age_us = now_us_ - mapped.last_update_us;
+        if (timeout_ms == 0 || now_us_ == 0 || last_update_us == 0 || now_us_ <= last_update_us) return true;
+        const uint64_t age_us = now_us_ - last_update_us;
         return age_us <= static_cast<uint64_t>(timeout_ms) * 1000ULL;
     }
 
-    bool has_earlier_current_path(size_t current_index, const char* path) const {
-        for (size_t i = 1; i < current_index; ++i) {
-            SignalKMappedValue<Real> previous;
-            if (!current_value(static_cast<ModelField>(i), previous)) continue;
-            if (previous.path == path || strcmp(previous.path, path) == 0) return true;
+    bool is_current(const SignalKMappedValue<Real>& mapped) const {
+        return timestamp_is_current(mapped.last_update_us);
+    }
+
+    bool is_selected_path_candidate(size_t current_index, const SignalKMappedValue<Real>& current) const {
+        const size_t count = static_cast<size_t>(ModelField::Count);
+        for (size_t i = 1; i < count; ++i) {
+            if (i == current_index) continue;
+            SignalKMappedValue<Real> candidate;
+            if (!current_value(static_cast<ModelField>(i), candidate)) continue;
+            if (candidate.path != current.path && strcmp(candidate.path, current.path) != 0) continue;
+            if (candidate.last_update_us > current.last_update_us) return false;
+            if (candidate.last_update_us == current.last_update_us && i < current_index) return false;
         }
-        return false;
+        return true;
     }
 
     SourceId newest_source(ModelField a, uint64_t ta,
                            ModelField b, uint64_t tb,
-                           ModelField c = ModelField::None, uint64_t tc = 0) const {
+                           ModelField c = ModelField::None, uint64_t tc = 0,
+                           ModelField d = ModelField::None, uint64_t td = 0) const {
         ModelField selected = a;
         uint64_t timestamp = ta;
         if (tb > timestamp) { selected = b; timestamp = tb; }
-        if (tc > timestamp) { selected = c; }
+        if (tc > timestamp) { selected = c; timestamp = tc; }
+        if (td > timestamp) { selected = d; }
         return store_.source_id_for(selected);
     }
 
@@ -123,12 +148,17 @@ private:
                                  ModelField::ImuRollDeg, model.ins.imu.roll_deg.last_update_us);
         case SignalKObjectKind::DateTime:
             return newest_source(ModelField::GnssTimestampS, model.gnss.fix.timestamp_s.last_update_us,
+                                 ModelField::GnssDateDay, model.gnss.fix.date_day.last_update_us,
+                                 ModelField::GnssDateMonth, model.gnss.fix.date_month.last_update_us,
                                  ModelField::GnssDateYear, model.gnss.fix.date_year.last_update_us);
         case SignalKObjectKind::Current:
             return newest_source(ModelField::SeaCurrentSpeedKn, model.sea.current_speed_kn.last_update_us,
                                  ModelField::SeaCurrentDirectionDeg, model.sea.current_direction_deg.last_update_us,
                                  ModelField::SeaCurrentDirectionMagneticDeg, model.sea.current_direction_magnetic_deg.last_update_us);
         default:
+            if (mapped.path && strcmp(mapped.path, signalk_path::SteeringAutopilotState) == 0) {
+                return store_.autopilot_state_source_id();
+            }
             return store_.source_id_for(field);
         }
     }
