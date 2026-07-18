@@ -94,6 +94,7 @@ public:
     using Model = ship_data_model::DataModel<Real>;
     static constexpr size_t FieldCount = static_cast<size_t>(ModelField::Count);
     static constexpr size_t PresenceBytes = (FieldCount + 7u) / 8u;
+    static constexpr size_t FallbackTimestampFieldCount = 25;
 
     Model& model() { return model_; }
     const Model& model() const { return model_; }
@@ -117,6 +118,10 @@ public:
     size_t change_queue_high_watermark() const { return changes_.high_watermark(); }
     uint64_t autopilot_state_last_update_us() const { return autopilot_state_last_update_us_; }
     SourceId autopilot_state_source_id() const { return autopilot_state_source_id_; }
+    uint64_t fallback_last_update_us_for(ModelField field) const {
+        const int16_t index = fallback_timestamp_index(field);
+        return index >= 0 ? fallback_update_us_[static_cast<size_t>(index)] : 0;
+    }
 
     void record_current(ModelField field, SourceId source_id) {
         const size_t field_index = static_cast<size_t>(field);
@@ -129,6 +134,10 @@ public:
     void mark_changed(ModelField field, SourceId source_id, uint64_t now_us) {
         ++marked_change_count_;
         record_current(field, source_id);
+        const int16_t fallback_index = fallback_timestamp_index(field);
+        if (fallback_index >= 0) {
+            fallback_update_us_[static_cast<size_t>(fallback_index)] = now_us;
+        }
         if (field == ModelField::AutopilotMode || field == ModelField::AutopilotEnabled) {
             autopilot_state_last_update_us_ = now_us;
             autopilot_state_source_id_ = source_id;
@@ -138,6 +147,37 @@ public:
     }
 
 private:
+    static int16_t fallback_timestamp_index(ModelField field) {
+        switch (field) {
+        case ModelField::GnssSatellitePrn0: return 0;
+        case ModelField::GnssSatelliteElevationDeg0: return 1;
+        case ModelField::GnssSatelliteAzimuthDeg0: return 2;
+        case ModelField::GnssSatelliteSnrDb0: return 3;
+        case ModelField::RouteApbArrivalCircleEntered: return 4;
+        case ModelField::RouteApbPerpendicularPassed: return 5;
+        case ModelField::RouteApbDestinationId: return 6;
+        case ModelField::RouteRmbArrived: return 7;
+        case ModelField::RouteRmbDestinationId: return 8;
+        case ModelField::RouteWaypointToId: return 9;
+        case ModelField::RouteWaypointFromId: return 10;
+        case ModelField::RouteWaypointArrivalCircleEntered: return 11;
+        case ModelField::RouteWaypointPerpendicularPassed: return 12;
+        case ModelField::RouteWaypointArrivalId: return 13;
+        case ModelField::AisSafetyObject: return 14;
+        case ModelField::AisDataLinkStatusObject: return 15;
+        case ModelField::DscStructuredNotification: return 16;
+        case ModelField::InmarsatSafetyNetStructuredNotification: return 17;
+        case ModelField::NavtexStructuredNotification: return 18;
+        case ModelField::AlertStructuredNotification: return 19;
+        case ModelField::MobStructuredNotification: return 20;
+        case ModelField::LegacyCommObject: return 21;
+        case ModelField::NotificationText: return 22;
+        case ModelField::NotificationEvent: return 23;
+        case ModelField::NotificationEventLog: return 24;
+        default: return -1;
+        }
+    }
+
     Model model_{};
     ModelChangeQueue<QueueCapacity> changes_{};
     uint32_t sequence_ = 0;
@@ -146,6 +186,7 @@ private:
     SourceId autopilot_state_source_id_ = 0;
     SourceId latest_source_id_[FieldCount]{};
     uint8_t present_bits_[PresenceBytes]{};
+    uint64_t fallback_update_us_[FallbackTimestampFieldCount]{};
 };
 
 } // namespace signalk_mini
