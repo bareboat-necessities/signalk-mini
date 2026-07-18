@@ -64,8 +64,13 @@ inline bool format_signalk_datetime_utc(char* dst,
                                         int32_t month,
                                         int32_t day,
                                         double seconds_of_day) {
-    if (!dst || dst_size < 25 || year < 1 || month < 1 || month > 12 || day < 1 || day > 31 ||
-        seconds_of_day < 0.0 || seconds_of_day >= 86401.0) return false;
+    if (!dst || dst_size < 25 || year < 1 || month < 1 || month > 12 ||
+        !(seconds_of_day >= 0.0 && seconds_of_day < 86401.0)) return false;
+    static constexpr int32_t DaysPerMonth[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    int32_t maximum_day = DaysPerMonth[month - 1];
+    const bool leap_year = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    if (month == 2 && leap_year) maximum_day = 29;
+    if (day < 1 || day > maximum_day) return false;
     uint32_t millis_of_day = static_cast<uint32_t>(seconds_of_day * 1000.0 + 0.5);
     if (millis_of_day >= 86400000u) millis_of_day = 86399999u;
     const uint32_t hour = millis_of_day / 3600000u;
