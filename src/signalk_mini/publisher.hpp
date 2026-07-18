@@ -102,9 +102,11 @@ public:
             scalar_batch_[batch_count++] = mapped;
         });
         flush_scalar_batch(sink, json_capacity, timestamp, batch_source_label, scalar_batch_, batch_count);
-        if (include_other_contexts && store_.has_value(ModelField::AisTargetsObject) && store_.model().ais.targets.target_count.valid) {
+        const auto& ais_table = store_.model().ais.targets;
+        if (include_other_contexts && ais_table.target_count.valid &&
+            view.field_is_current(ModelField::AisTargetsObject, ais_table.target_count.last_update_us)) {
             publish_ais_targets(sink, json_capacity, timestamp,
-                                view.source_label(store_.source_id_for(ModelField::AisTargetsObject)));
+                                view.source_label(store_.source_id_for(ModelField::AisTargetsObject)), &view);
         }
         ++published_snapshot_count_;
     }
@@ -245,11 +247,13 @@ private:
     void publish_ais_targets(DeltaSink& sink,
                              size_t json_capacity,
                              const char* timestamp,
-                             const char* source_label) {
+                             const char* source_label,
+                             const SignalKTypedModelView<Real>* current_view = nullptr) {
         const auto& table = store_.model().ais.targets;
         for (uint8_t i = 0; i < ship_data_model::AIS_TARGET_TABLE_CAPACITY; ++i) {
             const auto& target = table.targets[i];
-            if (!target.occupied || !target.mmsi.valid || !is_vessel_mmsi(target.mmsi.value)) continue;
+            if (!target.occupied || (current_view && !current_view->ais_target_is_current(target)) ||
+                !target.mmsi.valid || !is_vessel_mmsi(target.mmsi.value)) continue;
             const int len = write_ais_target_delta(json_, json_capacity, timestamp, source_label, target);
             if (len <= 0 || static_cast<size_t>(len) >= json_capacity) {
                 ++dropped_publish_count_;
@@ -298,7 +302,7 @@ private:
             }
             if (!out.append_raw("}}")) return 0;
         }
-        if (target.latitude_deg.valid || target.longitude_deg.valid) {
+        if (target.latitude_deg.valid && target.longitude_deg.valid) {
             if (!start_value("navigation.position") || !out.append_char('{')) return 0;
             bool position_first = true;
             if (target.latitude_deg.valid) {
