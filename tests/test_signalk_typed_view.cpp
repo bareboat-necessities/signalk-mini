@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -71,8 +72,18 @@ JsonVariantConst delta_value(JsonDocument& doc, const char* path) {
 
 int main() {
     REQUIRE(signalk_mini::signalk_valid_self_context(SelfContext));
+    REQUIRE(signalk_mini::signalk_valid_self_context("vessels.urn:mrn:signalk:uuid:11111111-2222-5333-8444-555555555555"));
     REQUIRE(!signalk_mini::signalk_valid_self_context("vessels.self"));
     REQUIRE(!signalk_mini::signalk_valid_self_context("vessels.urn:mrn:signalk:uuid:not-a-uuid"));
+    REQUIRE(!signalk_mini::signalk_valid_self_context("vessels.http://"));
+    REQUIRE(!signalk_mini::signalk_valid_self_context("vessels.https://"));
+    REQUIRE(!signalk_mini::signalk_valid_self_context("vessels.mailto:"));
+    REQUIRE(!signalk_mini::signalk_valid_self_context("vessels.tel:"));
+    REQUIRE(signalk_mini::signalk_valid_self_context("vessels.https://example.test/vessel"));
+    char generated_context[80];
+    REQUIRE(signalk_mini::signalk_make_uuid_context(generated_context, sizeof(generated_context), 0x1234ULL, 0x5678ULL));
+    REQUIRE(signalk_mini::signalk_valid_self_context(generated_context));
+    REQUIRE(std::strstr(generated_context, "-4") != nullptr);
 
     signalk_mini::ConnectorConfig connector;
     connector.enabled = true;
@@ -138,6 +149,9 @@ int main() {
     target.latitude_deg.set(41.0f, 1400000);
     target.longitude_deg.set(-73.0f, 1400000);
     target.speed_over_ground_kn.set(6.0f, 1400000);
+    target.last_seen_us = 1400000;
+    target.last_position_update_us = 1400000;
+    target.last_static_update_us = 1400000;
     std::strcpy(target.vessel_name, "TEST TARGET");
     model.ais.targets.target_count.set(1, 1400000);
     mark(store, signalk_mini::ModelField::AisTargetsObject, source, 1400000);
@@ -146,6 +160,10 @@ int main() {
     non_vessel_target.occupied = true;
     non_vessel_target.mmsi.set(111000001, 1400000);
     non_vessel_target.latitude_deg.set(39.0f, 1400000);
+    auto& incomplete_vessel = model.ais.targets.targets[2];
+    incomplete_vessel.occupied = true;
+    incomplete_vessel.mmsi.set(235000001, 1400000);
+    incomplete_vessel.latitude_deg.set(38.0f, 1400000);
 
     signalk_mini::SignalKMapper<float> mapper;
     signalk_mini::SignalKMappedValue<float> mapped;
@@ -198,6 +216,64 @@ int main() {
     REQUIRE(std::strcmp(self["steering"]["autopilot"]["state"]["value"] | "", "wind") == 0);
     REQUIRE(std::strcmp(full_doc["sources"]["connector0"]["label"] | "", "gps-primary") == 0);
 
+    signalk_mini::ModelStore<float> duplicate_store;
+    duplicate_store.model().env.barometric_pressure_bar.set(1.0f, 1000000);
+    mark(duplicate_store, signalk_mini::ModelField::EnvBarometricPressureBar, source, 1000000);
+    duplicate_store.model().env.barometric_pressure_inhg.set(29.92f, 2000000);
+    mark(duplicate_store, signalk_mini::ModelField::EnvBarometricPressureInHg, source, 2000000);
+    signalk_mini::SignalKTypedModelView<float> duplicate_view(duplicate_store, config, 2000000);
+    size_t pressure_count = 0;
+    float selected_pressure = 0.0f;
+    duplicate_view.for_each_current_value([&](signalk_mini::ModelField, const signalk_mini::SignalKMappedValue<float>& value) {
+        if (std::strcmp(value.path, "environment.outside.pressure") == 0) {
+            ++pressure_count;
+            selected_pressure = value.number;
+        }
+    });
+    REQUIRE(pressure_count == 1);
+    NEAR(selected_pressure, 29.92f * 3386.389f, 0.1f);
+    char duplicate_full[4096];
+    REQUIRE(full_writer.write(duplicate_full, sizeof(duplicate_full), duplicate_store, config, 2000000) > 0);
+    JsonDocument duplicate_doc;
+    REQUIRE(!deserializeJson(duplicate_doc, duplicate_full));
+    NEAR(duplicate_doc["vessels"][SelfKey]["environment"]["outside"]["pressure"]["value"].as<float>(),
+         29.92f * 3386.389f, 0.1f);
+
+    signalk_mini::ModelStore<float> datetime_source_store;
+    auto& datetime_fix = datetime_source_store.model().gnss.fix;
+    datetime_fix.timestamp_s.set(3600.0f, 1000000);
+    datetime_fix.date_year.set(2026, 1000000);
+    datetime_fix.date_month.set(7, 3000000);
+    datetime_fix.date_day.set(18, 2000000);
+    mark(datetime_source_store, signalk_mini::ModelField::GnssTimestampS, source, 1000000);
+    mark(datetime_source_store, signalk_mini::ModelField::GnssDateYear, source, 1000000);
+    const signalk_mini::SourceId newer_source = static_cast<signalk_mini::SourceId>(source + 1);
+    mark(datetime_source_store, signalk_mini::ModelField::GnssDateDay, newer_source, 2000000);
+    mark(datetime_source_store, signalk_mini::ModelField::GnssDateMonth, newer_source, 3000000);
+    signalk_mini::SignalKTypedModelView<float> datetime_source_view(datetime_source_store, config, 3000000);
+    REQUIRE(datetime_source_view.current_value(signalk_mini::ModelField::GnssDateYear, mapped));
+    REQUIRE(mapped.source_id == newer_source);
+
+    char datetime_buffer[32];
+    REQUIRE(!signalk_mini::format_signalk_datetime_utc(datetime_buffer, sizeof(datetime_buffer), 2025, 2, 29, 0.0));
+    REQUIRE(!signalk_mini::format_signalk_datetime_utc(datetime_buffer, sizeof(datetime_buffer), 2026, 4, 31, 0.0));
+    REQUIRE(!signalk_mini::format_signalk_datetime_utc(datetime_buffer, sizeof(datetime_buffer), 2026, 7, 18, std::numeric_limits<double>::quiet_NaN()));
+    REQUIRE(signalk_mini::format_signalk_datetime_utc(datetime_buffer, sizeof(datetime_buffer), 2024, 2, 29, 0.0));
+
+    char too_small[32];
+    REQUIRE(full_writer.write(too_small, sizeof(too_small), store, config, 1500000) == 0);
+
+    signalk_mini::ModelStore<float> empty_store;
+    char empty_full[1024];
+    const int empty_len = full_writer.write(empty_full, sizeof(empty_full), empty_store, config, 1500000);
+    REQUIRE(empty_len > 0);
+    JsonDocument empty_doc;
+    REQUIRE(!deserializeJson(empty_doc, empty_full, static_cast<size_t>(empty_len)));
+    REQUIRE(std::strcmp(empty_doc["version"] | "", "1.8.2") == 0);
+    REQUIRE(std::strcmp(empty_doc["self"] | "", SelfKey) == 0);
+    REQUIRE(!empty_doc["vessels"][SelfKey].isNull());
+    REQUIRE(empty_doc["vessels"][SelfKey]["navigation"].isNull());
+
     JsonObject ais = full_doc["vessels"]["urn:mrn:imo:mmsi:234567890"].as<JsonObject>();
     REQUIRE(!ais.isNull());
     REQUIRE(std::strcmp(ais["name"] | "", "TEST TARGET") == 0);
@@ -223,6 +299,7 @@ int main() {
     REQUIRE(find_delta_value(first_snapshot, "vessels.urn:mrn:imo:mmsi:234567890", "", ais_static_delta));
     REQUIRE(std::strcmp(delta_value(ais_static_delta, "")["mmsi"] | "", "234567890") == 0);
     REQUIRE(!find_delta_value(first_snapshot, "vessels.urn:mrn:imo:mmsi:111000001", "navigation.position", ais_delta));
+    REQUIRE(!find_delta_value(first_snapshot, "vessels.urn:mrn:imo:mmsi:235000001", "navigation.position", ais_delta));
 
     JsonDocument quality_delta;
     REQUIRE(find_delta_value(first_snapshot, SelfContext, "navigation.gnss.methodQuality", quality_delta));
@@ -231,6 +308,17 @@ int main() {
     JsonDocument current_delta;
     REQUIRE(find_delta_value(first_snapshot, SelfContext, "environment.current", current_delta));
     NEAR(delta_value(current_delta, "environment.current")["drift"].as<float>(), 2.0f * 0.5144444444f, 0.00001f);
+
+    signalk_mini::ModelStore<float> incomplete_store;
+    incomplete_store.model().gnss.fix.fix_lat_deg.set(10.0f, 1000);
+    mark(incomplete_store, signalk_mini::ModelField::GnssFixLatDeg, source, 1000);
+    signalk_mini::SignalKTypedModelView<float> incomplete_view(incomplete_store, config, 1000);
+    REQUIRE(!incomplete_view.current_value(signalk_mini::ModelField::GnssFixLatDeg, mapped));
+    char incomplete_full[2048];
+    REQUIRE(full_writer.write(incomplete_full, sizeof(incomplete_full), incomplete_store, config, 1000) > 0);
+    JsonDocument incomplete_doc;
+    REQUIRE(!deserializeJson(incomplete_doc, incomplete_full));
+    REQUIRE(incomplete_doc["vessels"][SelfKey]["navigation"]["position"].isNull());
 
     model.gnss.fix.fix_lat_deg.set(42.25f, 2000000);
     mark(store, signalk_mini::ModelField::GnssFixLatDeg, source, 2000000);
@@ -245,6 +333,17 @@ int main() {
     signalk_mini::SignalKTypedModelView<float> expired_view(store, expiring_config, 2050000);
     REQUIRE(!expired_view.current_value(signalk_mini::ModelField::GnssSpeedKn, mapped));
     REQUIRE(expired_view.current_value(signalk_mini::ModelField::GnssFixLatDeg, mapped));
+    REQUIRE(!expired_view.current_value(signalk_mini::ModelField::AutopilotMode, mapped));
+    REQUIRE(!expired_view.ais_target_is_current(target));
+    CollectSink expired_snapshot;
+    signalk_mini::SignalKPublisher<float, 4096> expiring_publisher(store, expiring_config);
+    expiring_publisher.publish_current(expired_snapshot, 2050000, true);
+    REQUIRE(!find_delta_value(expired_snapshot, "vessels.urn:mrn:imo:mmsi:234567890", "navigation.position", ais_delta));
+    char expired_full[32768];
+    REQUIRE(full_writer.write(expired_full, sizeof(expired_full), store, expiring_config, 2050000) > 0);
+    JsonDocument expired_doc;
+    REQUIRE(!deserializeJson(expired_doc, expired_full));
+    REQUIRE(expired_doc["vessels"]["urn:mrn:imo:mmsi:234567890"].isNull());
     REQUIRE(signalk_mini::ModelStore<float>::PresenceBytes < signalk_mini::ModelStore<float>::FieldCount);
 
     return 0;
