@@ -142,8 +142,10 @@ bool line_has_valid_hello(const std::string& line) {
     REQUIRE(!err);
 
     REQUIRE(std::strcmp(doc["name"] | "", "integration-signalk-server") == 0);
-    REQUIRE(std::strcmp(doc["version"] | "", "0.1-integration") == 0);
-    REQUIRE(std::strcmp(doc["self"] | "", "vessels.self") == 0);
+    REQUIRE(std::strcmp(doc["version"] | "", "1.8.2") == 0);
+    REQUIRE(std::strcmp(doc["self"] | "", "vessels.urn:mrn:signalk:uuid:11111111-2222-4333-8444-555555555555") == 0);
+    const char* hello_timestamp = doc["timestamp"] | "";
+    REQUIRE(std::strlen(hello_timestamp) >= 20);
 
     JsonArray roles = doc["roles"].as<JsonArray>();
     REQUIRE(!roles.isNull());
@@ -277,7 +279,8 @@ int main() {
     signalk_mini::SignalKMiniConfig config;
     config.identity.server_name = "integration-signalk-server";
     config.identity.server_version = "0.1-integration";
-    config.identity.self = "vessels.self";
+    config.identity.signalk_version = "1.8.2";
+    config.identity.self = "vessels.urn:mrn:signalk:uuid:11111111-2222-4333-8444-555555555555";
     config.signalk.host = "127.0.0.1";
     config.signalk.port = signalk_port;
     config.signalk.allow_rx = true;

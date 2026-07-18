@@ -51,8 +51,9 @@ int main() {
 
     store.model().gnss.fix.fix_alt_hae_m.set(58.9f, 1000);
     mark(store, signalk_mini::ModelField::GnssFixAltitudeHaeM);
-    REQUIRE(pop_path(store, "navigation.position.value.altitude", mapped));
-    NEAR(mapped.number, 58.9f, 0.0001f);
+    REQUIRE(pop_path(store, "navigation.position", mapped));
+    REQUIRE(mapped.kind == signalk_mini::SignalKMappedValueKind::Object);
+    REQUIRE(mapped.object_kind == signalk_mini::SignalKObjectKind::Position);
 
     store.model().gnss.fix.vertical_speed_m_s.set(-0.4f, 1000);
     mark(store, signalk_mini::ModelField::GnssVerticalSpeedMs);
@@ -131,8 +132,9 @@ int main() {
 
     store.model().ins.imu.pitch_deg.set(1.2f, 1000);
     mark(store, signalk_mini::ModelField::ImuPitchDeg);
-    REQUIRE(pop_path(store, "navigation.attitude.pitch", mapped));
-    NEAR(mapped.number, 1.2f * 3.14159265358979323846f / 180.0f, 0.0001f);
+    REQUIRE(pop_path(store, "navigation.attitude", mapped));
+    REQUIRE(mapped.kind == signalk_mini::SignalKMappedValueKind::Object);
+    REQUIRE(mapped.object_kind == signalk_mini::SignalKObjectKind::Attitude);
 
     auto& target = store.model().ais.targets.targets[0];
     target.occupied = true;
@@ -141,8 +143,7 @@ int main() {
     target.longitude_deg.set(-73.9f, 1000);
     store.model().ais.targets.target_count.set(1, 1000);
     mark(store, signalk_mini::ModelField::AisTargetsObject);
-    REQUIRE(pop_path(store, "navigation.ais.targets", mapped));
-    REQUIRE(mapped.kind == signalk_mini::SignalKMappedValueKind::Object);
+    REQUIRE(!pop_path(store, "navigation.ais.targets", mapped));
 
     auto& navtex = store.model().notifications.navtex.received;
     std::strcpy(navtex.navtex_message_id, "A1");

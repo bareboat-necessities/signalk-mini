@@ -92,6 +92,8 @@ template<typename Real, size_t QueueCapacity = DefaultModelChangeQueueCapacity>
 class ModelStore {
 public:
     using Model = ship_data_model::DataModel<Real>;
+    static constexpr size_t FieldCount = static_cast<size_t>(ModelField::Count);
+    static constexpr size_t PresenceBytes = (FieldCount + 7u) / 8u;
 
     Model& model() { return model_; }
     const Model& model() const { return model_; }
@@ -102,12 +104,29 @@ public:
     uint64_t enqueued_change_count() const { return changes_.enqueued_count(); }
     uint64_t coalesced_change_count() const { return changes_.coalesced_count(); }
     uint64_t dropped_change_count() const { return changes_.dropped_count(); }
+    SourceId source_id_for(ModelField field) const {
+        const size_t index = static_cast<size_t>(field);
+        return index < FieldCount ? latest_source_id_[index] : 0;
+    }
+    bool has_value(ModelField field) const {
+        const size_t index = static_cast<size_t>(field);
+        return index < FieldCount && (present_bits_[index >> 3u] & static_cast<uint8_t>(1u << (index & 7u))) != 0;
+    }
     size_t pending_change_count() const { return changes_.size(); }
     size_t change_queue_capacity() const { return changes_.capacity(); }
     size_t change_queue_high_watermark() const { return changes_.high_watermark(); }
 
+    void record_current(ModelField field, SourceId source_id) {
+        const size_t field_index = static_cast<size_t>(field);
+        if (field_index < FieldCount) {
+            latest_source_id_[field_index] = source_id;
+            present_bits_[field_index >> 3u] |= static_cast<uint8_t>(1u << (field_index & 7u));
+        }
+    }
+
     void mark_changed(ModelField field, SourceId source_id, uint64_t now_us) {
         ++marked_change_count_;
+        record_current(field, source_id);
         ModelChange change{field, source_id, model_change_timestamp_ms(now_us), ++sequence_};
         changes_.push(change);
     }
@@ -117,6 +136,8 @@ private:
     ModelChangeQueue<QueueCapacity> changes_{};
     uint32_t sequence_ = 0;
     uint64_t marked_change_count_ = 0;
+    SourceId latest_source_id_[FieldCount]{};
+    uint8_t present_bits_[PresenceBytes]{};
 };
 
 } // namespace signalk_mini

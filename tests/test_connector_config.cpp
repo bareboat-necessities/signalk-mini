@@ -16,6 +16,8 @@ static std::string write_config() {
     ::close(fd);
     std::ofstream out(path);
     out <<
+        "identity = { server_name=\"test\"; server_version=\"0.1\"; signalk_version=\"1.8.2\"; self=\"vessels.urn:mrn:signalk:uuid:11111111-2222-4333-8444-555555555555\"; };\n"
+        "publisher = { send_current_values_on_connect=false; current_value_timeout_ms=5000; };\n"
         "signalk = { host=\"127.0.0.1\"; port=20223; websocket={enabled=false;}; };\n"
         "connectors = (\n"
         " { enabled=true; label=\"ubx-net\"; protocol=\"ubx\"; transport=\"tcp_client\";\n"
@@ -35,6 +37,10 @@ int main() {
     REQUIRE(loader.load_file(path.c_str(), error));
     ::unlink(path.c_str());
     REQUIRE(loader.config.connector_count == 2);
+    REQUIRE(std::string(loader.config.identity.signalk_version) == "1.8.2");
+    REQUIRE(std::string(loader.config.identity.self) == "vessels.urn:mrn:signalk:uuid:11111111-2222-4333-8444-555555555555");
+    REQUIRE(!loader.config.publisher.send_current_values_on_connect);
+    REQUIRE(loader.config.publisher.current_value_timeout_ms == 5000);
 
     const auto& ubx = loader.config.connectors[0];
     REQUIRE(ubx.protocol.kind == signalk_mini::ConnectorProtocol::Ubx);

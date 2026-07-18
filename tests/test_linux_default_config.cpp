@@ -33,6 +33,10 @@ static void require_current_linux_defaults(const std::string& text) {
     REQUIRE(text.find("signalk") != std::string::npos);
     REQUIRE(text.find("host = \\\"0.0.0.0\\\";") != std::string::npos || text.find("host = \"0.0.0.0\";") != std::string::npos);
     REQUIRE(text.find("port = 20223;") != std::string::npos);
+    REQUIRE(text.find("signalk_version = \\\"1.8.2\\\";") != std::string::npos || text.find("signalk_version = \"1.8.2\";") != std::string::npos);
+    REQUIRE(text.find("vessels.urn:mrn:signalk:uuid:") != std::string::npos);
+    REQUIRE(text.find("send_current_values_on_connect = true;") != std::string::npos);
+    REQUIRE(text.find("current_value_timeout_ms = 0;") != std::string::npos);
 
     REQUIRE(text.find("websocket") != std::string::npos);
     REQUIRE(text.find("enabled = true;") != std::string::npos);

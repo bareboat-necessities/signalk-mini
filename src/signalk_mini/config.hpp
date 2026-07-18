@@ -10,7 +10,8 @@ namespace signalk_mini {
 struct ServerIdentityConfig {
     const char* server_name = "signalk-mini";
     const char* server_version = "0.1.0";
-    const char* self = "vessels.self";
+    const char* signalk_version = "1.8.2";
+    const char* self = "vessels.urn:mrn:signalk:uuid:00000000-0000-4000-8000-000000000001";
 };
 
 struct SignalKWebSocketServerConfig {
@@ -40,6 +41,8 @@ struct PublisherConfig {
     uint16_t max_changes_per_tick = DefaultMaxChangesPerTick;
     uint16_t json_buffer_size = static_cast<uint16_t>(DefaultSignalKJsonBufferSize);
     const char* source_label = "signalk-mini";
+    bool send_current_values_on_connect = true;
+    uint32_t current_value_timeout_ms = 0;
 };
 
 enum class ConnectorProtocol : uint8_t {

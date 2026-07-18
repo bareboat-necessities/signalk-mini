@@ -204,6 +204,23 @@ reconnect: {
 
 The optional `device` filter keeps one connector mapped to one logical GPS source. Leave it unset for a single-device GPSD daemon. GPSD reports are parsed into the typed GNSS model; raw JSON is not retained. Oversized or malformed records are discarded without corrupting the following report.
 
+## Signal K typed-model projection
+
+Signal K values are projected directly from `DataModel<Real>`. The server does not retain a second JSON tree and does not cache serialized value strings. A `SignalKTypedModelView` reads the current `Stamped<T>` values and compact source/presence metadata, then serializers build bounded deltas or a caller-supplied full-model buffer on demand.
+
+Replace the example `identity.self` UUID with a stable UUID for the vessel, or use a valid `vessels.urn:mrn:imo:mmsi:<mmsi>` context. The built-in UUID is only a syntactically valid development default.
+
+Core object-valued paths are emitted in schema form:
+
+- `navigation.position` is one object containing `latitude`, `longitude`, and optional `altitude`.
+- `navigation.attitude` is one object containing available `roll` and `pitch` values in radians.
+- `navigation.datetime` is one ISO-8601 UTC string.
+- AIS targets are published under separate `vessels.urn:mrn:imo:mmsi:<mmsi>` contexts rather than under `vessels.self.navigation.ais.targets`.
+
+`SignalKMiniApp::write_full_model(dst, capacity)` serializes a current full-model view directly from the typed store. The caller owns the output buffer. Live current-value snapshots use the normal bounded publisher buffer and do not consume the model-change queue.
+
+WebSocket clients receive current values after hello by default. Add `?subscribe=none` to suppress the initial snapshot. Raw TCP clients receive the current typed snapshot when they send the existing subscribe-all request. `publisher.current_value_timeout_ms` can exclude stale values; `0` retains the latest valid typed value indefinitely.
+
 ## Minimal Signal K subscribe-all
 
 The main Signal K TCP server sends a hello line immediately after a client connects. Deltas are not sent to that client until it sends a minimal subscribe-all line.
@@ -245,7 +262,7 @@ nc 127.0.0.1 20223
 Expected first line from the server:
 
 ```json
-{"name":"signalk-mini","version":"0.1.0","self":"vessels.self","roles":["master","main"]}
+{"name":"signalk-mini","version":"1.8.2","self":"vessels.urn:mrn:signalk:uuid:00000000-0000-4000-8000-000000000001","roles":["master","main"],"timestamp":"2026-07-18T06:00:00.000Z"}
 ```
 
 Then type or send:
@@ -257,7 +274,7 @@ Then type or send:
 Expected clock delta shape:
 
 ```json
-{"updates":[{"source":{"label":"signalk-mini"},"values":[{"path":"communication.server.clock","value":1760000000}]}]}
+{"context":"vessels.urn:mrn:signalk:uuid:00000000-0000-4000-8000-000000000001","updates":[{"timestamp":"2026-07-18T06:00:00.000Z","source":{"label":"signalk-mini"},"values":[{"path":"communication.server.clock","value":1760000000}]}]}
 ```
 
 One-shot shell example that subscribes and prints deltas:
