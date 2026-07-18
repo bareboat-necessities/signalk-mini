@@ -51,6 +51,11 @@ int main() {
 
     store.model().gnss.fix.fix_alt_hae_m.set(58.9f, 1000);
     mark(store, signalk_mini::ModelField::GnssFixAltitudeHaeM);
+    REQUIRE(!pop_path(store, "navigation.position", mapped));
+    store.model().gnss.fix.fix_lat_deg.set(40.0f, 1000);
+    store.model().gnss.fix.fix_lon_deg.set(-74.0f, 1000);
+    mark(store, signalk_mini::ModelField::GnssFixLatDeg);
+    mark(store, signalk_mini::ModelField::GnssFixLonDeg);
     REQUIRE(pop_path(store, "navigation.position", mapped));
     REQUIRE(mapped.kind == signalk_mini::SignalKMappedValueKind::Object);
     REQUIRE(mapped.object_kind == signalk_mini::SignalKObjectKind::Position);
