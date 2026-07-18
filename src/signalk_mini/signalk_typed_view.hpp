@@ -27,9 +27,7 @@ public:
         if (out.last_update_us == 0 && strcmp(out.path, signalk_path::SteeringAutopilotState) == 0) {
             out.last_update_us = store_.autopilot_state_last_update_us();
         }
-        if (out.last_update_us == 0) {
-            out.last_update_us = store_.fallback_last_update_us_for(field);
-        }
+        if (out.last_update_us == 0) out.last_update_us = aggregate_last_update_us(field);
         if (out.last_update_us == 0 && !store_.has_value(field)) return false;
         if (!is_current(out)) return false;
         out.source_id = source_for(field, out);
@@ -103,6 +101,8 @@ public:
     }
 
 private:
+    static uint64_t latest_timestamp(uint64_t a, uint64_t b) { return a > b ? a : b; }
+
     bool timestamp_is_current(uint64_t last_update_us) const {
         const uint32_t timeout_ms = config_.publisher.current_value_timeout_ms;
         if (timeout_ms == 0 || now_us_ == 0 || last_update_us == 0 || now_us_ <= last_update_us) return true;
@@ -112,6 +112,85 @@ private:
 
     bool is_current(const SignalKMappedValue<Real>& mapped) const {
         return timestamp_is_current(mapped.last_update_us);
+    }
+
+    uint64_t aggregate_last_update_us(ModelField field) const {
+        const auto& model = store_.model();
+        switch (field) {
+        case ModelField::GnssSatellitePrn0:
+        case ModelField::GnssSatelliteElevationDeg0:
+        case ModelField::GnssSatelliteAzimuthDeg0:
+        case ModelField::GnssSatelliteSnrDb0:
+            return latest_timestamp(model.gnss.sky_view.last_update_us,
+                                    model.gnss.satellites_in_view.last_update_us);
+        case ModelField::RouteApbArrivalCircleEntered:
+        case ModelField::RouteApbPerpendicularPassed:
+        case ModelField::RouteApbDestinationId:
+            return model.route.apb.last_update_us;
+        case ModelField::RouteRmbArrived:
+        case ModelField::RouteRmbDestinationId:
+            return model.route.rmb.last_update_us;
+        case ModelField::RouteWaypointToId:
+        case ModelField::RouteWaypointFromId:
+            return model.route.waypoint.last_update_us;
+        case ModelField::RouteWaypointArrivalCircleEntered:
+        case ModelField::RouteWaypointPerpendicularPassed:
+        case ModelField::RouteWaypointArrivalId:
+            return model.route.waypoint_arrival.last_update_us;
+        case ModelField::AisSafetyObject:
+            return latest_timestamp(model.ais.safety_text.last_update_us,
+                                    model.ais.addressed_safety.last_update_us);
+        case ModelField::AisDataLinkStatusObject:
+            return model.ais.data_link_status.last_update_us;
+        case ModelField::DscStructuredNotification: {
+            uint64_t timestamp = model.comm.dsc.latest_call.last_update_us;
+            timestamp = latest_timestamp(timestamp, model.notifications.dsc.distress.last_update_us);
+            timestamp = latest_timestamp(timestamp, model.notifications.dsc.urgency.last_update_us);
+            return latest_timestamp(timestamp, model.notifications.dsc.safety.last_update_us);
+        }
+        case ModelField::InmarsatSafetyNetStructuredNotification:
+            return latest_timestamp(model.notifications.inmarsat.safetynet.latest_message.last_update_us,
+                                    model.notifications.inmarsat.safetynet.message_count.last_update_us);
+        case ModelField::NavtexStructuredNotification: {
+            uint64_t timestamp = model.notifications.navtex.received.last_update_us;
+            timestamp = latest_timestamp(timestamp, model.notifications.navtex.receiver_mask.last_update_us);
+            return latest_timestamp(timestamp, model.notifications.navtex.history.count.last_update_us);
+        }
+        case ModelField::AlertStructuredNotification: {
+            const auto& alerts = model.notifications.alerts;
+            uint64_t timestamp = alerts.acknowledgement.last_update_us;
+            timestamp = latest_timestamp(timestamp, alerts.acknowledgement_detail.last_update_us);
+            timestamp = latest_timestamp(timestamp, alerts.condition.last_update_us);
+            timestamp = latest_timestamp(timestamp, alerts.cyclic_list.last_update_us);
+            timestamp = latest_timestamp(timestamp, alerts.alert_report.last_update_us);
+            timestamp = latest_timestamp(timestamp, alerts.alarm_state.last_update_us);
+            timestamp = latest_timestamp(timestamp, alerts.command_refused.last_update_us);
+            timestamp = latest_timestamp(timestamp, alerts.heartbeat.last_update_us);
+            return latest_timestamp(timestamp, alerts.fire.last_update_us);
+        }
+        case ModelField::MobStructuredNotification:
+            return model.notifications.special.smv.last_update_us;
+        case ModelField::LegacyCommObject: {
+            const auto& comm = model.comm;
+            uint64_t timestamp = comm.radio_frequency_set.last_update_us;
+            timestamp = latest_timestamp(timestamp, comm.beacon_control.last_update_us);
+            timestamp = latest_timestamp(timestamp, comm.beacon_status.last_update_us);
+            timestamp = latest_timestamp(timestamp, comm.return_link_message.last_update_us);
+            timestamp = latest_timestamp(timestamp, comm.equipment.control_command.last_update_us);
+            timestamp = latest_timestamp(timestamp, comm.equipment.control_operation.last_update_us);
+            timestamp = latest_timestamp(timestamp, comm.equipment.control_response.last_update_us);
+            timestamp = latest_timestamp(timestamp, comm.equipment.display_control.last_update_us);
+            return latest_timestamp(timestamp, comm.equipment.door_status.last_update_us);
+        }
+        case ModelField::NotificationText:
+            return model.notifications.messages.text.last_update_us;
+        case ModelField::NotificationEvent:
+            return model.notifications.messages.event.last_update_us;
+        case ModelField::NotificationEventLog:
+            return model.notifications.messages.event_log.last_update_us;
+        default:
+            return 0;
+        }
     }
 
     bool is_selected_path_candidate(size_t current_index, const SignalKMappedValue<Real>& current) const {
