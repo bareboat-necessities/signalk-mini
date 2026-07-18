@@ -762,10 +762,10 @@ private:
             }
             const InitialStreamScope scope = owner.websocket_initial_scope(request.resource);
             const bool active_subscription = scope != InitialStreamScope::None;
-            const bool send_current = active_subscription && owner.config_.publisher.send_current_values_on_connect &&
+            const bool tx_enabled = owner.config_.signalk.websocket.allow_tx && active_subscription;
+            const bool send_current = tx_enabled && owner.config_.publisher.send_current_values_on_connect &&
                                       owner.websocket_should_send_current_values(request.resource);
-            ConnectionFlags flags{owner.config_.signalk.websocket.allow_rx,
-                                  owner.config_.signalk.websocket.allow_tx && active_subscription};
+            ConnectionFlags flags{owner.config_.signalk.websocket.allow_rx, tx_enabled};
             if (!connections.add(connection, flags)) {
                 connection.close();
                 return;
