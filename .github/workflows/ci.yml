@@ -1,4 +1,4 @@
-name: Apply corrected Signal K typed view
+name: Apply Signal K typed-store projection
 
 on:
   push:
@@ -19,10 +19,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat .github/pr65.source.part00 .github/pr65.source.part01 | base64 --decode > /tmp/pr65-source-files.tar.gz
+          cat .github/pr65.seg{00..20} | base64 --decode > /tmp/pr65-source-files.tar.gz
           echo 'be7ff4b25dd2d1c55ec72a3b0ec8714950e2001632571d5ea223a83348262994  /tmp/pr65-source-files.tar.gz' | sha256sum --check --strict
           tar -xzf /tmp/pr65-source-files.tar.gz
-          rm -f .github/pr65.source.part00 .github/pr65.source.part01
+          rm -f .github/pr65.seg* .github/pr65.source.part* .github/pr65.patch.part* .github/pr65.full.*
           git fetch origin main
           git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
           git config user.name 'github-actions[bot]'
