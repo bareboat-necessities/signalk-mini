@@ -7,8 +7,8 @@ The Signal K layer does not retain a second JSON tree and does not cache seriali
 This design keeps MCU memory use predictable:
 
 - typed values are stored once;
-- only compact field-presence, source, and freshness bookkeeping is retained;
-- the fixed freshness table covers fields whose typed model representation does not carry an embedded timestamp;
+- only compact field-presence and source bookkeeping is retained;
+- freshness for unstamped text and object projections is derived from aggregate timestamps already present in the typed model;
 - snapshot output uses caller-provided fixed-capacity buffers;
 - reading a snapshot does not consume the live model-change queue;
 - no dynamic Signal K DOM is required;
