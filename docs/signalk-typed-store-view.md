@@ -7,13 +7,14 @@ The Signal K layer does not retain a second JSON tree and does not cache seriali
 This design keeps MCU memory use predictable:
 
 - typed values are stored once;
-- only compact field-presence and source bookkeeping is retained;
+- only compact field-presence, source, and freshness bookkeeping is retained;
+- the fixed freshness table covers fields whose typed model representation does not carry an embedded timestamp;
 - snapshot output uses caller-provided fixed-capacity buffers;
 - reading a snapshot does not consume the live model-change queue;
 - no dynamic Signal K DOM is required;
 - no serialized-value cache exists alongside the typed model.
 
-When multiple typed fields map to the same Signal K path, the view selects the freshest valid field and uses a deterministic field-order tie break. Configured expiry is applied while walking both self-vessel values and AIS contexts, so a new client does not receive stale targets or stale alternate-unit values.
+When multiple typed fields map to the same Signal K path, the view selects the freshest valid field and uses a deterministic field-order tie break. Configured expiry is applied while walking scalar values, text values, structured objects, and AIS contexts, so a new client does not receive stale targets or stale alternate-unit values.
 
 Object completeness is enforced before projection. In particular, `navigation.position` requires both latitude and longitude; altitude is included only when available. Partial coordinates are not advertised as a current Signal K position.
 
