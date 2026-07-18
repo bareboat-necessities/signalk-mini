@@ -27,6 +27,9 @@ public:
         if (out.last_update_us == 0 && strcmp(out.path, signalk_path::SteeringAutopilotState) == 0) {
             out.last_update_us = store_.autopilot_state_last_update_us();
         }
+        if (out.last_update_us == 0) {
+            out.last_update_us = store_.fallback_last_update_us_for(field);
+        }
         if (out.last_update_us == 0 && !store_.has_value(field)) return false;
         if (!is_current(out)) return false;
         out.source_id = source_for(field, out);
