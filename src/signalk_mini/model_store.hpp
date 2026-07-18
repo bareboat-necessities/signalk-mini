@@ -115,6 +115,8 @@ public:
     size_t pending_change_count() const { return changes_.size(); }
     size_t change_queue_capacity() const { return changes_.capacity(); }
     size_t change_queue_high_watermark() const { return changes_.high_watermark(); }
+    uint64_t autopilot_state_last_update_us() const { return autopilot_state_last_update_us_; }
+    SourceId autopilot_state_source_id() const { return autopilot_state_source_id_; }
 
     void record_current(ModelField field, SourceId source_id) {
         const size_t field_index = static_cast<size_t>(field);
@@ -127,6 +129,10 @@ public:
     void mark_changed(ModelField field, SourceId source_id, uint64_t now_us) {
         ++marked_change_count_;
         record_current(field, source_id);
+        if (field == ModelField::AutopilotMode || field == ModelField::AutopilotEnabled) {
+            autopilot_state_last_update_us_ = now_us;
+            autopilot_state_source_id_ = source_id;
+        }
         ModelChange change{field, source_id, model_change_timestamp_ms(now_us), ++sequence_};
         changes_.push(change);
     }
@@ -136,6 +142,8 @@ private:
     ModelChangeQueue<QueueCapacity> changes_{};
     uint32_t sequence_ = 0;
     uint64_t marked_change_count_ = 0;
+    uint64_t autopilot_state_last_update_us_ = 0;
+    SourceId autopilot_state_source_id_ = 0;
     SourceId latest_source_id_[FieldCount]{};
     uint8_t present_bits_[PresenceBytes]{};
 };
