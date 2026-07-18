@@ -1,32 +1,60 @@
-name: Apply Signal K typed-store projection
+name: CI
 
 on:
   push:
-    branches:
-      - agent/signalk-schema-typed-view
-
-permissions:
-  contents: write
+  pull_request:
 
 jobs:
-  apply:
+  linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install Linux dependencies
+        run: sudo apt-get update && sudo apt-get install -y libevent-dev libconfig-dev pkg-config
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Upload CTest diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
         with:
-          fetch-depth: 0
-      - name: Verify and install tested source files
-        shell: bash
+          name: ctest-diagnostics
+          path: build/Testing/Temporary/
+          if-no-files-found: ignore
+
+  arduino-atoms3r:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+      - name: Install ESP32 core and libraries
         run: |
-          set -euo pipefail
-          cat .github/pr65.seg{00..20} | base64 --decode > /tmp/pr65-source-files.tar.gz
-          echo 'be7ff4b25dd2d1c55ec72a3b0ec8714950e2001632571d5ea223a83348262994  /tmp/pr65-source-files.tar.gz' | sha256sum --check --strict
-          tar -xzf /tmp/pr65-source-files.tar.gz
-          rm -f .github/pr65.seg* .github/pr65.source.part* .github/pr65.patch.part* .github/pr65.full.*
-          git fetch origin main
-          git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'Complete Signal K typed-store projection'
-          git push origin HEAD:agent/signalk-schema-typed-view
+          arduino-cli config init --overwrite
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32
+          arduino-cli lib update-index
+          arduino-cli lib install M5Unified
+          arduino-cli lib install ArduinoJson
+      - name: Prepare vendored module libraries
+        run: |
+          printf '%s\n' 'name=signalk-mini-async-event-loop' 'version=0.1.0' 'author=Bareboat Necessities' 'maintainer=Bareboat Necessities' 'sentence=Vendored async event loop module for signalk-mini.' 'paragraph=Source-only vendored module used by signalk-mini.' 'category=Communication' 'architectures=esp32' 'includes=async_event_loop.hpp' > modules/async-event-loop/library.properties
+          printf '%s\n' 'name=signalk-mini-data-model' 'version=0.1.0' 'author=Bareboat Necessities' 'maintainer=Bareboat Necessities' 'sentence=Vendored data model module for signalk-mini.' 'paragraph=Source-only vendored module used by signalk-mini.' 'category=Data Processing' 'architectures=esp32' 'includes=ship_data_model.hpp' > modules/data-model/library.properties
+          printf '%s\n' 'name=signalk-mini-nmea0183' 'version=0.1.0' 'author=Bareboat Necessities' 'maintainer=Bareboat Necessities' 'sentence=Vendored NMEA0183 module for signalk-mini.' 'paragraph=Source-only vendored module used by signalk-mini.' 'category=Communication' 'architectures=esp32' 'includes=nmea0183_connector.hpp' > modules/nmea0183/library.properties
+          printf '%s\n' 'name=signalk-mini-seatalk' 'version=0.1.0' 'author=Bareboat Necessities' 'maintainer=Bareboat Necessities' 'sentence=Vendored SeaTalk module for signalk-mini.' 'paragraph=Source-only vendored module used by signalk-mini.' 'category=Communication' 'architectures=esp32' 'includes=seatalk.hpp' > modules/seatalk/library.properties
+          printf '%s\n' 'name=signalk-mini-ubx' 'version=0.1.0' 'author=Bareboat Necessities' 'maintainer=Bareboat Necessities' 'sentence=Vendored UBX module for signalk-mini.' 'paragraph=Source-only vendored module used by signalk-mini.' 'category=Communication' 'architectures=esp32' 'includes=ubx.hpp' > modules/ubx/library.properties
+      - name: Compile AtomS3R sketch
+        run: |
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32s3 \
+            --library . \
+            --library modules/async-event-loop \
+            --library modules/data-model \
+            --library modules/nmea0183 \
+            --library modules/seatalk \
+            --library modules/ubx \
+            mcu/signalk-atoms3r
