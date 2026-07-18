@@ -19,3 +19,5 @@ When multiple typed fields map to the same Signal K path, the view selects the f
 Object completeness is enforced before projection. In particular, `navigation.position` requires both latitude and longitude; altitude is included only when available. Partial coordinates are not advertised as a current Signal K position.
 
 New TCP or WebSocket clients can receive current values by walking this live view. The values are therefore always generated from the authoritative typed store rather than from stale serialized copies.
+
+The read-only REST API uses the same live projection. It counts the selected JSON subtree to determine `Content-Length`, then walks the typed model again and streams the response through a small fixed buffer. It does not retain a complete REST response or reconstruct the model in a dynamic JSON DOM.
