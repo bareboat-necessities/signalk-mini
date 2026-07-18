@@ -221,6 +221,29 @@ Core object-valued paths are emitted in schema form:
 
 WebSocket clients receive current values after hello by default. Add `?subscribe=none` to suppress the initial snapshot. Raw TCP clients receive the current typed snapshot when they send the existing subscribe-all request. `publisher.current_value_timeout_ms` can exclude stale values; `0` retains the latest valid typed value indefinitely.
 
+## Read-only Signal K REST API
+
+When the HTTP/WebSocket listener is enabled, the server advertises and serves a minimal read-only Signal K v1 REST API at:
+
+```text
+/signalk/v1/api/
+```
+
+The API root returns the current full Signal K document. The model can also be traversed by path, for example:
+
+```text
+/signalk/v1/api/version
+/signalk/v1/api/self
+/signalk/v1/api/sources
+/signalk/v1/api/vessels
+/signalk/v1/api/vessels/self/navigation
+/signalk/v1/api/vessels/self/navigation/position
+```
+
+`vessels/self` is a REST alias for the stable vessel key configured by `identity.self`; the actual UUID- or MMSI-based key is also accepted. Unknown or currently unavailable paths return `404`. The API is intentionally read-only, and methods other than `GET` return `405 Method Not Allowed`.
+
+REST responses are generated directly from the typed model. The server first counts the selected JSON representation, sends a `Content-Length` header, and then streams the same typed projection through a small fixed buffer. It does not retain a second Signal K tree or allocate a complete response body.
+
 ## Minimal Signal K subscribe-all
 
 The main Signal K TCP server sends a hello line immediately after a client connects. Deltas are not sent to that client until it sends a minimal subscribe-all line.
