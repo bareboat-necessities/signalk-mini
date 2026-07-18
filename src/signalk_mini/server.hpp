@@ -566,70 +566,235 @@ private:
         return false;
     }
 
+    static bool valid_http_host(const char* host) {
+        if (!host || !host[0]) return false;
+        for (const char* p = host; *p; ++p) {
+            const char c = *p;
+            const bool allowed = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                                 (c >= '0' && c <= '9') || c == '.' || c == '-' ||
+                                 c == ':' || c == '[' || c == ']';
+            if (!allowed) return false;
+        }
+        return true;
+    }
+
+    static bool parse_http_request_line(const char* header,
+                                        size_t header_len,
+                                        const char*& method,
+                                        size_t& method_len,
+                                        const char*& target,
+                                        size_t& target_len) {
+        if (!header || header_len < 14) return false;
+        const char* end = header + header_len;
+        const char* first_space = header;
+        while (first_space < end && *first_space != ' ') ++first_space;
+        if (first_space == header || first_space >= end) return false;
+        method = header;
+        method_len = static_cast<size_t>(first_space - header);
+        target = first_space + 1;
+        const char* second_space = target;
+        while (second_space < end && *second_space != ' ' && *second_space != '\r' && *second_space != '\n') ++second_space;
+        if (second_space == target || second_space >= end || *second_space != ' ') return false;
+        target_len = static_cast<size_t>(second_space - target);
+        return true;
+    }
+
+    static size_t http_path_length(const char* target, size_t target_len) {
+        if (!target) return 0;
+        const char* query = static_cast<const char*>(memchr(target, '?', target_len));
+        return query ? static_cast<size_t>(query - target) : target_len;
+    }
+
+    bool send_http_response(async_event_loop::ITcpConnection& connection,
+                            const char* status,
+                            const char* content_type,
+                            const char* body,
+                            const char* extra_headers = nullptr) {
+        if (!status || !content_type || !body) return false;
+        const size_t body_len = strlen(body);
+        char header[384];
+        const int header_len = snprintf(
+            header,
+            sizeof(header),
+            "HTTP/1.1 %s\r\n"
+            "Content-Type: %s\r\n"
+            "Content-Length: %u\r\n"
+            "Connection: close\r\n"
+            "Access-Control-Allow-Origin: *\r\n"
+            "%s"
+            "\r\n",
+            status,
+            content_type,
+            static_cast<unsigned>(body_len),
+            extra_headers ? extra_headers : "");
+        if (header_len <= 0 || static_cast<size_t>(header_len) >= sizeof(header)) return false;
+        return write_all(connection, reinterpret_cast<const uint8_t*>(header), static_cast<size_t>(header_len)) &&
+               (body_len == 0 || write_all(connection, reinterpret_cast<const uint8_t*>(body), body_len));
+    }
+
+    struct SignalKJsonCountSink {
+        size_t size = 0;
+        static bool write(void* context, const char*, size_t len) {
+            auto* self = static_cast<SignalKJsonCountSink*>(context);
+            if (!self || len > SIZE_MAX - self->size) return false;
+            self->size += len;
+            return true;
+        }
+    };
+
+    struct SignalKHttpJsonSink {
+        explicit SignalKHttpJsonSink(async_event_loop::ITcpConnection& connection_ref)
+            : connection(connection_ref) {}
+
+        static bool write(void* context, const char* data, size_t len) {
+            auto* self = static_cast<SignalKHttpJsonSink*>(context);
+            return self && self->append(data, len);
+        }
+
+        bool append(const char* data, size_t len) {
+            if (!data) return false;
+            while (len > 0) {
+                const size_t room = sizeof(buffer) - used;
+                const size_t take = len < room ? len : room;
+                memcpy(buffer + used, data, take);
+                used += take;
+                data += take;
+                len -= take;
+                if (used == sizeof(buffer) && !flush()) return false;
+            }
+            return true;
+        }
+
+        bool flush() {
+            if (used == 0) return true;
+            const int written = connection.write(reinterpret_cast<const uint8_t*>(buffer), used);
+            if (written != static_cast<int>(used)) return false;
+            used = 0;
+            return true;
+        }
+
+        async_event_loop::ITcpConnection& connection;
+        char buffer[256];
+        size_t used = 0;
+    };
+
+    bool send_signalk_rest_response(async_event_loop::ITcpConnection& connection,
+                                    const char* relative_path) {
+        const uint64_t now_us = loop_.clock().micros();
+        SignalKFullModelWriter<Real> model_writer;
+        SignalKJsonCountSink count_sink;
+        SignalKJsonStreamWriter count_out(&SignalKJsonCountSink::write, &count_sink);
+        const SignalKModelWriteResult counted = model_writer.write_api_path(
+            count_out, relative_path, store_, config_, now_us);
+        if (counted == SignalKModelWriteResult::NotFound) {
+            return send_http_response(connection, "404 Not Found", "application/json", "{\"message\":\"Not Found\"}");
+        }
+        if (counted == SignalKModelWriteResult::InvalidPath) {
+            return send_http_response(connection, "400 Bad Request", "application/json", "{\"message\":\"Invalid Signal K path\"}");
+        }
+        if (counted != SignalKModelWriteResult::Written || !count_out.ok()) {
+            return send_http_response(connection, "500 Internal Server Error", "application/json", "{\"message\":\"Serialization failed\"}");
+        }
+
+        char response_header[256];
+        const int response_header_len = snprintf(
+            response_header,
+            sizeof(response_header),
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: application/json\r\n"
+            "Content-Length: %u\r\n"
+            "Connection: close\r\n"
+            "Access-Control-Allow-Origin: *\r\n"
+            "\r\n",
+            static_cast<unsigned>(count_sink.size));
+        if (response_header_len <= 0 || static_cast<size_t>(response_header_len) >= sizeof(response_header) ||
+            !write_all(connection, reinterpret_cast<const uint8_t*>(response_header), static_cast<size_t>(response_header_len))) {
+            return false;
+        }
+
+        SignalKHttpJsonSink body_sink(connection);
+        SignalKJsonStreamWriter body_out(&SignalKHttpJsonSink::write, &body_sink);
+        const SignalKModelWriteResult written = model_writer.write_api_path(
+            body_out, relative_path, store_, config_, now_us);
+        return written == SignalKModelWriteResult::Written && body_out.ok() &&
+               body_out.size() == count_sink.size && body_sink.flush();
+    }
+
     bool handle_signalk_http_request(async_event_loop::ITcpConnection& connection,
                                      const char* header,
                                      size_t header_len) {
-        if (!header || header_len < 16 || strncmp(header, "GET ", 4) != 0) return false;
-        const char* target = header + 4;
-        const char* end = header + header_len;
-        const char* target_end = target;
-        while (target_end < end && *target_end != ' ') ++target_end;
-        const size_t target_len = static_cast<size_t>(target_end - target);
+        const char* method = nullptr;
+        const char* target = nullptr;
+        size_t method_len = 0;
+        size_t target_len = 0;
+        if (!parse_http_request_line(header, header_len, method, method_len, target, target_len)) {
+            return send_http_response(connection, "400 Bad Request", "application/json", "{\"message\":\"Malformed HTTP request\"}");
+        }
+        if (method_len != 3 || strncmp(method, "GET", 3) != 0) {
+            return send_http_response(connection, "405 Method Not Allowed", "application/json",
+                                      "{\"message\":\"Read-only API; GET required\"}", "Allow: GET\r\n");
+        }
 
-        if (target_len == 1 && target[0] == '/') {
+        const size_t path_len = http_path_length(target, target_len);
+        if (path_len == 0 || path_len >= 512) {
+            return send_http_response(connection, "414 URI Too Long", "application/json", "{\"message\":\"URI too long\"}");
+        }
+
+        if (path_len == 1 && target[0] == '/') {
             static constexpr char Body[] =
                 "<!doctype html><html><head><meta charset=\"utf-8\"><title>SignalK Mini</title></head>"
                 "<body><h1>SignalK Mini</h1><p>Lightweight Signal K server is running.</p>"
-                "<p><a href=\"/signalk\">Signal K discovery</a></p></body></html>";
-            char response[384];
-            const int response_len = snprintf(
-                response,
-                sizeof(response),
-                "HTTP/1.1 200 OK\r\n"
-                "Content-Type: text/html; charset=utf-8\r\n"
-                "Content-Length: %u\r\n"
-                "Connection: close\r\n"
-                "\r\n%s",
-                static_cast<unsigned>(sizeof(Body) - 1),
-                Body);
-            if (response_len <= 0 || static_cast<size_t>(response_len) >= sizeof(response)) return false;
-            return write_all(connection,
-                             reinterpret_cast<const uint8_t*>(response),
-                             static_cast<size_t>(response_len));
+                "<p><a href=\"/signalk\">Signal K discovery</a></p>"
+                "<p><a href=\"/signalk/v1/api/\">Signal K REST API</a></p></body></html>";
+            return send_http_response(connection, "200 OK", "text/html; charset=utf-8", Body);
         }
 
         const bool discovery =
-            (target_len == 8 && strncmp(target, "/signalk", 8) == 0) ||
-            (target_len == 9 && strncmp(target, "/signalk/", 9) == 0);
-        if (!discovery) return false;
+            (path_len == 8 && strncmp(target, "/signalk", 8) == 0) ||
+            (path_len == 9 && strncmp(target, "/signalk/", 9) == 0);
+        if (discovery) {
+            char host[128];
+            if (!copy_http_host(header, header_len, host, sizeof(host)) || !valid_http_host(host)) {
+                snprintf(host, sizeof(host), "127.0.0.1:%u", static_cast<unsigned>(config_.signalk.websocket.port));
+            }
 
-        char host[128];
-        if (!copy_http_host(header, header_len, host, sizeof(host))) {
-            snprintf(host, sizeof(host), "127.0.0.1:%u", static_cast<unsigned>(config_.signalk.websocket.port));
+            char body[640];
+            const int body_len = snprintf(
+                body,
+                sizeof(body),
+                "{\"endpoints\":{\"v1\":{\"version\":\"%s\",\"signalk-http\":\"http://%s/signalk/v1/api/\",\"signalk-ws\":\"ws://%s/signalk/v1/stream\"}},\"server\":{\"id\":\"%s\",\"version\":\"%s\"}}",
+                config_.identity.signalk_version ? config_.identity.signalk_version : "1.8.2",
+                host,
+                host,
+                config_.identity.server_name ? config_.identity.server_name : "signalk-mini",
+                config_.identity.server_version ? config_.identity.server_version : "0.1.0");
+            if (body_len <= 0 || static_cast<size_t>(body_len) >= sizeof(body)) {
+                return send_http_response(connection, "500 Internal Server Error", "application/json", "{\"message\":\"Discovery serialization failed\"}");
+            }
+            return send_http_response(connection, "200 OK", "application/json", body);
         }
 
-        char body[512];
-        const int body_len = snprintf(
-            body,
-            sizeof(body),
-            "{\"endpoints\":{\"v1\":{\"version\":\"%s\",\"signalk-ws\":\"ws://%s/signalk/v1/stream\"}},\"server\":{\"id\":\"%s\",\"version\":\"%s\"}}",
-            config_.identity.signalk_version ? config_.identity.signalk_version : "1.8.2",
-            host,
-            config_.identity.server_name ? config_.identity.server_name : "signalk-mini",
-            config_.identity.server_version ? config_.identity.server_version : "0.1.0");
-        if (body_len <= 0 || static_cast<size_t>(body_len) >= sizeof(body)) return false;
+        static constexpr char ApiBase[] = "/signalk/v1/api";
+        static constexpr size_t ApiBaseLen = sizeof(ApiBase) - 1;
+        if (path_len == ApiBaseLen && strncmp(target, ApiBase, ApiBaseLen) == 0) {
+            return send_http_response(connection, "308 Permanent Redirect", "application/json",
+                                      "{\"message\":\"Use /signalk/v1/api/\"}",
+                                      "Location: /signalk/v1/api/\r\n");
+        }
+        if (path_len > ApiBaseLen && strncmp(target, ApiBase, ApiBaseLen) == 0 && target[ApiBaseLen] == '/') {
+            const char* relative = target + ApiBaseLen + 1;
+            size_t relative_len = path_len - ApiBaseLen - 1;
+            while (relative_len > 0 && relative[relative_len - 1] == '/') --relative_len;
+            char relative_path[384];
+            if (relative_len >= sizeof(relative_path)) {
+                return send_http_response(connection, "414 URI Too Long", "application/json", "{\"message\":\"Signal K path too long\"}");
+            }
+            memcpy(relative_path, relative, relative_len);
+            relative_path[relative_len] = '\0';
+            return send_signalk_rest_response(connection, relative_path);
+        }
 
-        char response[768];
-        const int response_len = snprintf(
-            response,
-            sizeof(response),
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %u\r\nConnection: close\r\nAccess-Control-Allow-Origin: *\r\n\r\n%s",
-            static_cast<unsigned>(body_len),
-            body);
-        if (response_len <= 0 || static_cast<size_t>(response_len) >= sizeof(response)) return false;
-        return write_all(connection,
-                         reinterpret_cast<const uint8_t*>(response),
-                         static_cast<size_t>(response_len));
+        return send_http_response(connection, "404 Not Found", "application/json", "{\"message\":\"Not Found\"}");
     }
 
     static bool is_signalk_stream_resource(const char* resource) {

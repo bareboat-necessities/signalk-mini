@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 #include <ArduinoJson.h>
 #include <stdio.h>
 #include <string.h>
@@ -12,9 +13,16 @@ namespace signalk_mini {
 
 class SignalKJsonStreamWriter {
 public:
+    using WriteCallback = bool (*)(void* context, const char* data, size_t len);
+
     SignalKJsonStreamWriter(char* dst, size_t capacity) : dst_(dst), capacity_(capacity) {
         if (dst_ && capacity_ > 0) dst_[0] = '\0';
         else ok_ = false;
+    }
+
+    SignalKJsonStreamWriter(WriteCallback callback, void* context)
+        : callback_(callback), callback_context_(context) {
+        if (!callback_) ok_ = false;
     }
 
     bool ok() const { return ok_; }
@@ -61,13 +69,20 @@ public:
 
     template<typename JsonValue>
     bool append_json(const JsonValue& value) {
-        if (!ok_ || !dst_ || capacity_ == 0) return false;
+        if (!ok_) return false;
         const size_t required = measureJson(value);
-        if (pos_ + required >= capacity_) return fail();
-        const size_t written = serializeJson(value, dst_ + pos_, capacity_ - pos_);
-        if (written != required) return fail();
-        pos_ += written;
-        dst_[pos_] = '\0';
+        if (dst_) {
+            if (capacity_ == 0 || pos_ + required >= capacity_) return fail();
+            const size_t written = serializeJson(value, dst_ + pos_, capacity_ - pos_);
+            if (written != required) return fail();
+            pos_ += written;
+            dst_[pos_] = '\0';
+            return true;
+        }
+
+        JsonWriterAdapter adapter(*this);
+        const size_t written = serializeJson(value, adapter);
+        if (written != required || !ok_) return fail();
         return true;
     }
 
@@ -85,12 +100,37 @@ public:
     }
 
 private:
+    class JsonWriterAdapter {
+    public:
+        explicit JsonWriterAdapter(SignalKJsonStreamWriter& owner) : owner_(owner) {}
+
+        size_t write(uint8_t value) {
+            const char c = static_cast<char>(value);
+            return owner_.append_bytes(&c, 1) ? 1u : 0u;
+        }
+
+        size_t write(const uint8_t* buffer, size_t size) {
+            return owner_.append_bytes(reinterpret_cast<const char*>(buffer), size) ? size : 0u;
+        }
+
+    private:
+        SignalKJsonStreamWriter& owner_;
+    };
+
     bool append_bytes(const char* data, size_t len) {
-        if (!ok_ || !dst_ || capacity_ == 0 || !data) return false;
-        if (pos_ + len >= capacity_) return fail();
-        memcpy(dst_ + pos_, data, len);
+        if (!ok_ || !data) return false;
+        if (len == 0) return true;
+
+        if (dst_) {
+            if (capacity_ == 0 || pos_ + len >= capacity_) return fail();
+            memcpy(dst_ + pos_, data, len);
+            pos_ += len;
+            dst_[pos_] = '\0';
+            return true;
+        }
+
+        if (!callback_ || !callback_(callback_context_, data, len)) return fail();
         pos_ += len;
-        dst_[pos_] = '\0';
         return true;
     }
 
@@ -103,6 +143,8 @@ private:
 
     char* dst_ = nullptr;
     size_t capacity_ = 0;
+    WriteCallback callback_ = nullptr;
+    void* callback_context_ = nullptr;
     size_t pos_ = 0;
     bool ok_ = true;
 };

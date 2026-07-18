@@ -169,8 +169,12 @@ int main() {
                   "ws://127.0.0.1:%u/signalk/v1/stream",
                   static_cast<unsigned>(ws_port));
     REQUIRE(std::strcmp(doc["endpoints"]["v1"]["signalk-ws"] | "", expected_ws) == 0);
+    char expected_http[128];
+    std::snprintf(expected_http, sizeof(expected_http),
+                  "http://127.0.0.1:%u/signalk/v1/api/",
+                  static_cast<unsigned>(ws_port));
+    REQUIRE(std::strcmp(doc["endpoints"]["v1"]["signalk-http"] | "", expected_http) == 0);
     REQUIRE(std::strcmp(doc["endpoints"]["v1"]["version"] | "", "1.8.2") == 0);
-    REQUIRE(doc["endpoints"]["v1"]["signalk-http"].isNull());
     REQUIRE(std::strcmp(doc["server"]["id"] | "", "integration-signalk-server") == 0);
     REQUIRE(std::strcmp(doc["server"]["version"] | "", "0.1-integration") == 0);
 
