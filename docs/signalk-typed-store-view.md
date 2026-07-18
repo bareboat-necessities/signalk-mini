@@ -13,4 +13,6 @@ This design keeps MCU memory use predictable:
 - no dynamic Signal K DOM is required;
 - no serialized-value cache exists alongside the typed model.
 
+When multiple typed fields map to the same Signal K path, the view selects the freshest valid field and uses a deterministic field-order tie break. Configured expiry is applied while walking both self-vessel values and AIS contexts, so a new client does not receive stale targets or stale alternate-unit values.
+
 New TCP or WebSocket clients can receive current values by walking this live view. The values are therefore always generated from the authoritative typed store rather than from stale serialized copies.
