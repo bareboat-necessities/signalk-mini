@@ -82,7 +82,7 @@ public:
         switch (field) {
         case ModelField::GnssFixLatDeg:
         case ModelField::GnssFixLonDeg:
-        case ModelField::GnssFixAltitudeHaeM: return map_object_if(model.gnss.fix.fix_lat_deg.valid || model.gnss.fix.fix_lon_deg.valid || model.gnss.fix.fix_alt_hae_m.valid, latest_timestamp(model.gnss.fix.fix_lat_deg.last_update_us, model.gnss.fix.fix_lon_deg.last_update_us, model.gnss.fix.fix_alt_hae_m.last_update_us), signalk_path::NavigationPosition, SignalKObjectKind::Position, out);
+        case ModelField::GnssFixAltitudeHaeM: return map_object_if(model.gnss.fix.fix_lat_deg.valid && model.gnss.fix.fix_lon_deg.valid, latest_timestamp(model.gnss.fix.fix_lat_deg.last_update_us, model.gnss.fix.fix_lon_deg.last_update_us, model.gnss.fix.fix_alt_hae_m.last_update_us), signalk_path::NavigationPosition, SignalKObjectKind::Position, out);
         case ModelField::GnssSpeedKn: return map_number(model.gnss.fix.speed_kn, signalk_path::NavigationSpeedOverGround, out, UnitTransform::KnotsToMps);
         case ModelField::GnssTrackDeg: return map_number(model.gnss.fix.track_deg, signalk_path::NavigationCourseOverGroundTrue, out, UnitTransform::DegToRad);
         case ModelField::GnssVerticalSpeedMs: return map_number(model.gnss.fix.vertical_speed_m_s, signalk_path::NavigationVerticalSpeed, out);
