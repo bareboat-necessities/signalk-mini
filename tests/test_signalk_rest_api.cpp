@@ -129,17 +129,29 @@ struct HttpResponse {
     std::string body;
 };
 
-HttpResponse request(uint16_t port, const char* method, const char* path) {
+HttpResponse request(uint16_t port,
+                     const char* method,
+                     const char* path,
+                     const char* host = nullptr,
+                     const char* version = "HTTP/1.1") {
     Fd client = connect_loopback(port, 3000);
     REQUIRE(client.valid());
+    char default_host[64];
+    if (!host) {
+        const int host_len = std::snprintf(default_host, sizeof(default_host),
+                                           "127.0.0.1:%u", static_cast<unsigned>(port));
+        REQUIRE(host_len > 0 && static_cast<size_t>(host_len) < sizeof(default_host));
+        host = default_host;
+    }
     char request_text[768];
     const int request_len = std::snprintf(
         request_text,
         sizeof(request_text),
-        "%s %s HTTP/1.1\r\nHost: 127.0.0.1:%u\r\nAccept: application/json\r\nConnection: close\r\n\r\n",
+        "%s %s %s\r\nHost: %s\r\nAccept: application/json\r\nConnection: close\r\n\r\n",
         method,
         path,
-        static_cast<unsigned>(port));
+        version,
+        host);
     REQUIRE(request_len > 0 && static_cast<size_t>(request_len) < sizeof(request_text));
     REQUIRE(send_all(client.get(), std::string(request_text, static_cast<size_t>(request_len))));
 
@@ -191,11 +203,14 @@ void seed_model(signalk_mini::SignalKMiniApp<float>& app) {
 
 int main() {
     const uint16_t raw_port = reserve_loopback_port();
-    const uint16_t http_port = reserve_loopback_port();
+    uint16_t http_port = 0;
+    do {
+        http_port = reserve_loopback_port();
+    } while (http_port == raw_port);
 
     signalk_mini::SignalKMiniConfig config;
-    config.identity.server_name = "rest-integration-server";
-    config.identity.server_version = "0.1-rest";
+    config.identity.server_name = "rest-\"integration\\server";
+    config.identity.server_version = "0.1-\"rest\\version";
     config.identity.signalk_version = "1.8.2";
     config.identity.self = "vessels.urn:mrn:signalk:uuid:11111111-2222-4333-8444-555555555555";
     config.signalk.host = "127.0.0.1";
@@ -226,6 +241,26 @@ int main() {
     std::snprintf(expected_http, sizeof(expected_http),
                   "http://127.0.0.1:%u/signalk/v1/api/", static_cast<unsigned>(http_port));
     REQUIRE(std::strcmp(discovery_doc["endpoints"]["v1"]["signalk-http"] | "", expected_http) == 0);
+    REQUIRE(std::strcmp(discovery_doc["server"]["id"] | "", "rest-\"integration\\server") == 0);
+    REQUIRE(std::strcmp(discovery_doc["server"]["version"] | "", "0.1-\"rest\\version") == 0);
+
+    char ipv6_host[64];
+    std::snprintf(ipv6_host, sizeof(ipv6_host), "[::1]:%u", static_cast<unsigned>(http_port));
+    const HttpResponse ipv6_discovery = request(http_port, "GET", "/signalk", ipv6_host);
+    JsonDocument ipv6_discovery_doc;
+    REQUIRE(!deserializeJson(ipv6_discovery_doc, ipv6_discovery.body));
+    char expected_ipv6_http[128];
+    std::snprintf(expected_ipv6_http, sizeof(expected_ipv6_http),
+                  "http://[::1]:%u/signalk/v1/api/", static_cast<unsigned>(http_port));
+    REQUIRE(std::strcmp(ipv6_discovery_doc["endpoints"]["v1"]["signalk-http"] | "", expected_ipv6_http) == 0);
+
+    const HttpResponse invalid_host_discovery = request(http_port, "GET", "/signalk", "host:abc");
+    JsonDocument invalid_host_doc;
+    REQUIRE(!deserializeJson(invalid_host_doc, invalid_host_discovery.body));
+    REQUIRE(std::strcmp(invalid_host_doc["endpoints"]["v1"]["signalk-http"] | "", expected_http) == 0);
+
+    const HttpResponse malformed_version = request(http_port, "GET", "/signalk", nullptr, "garbage");
+    REQUIRE(malformed_version.raw.find("HTTP/1.1 400 Bad Request\r\n") == 0);
 
     const HttpResponse redirect = request(http_port, "GET", "/signalk/v1/api");
     REQUIRE(redirect.raw.find("HTTP/1.1 308 Permanent Redirect\r\n") == 0);

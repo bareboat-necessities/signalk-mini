@@ -566,16 +566,93 @@ private:
         return false;
     }
 
+    static bool is_decimal_digit(char c) {
+        return c >= '0' && c <= '9';
+    }
+
+    static bool is_hex_digit(char c) {
+        return is_decimal_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+    }
+
+    static bool valid_http_port(const char* begin, const char* end) {
+        if (!begin || !end || begin >= end) return false;
+        uint32_t port = 0;
+        for (const char* p = begin; p < end; ++p) {
+            if (!is_decimal_digit(*p)) return false;
+            port = port * 10u + static_cast<uint32_t>(*p - '0');
+            if (port > 65535u) return false;
+        }
+        return port != 0;
+    }
+
+    static bool valid_http_hostname(const char* begin, const char* end) {
+        if (!begin || !end || begin >= end || static_cast<size_t>(end - begin) > 253) return false;
+        size_t label_len = 0;
+        bool label_ends_with_hyphen = false;
+        for (const char* p = begin; p < end; ++p) {
+            const char c = *p;
+            if (c == '.') {
+                if (label_len == 0 || label_ends_with_hyphen) return false;
+                label_len = 0;
+                label_ends_with_hyphen = false;
+                continue;
+            }
+            const bool alnum = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || is_decimal_digit(c);
+            if (!alnum && c != '-') return false;
+            if (label_len == 0 && c == '-') return false;
+            if (++label_len > 63) return false;
+            label_ends_with_hyphen = c == '-';
+        }
+        return label_len != 0 && !label_ends_with_hyphen;
+    }
+
+    static bool valid_http_ipv6_literal(const char* begin, const char* end) {
+        if (!begin || !end || begin >= end) return false;
+        const char* p = begin;
+        size_t groups = 0;
+        bool compressed = false;
+        if (*p == ':') {
+            if (p + 1 >= end || p[1] != ':') return false;
+            compressed = true;
+            p += 2;
+            if (p == end) return true;
+        }
+        while (p < end) {
+            size_t digits = 0;
+            while (p < end && is_hex_digit(*p) && digits < 4) {
+                ++p;
+                ++digits;
+            }
+            if (digits == 0 || (p < end && is_hex_digit(*p))) return false;
+            if (++groups > 8) return false;
+            if (p == end) break;
+            if (*p != ':') return false;
+            ++p;
+            if (p == end) return false;
+            if (*p == ':') {
+                if (compressed) return false;
+                compressed = true;
+                ++p;
+                if (p == end) break;
+            }
+        }
+        return compressed ? groups < 8 : groups == 8;
+    }
+
     static bool valid_http_host(const char* host) {
         if (!host || !host[0]) return false;
-        for (const char* p = host; *p; ++p) {
-            const char c = *p;
-            const bool allowed = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-                                 (c >= '0' && c <= '9') || c == '.' || c == '-' ||
-                                 c == ':' || c == '[' || c == ']';
-            if (!allowed) return false;
+        const char* end = host + strlen(host);
+        if (host[0] == '[') {
+            const char* close = strchr(host + 1, ']');
+            if (!close || !valid_http_ipv6_literal(host + 1, close)) return false;
+            if (close + 1 == end) return true;
+            return close[1] == ':' && valid_http_port(close + 2, end);
         }
-        return true;
+        if (strchr(host, '[') || strchr(host, ']')) return false;
+        const char* colon = strchr(host, ':');
+        if (!colon) return valid_http_hostname(host, end);
+        if (strchr(colon + 1, ':')) return false;
+        return valid_http_hostname(host, colon) && valid_http_port(colon + 1, end);
     }
 
     static bool parse_http_request_line(const char* header,
@@ -596,7 +673,14 @@ private:
         while (second_space < end && *second_space != ' ' && *second_space != '\r' && *second_space != '\n') ++second_space;
         if (second_space == target || second_space >= end || *second_space != ' ') return false;
         target_len = static_cast<size_t>(second_space - target);
-        return true;
+
+        const char* version = second_space + 1;
+        const char* line_end = version;
+        while (line_end + 1 < end && !(line_end[0] == '\r' && line_end[1] == '\n')) ++line_end;
+        if (line_end + 1 >= end) return false;
+        const size_t version_len = static_cast<size_t>(line_end - version);
+        return version_len == 8 &&
+               (strncmp(version, "HTTP/1.1", 8) == 0 || strncmp(version, "HTTP/1.0", 8) == 0);
     }
 
     static size_t http_path_length(const char* target, size_t target_len) {
@@ -643,8 +727,9 @@ private:
     };
 
     struct SignalKHttpJsonSink {
-        explicit SignalKHttpJsonSink(async_event_loop::ITcpConnection& connection_ref)
-            : connection(connection_ref) {}
+        SignalKHttpJsonSink(MiniSignalKServer& owner_ref,
+                            async_event_loop::ITcpConnection& connection_ref)
+            : owner(owner_ref), connection(connection_ref) {}
 
         static bool write(void* context, const char* data, size_t len) {
             auto* self = static_cast<SignalKHttpJsonSink*>(context);
@@ -667,12 +752,12 @@ private:
 
         bool flush() {
             if (used == 0) return true;
-            const int written = connection.write(reinterpret_cast<const uint8_t*>(buffer), used);
-            if (written != static_cast<int>(used)) return false;
+            if (!owner.write_all(connection, reinterpret_cast<const uint8_t*>(buffer), used)) return false;
             used = 0;
             return true;
         }
 
+        MiniSignalKServer& owner;
         async_event_loop::ITcpConnection& connection;
         char buffer[256];
         size_t used = 0;
@@ -712,7 +797,7 @@ private:
             return false;
         }
 
-        SignalKHttpJsonSink body_sink(connection);
+        SignalKHttpJsonSink body_sink(*this, connection);
         SignalKJsonStreamWriter body_out(&SignalKHttpJsonSink::write, &body_sink);
         const SignalKModelWriteResult written = model_writer.write_api_path(
             body_out, relative_path, store_, config_, now_us);
@@ -758,17 +843,29 @@ private:
                 snprintf(host, sizeof(host), "127.0.0.1:%u", static_cast<unsigned>(config_.signalk.websocket.port));
             }
 
+            char http_url[192];
+            char websocket_url[192];
+            const int http_url_len = snprintf(http_url, sizeof(http_url),
+                                              "http://%s/signalk/v1/api/", host);
+            const int websocket_url_len = snprintf(websocket_url, sizeof(websocket_url),
+                                                   "ws://%s/signalk/v1/stream", host);
+            if (http_url_len <= 0 || static_cast<size_t>(http_url_len) >= sizeof(http_url) ||
+                websocket_url_len <= 0 || static_cast<size_t>(websocket_url_len) >= sizeof(websocket_url)) {
+                return send_http_response(connection, "500 Internal Server Error", "application/json", "{\"message\":\"Discovery serialization failed\"}");
+            }
+
             char body[640];
-            const int body_len = snprintf(
-                body,
-                sizeof(body),
-                "{\"endpoints\":{\"v1\":{\"version\":\"%s\",\"signalk-http\":\"http://%s/signalk/v1/api/\",\"signalk-ws\":\"ws://%s/signalk/v1/stream\"}},\"server\":{\"id\":\"%s\",\"version\":\"%s\"}}",
-                config_.identity.signalk_version ? config_.identity.signalk_version : "1.8.2",
-                host,
-                host,
-                config_.identity.server_name ? config_.identity.server_name : "signalk-mini",
-                config_.identity.server_version ? config_.identity.server_version : "0.1.0");
-            if (body_len <= 0 || static_cast<size_t>(body_len) >= sizeof(body)) {
+            SignalKJsonStreamWriter discovery(body, sizeof(body));
+            const bool body_ok = discovery.append_raw("{\"endpoints\":{\"v1\":{\"version\":") &&
+                discovery.append_quoted(config_.identity.signalk_version ? config_.identity.signalk_version : "1.8.2") &&
+                discovery.append_raw(",\"signalk-http\":") && discovery.append_quoted(http_url) &&
+                discovery.append_raw(",\"signalk-ws\":") && discovery.append_quoted(websocket_url) &&
+                discovery.append_raw("}},\"server\":{\"id\":") &&
+                discovery.append_quoted(config_.identity.server_name ? config_.identity.server_name : "signalk-mini") &&
+                discovery.append_raw(",\"version\":") &&
+                discovery.append_quoted(config_.identity.server_version ? config_.identity.server_version : "0.1.0") &&
+                discovery.append_raw("}}");
+            if (!body_ok || !discovery.ok()) {
                 return send_http_response(connection, "500 Internal Server Error", "application/json", "{\"message\":\"Discovery serialization failed\"}");
             }
             return send_http_response(connection, "200 OK", "application/json", body);
@@ -1402,8 +1499,13 @@ private:
 
     bool write_all(async_event_loop::IByteStream& stream, const uint8_t* data, size_t length) {
         if (!data || length == 0 || !stream.valid() || !stream.writable()) return false;
-        const int n = stream.write(data, length);
-        return n == static_cast<int>(length);
+        size_t offset = 0;
+        while (offset < length) {
+            const int n = stream.write(data + offset, length - offset);
+            if (n <= 0 || static_cast<size_t>(n) > length - offset) return false;
+            offset += static_cast<size_t>(n);
+        }
+        return true;
     }
 
     bool transmit_to_tcp_server_connections(ConnectionRegistry<MaxConnectionsPerConnector>& connections, const uint8_t* data, size_t length) {
