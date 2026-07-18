@@ -2,22 +2,16 @@
 
 namespace signalk_mini::signalk_path {
 
-inline constexpr char NavigationPositionLatitude[] = "navigation.position.value.latitude";
-inline constexpr char NavigationPositionLongitude[] = "navigation.position.value.longitude";
-inline constexpr char NavigationPositionAltitude[] = "navigation.position.value.altitude";
+inline constexpr char NavigationPosition[] = "navigation.position";
 inline constexpr char NavigationSpeedOverGround[] = "navigation.speedOverGround";
 inline constexpr char NavigationCourseOverGroundTrue[] = "navigation.courseOverGroundTrue";
 inline constexpr char NavigationVerticalSpeed[] = "navigation.verticalSpeed";
-inline constexpr char NavigationDateTimeTimeOfDay[] = "navigation.datetime.timeOfDay";
-inline constexpr char NavigationDateTimeDay[] = "navigation.datetime.day";
-inline constexpr char NavigationDateTimeMonth[] = "navigation.datetime.month";
-inline constexpr char NavigationDateTimeYear[] = "navigation.datetime.year";
+inline constexpr char NavigationDateTime[] = "navigation.datetime";
 inline constexpr char NavigationGnssMethodQuality[] = "navigation.gnss.methodQuality";
 inline constexpr char NavigationGnssFixValid[] = "navigation.gnss.fixValid";
 inline constexpr char NavigationGnssSatellites[] = "navigation.gnss.satellites";
 inline constexpr char NavigationGnssHorizontalDilution[] = "navigation.gnss.horizontalDilution";
 inline constexpr char NavigationGnssDifferentialReference[] = "navigation.gnss.differentialReference";
-inline constexpr char NavigationGnssDeclination[] = "navigation.gnss.declination";
 inline constexpr char NavigationGnssAntennaAltitude[] = "navigation.gnss.antennaAltitude";
 inline constexpr char NavigationGnssGeoidalSeparation[] = "navigation.gnss.geoidalSeparation";
 inline constexpr char NavigationGnssDifferentialAge[] = "navigation.gnss.differentialAge";
@@ -38,8 +32,7 @@ inline constexpr char NavigationHeadingTrue[] = "navigation.headingTrue";
 inline constexpr char NavigationHeadingMagnetic[] = "navigation.headingMagnetic";
 inline constexpr char NavigationMagneticVariation[] = "navigation.magneticVariation";
 inline constexpr char NavigationMagneticDeviation[] = "navigation.magneticDeviation";
-inline constexpr char NavigationAttitudePitch[] = "navigation.attitude.pitch";
-inline constexpr char NavigationAttitudeRoll[] = "navigation.attitude.roll";
+inline constexpr char NavigationAttitude[] = "navigation.attitude";
 inline constexpr char NavigationSpeedThroughWater[] = "navigation.speedThroughWater";
 inline constexpr char NavigationSpeedThroughWaterLongitudinal[] = "navigation.speedThroughWaterLongitudinal";
 inline constexpr char NavigationSpeedThroughWaterTransverse[] = "navigation.speedThroughWaterTransverse";
@@ -69,7 +62,6 @@ inline constexpr char NavigationCourseGreatCircleDestinationTime[] = "navigation
 inline constexpr char NavigationCourseGreatCircleTimeToGo[] = "navigation.courseGreatCircle.timeToGo";
 inline constexpr char NavigationCourseGreatCirclePreviousPointId[] = "navigation.courseGreatCircle.previousPoint.id";
 inline constexpr char NavigationCourseGreatCircleArrivalCircleRadius[] = "navigation.courseGreatCircle.arrivalCircleRadius";
-inline constexpr char NavigationAisTargets[] = "navigation.ais.targets";
 inline constexpr char NavigationAisOwnVessel[] = "navigation.ais.ownVessel";
 inline constexpr char NavigationAisDataLinkStatus[] = "navigation.ais.dataLinkStatus";
 
@@ -86,18 +78,15 @@ inline constexpr char EnvironmentOutsideTemperature[] = "environment.outside.tem
 inline constexpr char EnvironmentOutsideRelativeHumidity[] = "environment.outside.relativeHumidity";
 inline constexpr char EnvironmentOutsideAbsoluteHumidity[] = "environment.outside.absoluteHumidity";
 inline constexpr char EnvironmentOutsideDewPointTemperature[] = "environment.outside.dewPointTemperature";
-inline constexpr char EnvironmentCurrentSpeed[] = "environment.current.speed";
-inline constexpr char EnvironmentCurrentDirectionTrue[] = "environment.current.directionTrue";
-inline constexpr char EnvironmentCurrentDirectionMagnetic[] = "environment.current.directionMagnetic";
+inline constexpr char EnvironmentCurrent[] = "environment.current";
 inline constexpr char EnvironmentWaterTemperature[] = "environment.water.temperature";
 inline constexpr char EnvironmentDepthBelowTransducer[] = "environment.depth.belowTransducer";
 inline constexpr char EnvironmentDepthBelowKeel[] = "environment.depth.belowKeel";
 inline constexpr char EnvironmentDepthBelowSurface[] = "environment.depth.belowSurface";
-inline constexpr char EnvironmentDepthTransducerOffset[] = "environment.depth.transducerOffset";
+inline constexpr char EnvironmentDepthSurfaceToTransducer[] = "environment.depth.surfaceToTransducer";
 
 inline constexpr char SteeringRudderAngle[] = "steering.rudderAngle";
-inline constexpr char SteeringAutopilotMode[] = "steering.autopilot.mode";
-inline constexpr char SteeringAutopilotEnabled[] = "steering.autopilot.enabled";
+inline constexpr char SteeringAutopilotState[] = "steering.autopilot.state";
 inline constexpr char SteeringAutopilotHeadingMagnetic[] = "steering.autopilot.headingMagnetic";
 inline constexpr char SteeringAutopilotTargetHeadingMagnetic[] = "steering.autopilot.target.headingMagnetic";
 inline constexpr char SteeringAutopilotTargetHeadingTrue[] = "steering.autopilot.target.headingTrue";

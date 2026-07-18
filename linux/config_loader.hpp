@@ -103,6 +103,7 @@ private:
         const char* value = nullptr;
         if (config_lookup_string(file, "identity.server_name", &value)) config.identity.server_name = keep(value);
         if (config_lookup_string(file, "identity.server_version", &value)) config.identity.server_version = keep(value);
+        if (config_lookup_string(file, "identity.signalk_version", &value)) config.identity.signalk_version = keep(value);
         if (config_lookup_string(file, "identity.self", &value)) config.identity.self = keep(value);
     }
 
@@ -137,6 +138,8 @@ private:
         read_u32(s, "interval_us", config.publisher.interval_us);
         read_u16(s, "max_changes_per_tick", config.publisher.max_changes_per_tick);
         read_u16(s, "json_buffer_size", config.publisher.json_buffer_size);
+        read_bool(s, "send_current_values_on_connect", config.publisher.send_current_values_on_connect);
+        read_u32(s, "current_value_timeout_ms", config.publisher.current_value_timeout_ms);
         if (config_setting_lookup_string(s, "source_label", &value)) config.publisher.source_label = keep(value);
     }
 

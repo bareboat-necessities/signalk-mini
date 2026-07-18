@@ -35,6 +35,7 @@ const char* startup_error_to_string(signalk_mini::MiniSignalKServer<float>::Star
     case StartupError::None: return "none";
     case StartupError::InvalidSignalKPort: return "invalid Signal K port";
     case StartupError::InvalidSignalKMaxConnections: return "invalid Signal K max connections";
+    case StartupError::InvalidSignalKIdentity: return "invalid Signal K version or self identity";
     case StartupError::InvalidPublisherInterval: return "invalid publisher interval";
     case StartupError::InvalidConnectorList: return "invalid connector list";
     case StartupError::UnsupportedConnectorProtocol: return "unsupported connector protocol";
@@ -104,7 +105,8 @@ const char* default_config_text() {
         "identity = {\n"
         "  server_name = \"signalk-mini\";\n"
         "  server_version = \"0.1.0\";\n"
-        "  self = \"vessels.self\";\n"
+        "  signalk_version = \"1.8.2\";\n"
+        "  self = \"vessels.urn:mrn:signalk:uuid:00000000-0000-4000-8000-000000000001\";\n"
         "};\n"
         "\n"
         "signalk = {\n"
@@ -128,6 +130,8 @@ const char* default_config_text() {
         "  max_changes_per_tick = 32;\n"
         "  json_buffer_size = 512;\n"
         "  source_label = \"signalk-mini\";\n"
+        "  send_current_values_on_connect = true;\n"
+        "  current_value_timeout_ms = 0;\n"
         "};\n"
         "\n"
         "connectors = (\n"

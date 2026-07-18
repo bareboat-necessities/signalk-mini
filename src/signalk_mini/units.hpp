@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <time.h>
 
@@ -54,6 +55,34 @@ inline bool format_signalk_timestamp_utc(char* dst,
                              utc.tm_hour,
                              utc.tm_min,
                              utc.tm_sec);
+    return len == 24 && static_cast<size_t>(len) < dst_size;
+}
+
+inline bool format_signalk_datetime_utc(char* dst,
+                                        size_t dst_size,
+                                        int32_t year,
+                                        int32_t month,
+                                        int32_t day,
+                                        double seconds_of_day) {
+    if (!dst || dst_size < 25 || year < 1 || month < 1 || month > 12 ||
+        !(seconds_of_day >= 0.0 && seconds_of_day < 86401.0)) return false;
+    static constexpr int32_t DaysPerMonth[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    int32_t maximum_day = DaysPerMonth[month - 1];
+    const bool leap_year = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    if (month == 2 && leap_year) maximum_day = 29;
+    if (day < 1 || day > maximum_day) return false;
+    uint32_t millis_of_day = static_cast<uint32_t>(seconds_of_day * 1000.0 + 0.5);
+    if (millis_of_day >= 86400000u) millis_of_day = 86399999u;
+    const uint32_t hour = millis_of_day / 3600000u;
+    millis_of_day %= 3600000u;
+    const uint32_t minute = millis_of_day / 60000u;
+    millis_of_day %= 60000u;
+    const uint32_t second = millis_of_day / 1000u;
+    const uint32_t millis = millis_of_day % 1000u;
+    const int len = snprintf(dst, dst_size, "%04ld-%02ld-%02ldT%02lu:%02lu:%02lu.%03luZ",
+                             static_cast<long>(year), static_cast<long>(month), static_cast<long>(day),
+                             static_cast<unsigned long>(hour), static_cast<unsigned long>(minute),
+                             static_cast<unsigned long>(second), static_cast<unsigned long>(millis));
     return len == 24 && static_cast<size_t>(len) < dst_size;
 }
 

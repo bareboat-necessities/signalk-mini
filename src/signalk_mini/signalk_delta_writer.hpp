@@ -35,9 +35,21 @@ public:
         if (!dst || dst_size == 0 || !value.path) return 0;
         JsonDocument doc;
         JsonObject item = start_item(doc, source_label, value.path);
-        JsonObject object = item["value"].to<JsonObject>();
-        if (!write_object(model, value.object_kind, object)) return 0;
+        JsonVariant target = item["value"].to<JsonVariant>();
+        if (!write_complex_value(model, value.object_kind, target)) return 0;
         return serialize_delta(dst, dst_size, doc);
+    }
+
+    bool write_value(SignalKJsonStreamWriter& out,
+                     const ship_data_model::DataModel<Real>& model,
+                     const SignalKMappedValue<Real>& value) const {
+        if (value.kind != SignalKMappedValueKind::Object) {
+            return signalk_json_write_scalar_value(out, value.kind, value.number, value.boolean, value.text);
+        }
+        JsonDocument doc;
+        JsonVariant target = doc.to<JsonVariant>();
+        if (!write_complex_value(model, value.object_kind, target)) return false;
+        return out.append_json(target);
     }
 
 private:
@@ -364,6 +376,44 @@ private:
         return any;
     }
 
+    bool write_complex_value(const ship_data_model::DataModel<Real>& model, SignalKObjectKind kind, JsonVariant target) const {
+        if (kind == SignalKObjectKind::DateTime) {
+            const auto& fix = model.gnss.fix;
+            char timestamp[32];
+            if (!fix.date_year.valid || !fix.date_month.valid || !fix.date_day.valid || !fix.timestamp_s.valid ||
+                !format_signalk_datetime_utc(timestamp, sizeof(timestamp), fix.date_year.value, fix.date_month.value,
+                                             fix.date_day.value, static_cast<double>(fix.timestamp_s.value))) return false;
+            target.set(timestamp);
+            return true;
+        }
+
+        JsonObject object = target.to<JsonObject>();
+        if (kind == SignalKObjectKind::Position) {
+            const auto& fix = model.gnss.fix;
+            if (!fix.fix_lat_deg.valid && !fix.fix_lon_deg.valid && !fix.fix_alt_hae_m.valid) return false;
+            set(object, "latitude", fix.fix_lat_deg);
+            set(object, "longitude", fix.fix_lon_deg);
+            set(object, "altitude", fix.fix_alt_hae_m);
+            return true;
+        }
+        if (kind == SignalKObjectKind::Attitude) {
+            const auto& imu = model.ins.imu;
+            if (!imu.roll_deg.valid && !imu.pitch_deg.valid) return false;
+            set_rad(object, "roll", imu.roll_deg);
+            set_rad(object, "pitch", imu.pitch_deg);
+            return true;
+        }
+        if (kind == SignalKObjectKind::Current) {
+            const auto& sea = model.sea;
+            if (!sea.current_speed_kn.valid && !sea.current_direction_deg.valid && !sea.current_direction_magnetic_deg.valid) return false;
+            if (sea.current_speed_kn.valid) object["drift"] = knots_to_mps<Real>(sea.current_speed_kn.value);
+            if (sea.current_direction_deg.valid) object["setTrue"] = deg_to_rad<Real>(sea.current_direction_deg.value);
+            if (sea.current_direction_magnetic_deg.valid) object["setMagnetic"] = deg_to_rad<Real>(sea.current_direction_magnetic_deg.value);
+            return true;
+        }
+        return write_object(model, kind, object);
+    }
+
     bool write_object(const ship_data_model::DataModel<Real>& model, SignalKObjectKind kind, JsonObject object) const {
         const SignalKAisDeltaWriter<Real> ais;
         switch (kind) {
@@ -377,6 +427,10 @@ private:
         case SignalKObjectKind::Alerts: return write_alerts(model, object);
         case SignalKObjectKind::Mob: return write_mob(model, object);
         case SignalKObjectKind::LegacyComm: return write_legacy_comm(model, object);
+        case SignalKObjectKind::Position:
+        case SignalKObjectKind::Attitude:
+        case SignalKObjectKind::DateTime:
+        case SignalKObjectKind::Current:
         case SignalKObjectKind::None:
         default: return false;
         }

@@ -127,7 +127,8 @@ int main() {
     signalk_mini::SignalKMiniConfig config;
     config.identity.server_name = "integration-signalk-server";
     config.identity.server_version = "0.1-integration";
-    config.identity.self = "vessels.self";
+    config.identity.signalk_version = "1.8.2";
+    config.identity.self = "vessels.urn:mrn:signalk:uuid:11111111-2222-4333-8444-555555555555";
     config.signalk.host = "127.0.0.1";
     config.signalk.port = raw_port;
     config.signalk.websocket.enabled = true;
@@ -168,7 +169,10 @@ int main() {
                   "ws://127.0.0.1:%u/signalk/v1/stream",
                   static_cast<unsigned>(ws_port));
     REQUIRE(std::strcmp(doc["endpoints"]["v1"]["signalk-ws"] | "", expected_ws) == 0);
+    REQUIRE(std::strcmp(doc["endpoints"]["v1"]["version"] | "", "1.8.2") == 0);
+    REQUIRE(doc["endpoints"]["v1"]["signalk-http"].isNull());
     REQUIRE(std::strcmp(doc["server"]["id"] | "", "integration-signalk-server") == 0);
+    REQUIRE(std::strcmp(doc["server"]["version"] | "", "0.1-integration") == 0);
 
     Fd root_client = connect_loopback(ws_port, 3000);
     REQUIRE(root_client.valid());

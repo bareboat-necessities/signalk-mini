@@ -232,8 +232,10 @@ bool has_valid_hello(const char* text) {
     const DeserializationError err = deserializeJson(doc, text);
     REQUIRE(!err);
     REQUIRE(std::strcmp(doc["name"] | "", "integration-signalk-server") == 0);
-    REQUIRE(std::strcmp(doc["version"] | "", "0.1-integration") == 0);
-    REQUIRE(std::strcmp(doc["self"] | "", "vessels.self") == 0);
+    REQUIRE(std::strcmp(doc["version"] | "", "1.8.2") == 0);
+    REQUIRE(std::strcmp(doc["self"] | "", "vessels.urn:mrn:signalk:uuid:11111111-2222-4333-8444-555555555555") == 0);
+    const char* hello_timestamp = doc["timestamp"] | "";
+    REQUIRE(std::strlen(hello_timestamp) >= 20);
     JsonArray roles = doc["roles"].as<JsonArray>();
     REQUIRE(!roles.isNull());
     bool has_master = false;
@@ -261,7 +263,7 @@ bool has_clock_delta(const char* text) {
             const char* path = value["path"] | "";
             if (std::strcmp(path, "communication.server.clock") != 0) continue;
 
-            REQUIRE(std::strcmp(doc["context"] | "", "vessels.self") == 0);
+            REQUIRE(std::strcmp(doc["context"] | "", "vessels.urn:mrn:signalk:uuid:11111111-2222-4333-8444-555555555555") == 0);
             const char* timestamp = update["timestamp"] | "";
             const size_t timestamp_len = std::strlen(timestamp);
             REQUIRE(timestamp_len >= 20);
@@ -326,7 +328,8 @@ int main() {
     signalk_mini::SignalKMiniConfig config;
     config.identity.server_name = "integration-signalk-server";
     config.identity.server_version = "0.1-integration";
-    config.identity.self = "vessels.self";
+    config.identity.signalk_version = "1.8.2";
+    config.identity.self = "vessels.urn:mrn:signalk:uuid:11111111-2222-4333-8444-555555555555";
     config.signalk.host = "127.0.0.1";
     config.signalk.port = raw_port;
     config.signalk.max_connections = 2;

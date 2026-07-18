@@ -42,8 +42,9 @@ int main() {
     const uint8_t st_state[] = {0x84, 0x16, 0x40, 0x00, 0x42, 0x00, 0xfe, 0x01, 0x08};
     now_us += 1000;
     REQUIRE(input.feed_datagram(st_state, sizeof(st_state), 1, now_us));
-    REQUIRE(pop_path(store, "steering.autopilot.mode", mapped));
+    REQUIRE(pop_path(store, "steering.autopilot.state", mapped));
     REQUIRE(mapped.kind == signalk_mini::SignalKMappedValueKind::Text);
+    REQUIRE(std::strcmp(mapped.text, "auto") == 0);
 
     const uint8_t nav_to_wp[] = {0x85, 0xb5, 0x07, 0x01, 0x00, 0x05, 0x07, 0x00};
     now_us += 1000;

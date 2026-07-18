@@ -52,8 +52,14 @@
 namespace {
 
 constexpr size_t nmea_buffer_size = 160;
+char signalk_self_context[80]{};
 
 signalk_mini::SignalKMiniConfig make_config() {
+  const uint64_t chip_id = ESP.getEfuseMac();
+  signalk_mini::signalk_make_uuid_context(
+    signalk_self_context, sizeof(signalk_self_context),
+    0x534b4d494e490000ULL ^ chip_id,
+    0x41544f4d53335200ULL ^ (chip_id << 1));
   // MCU strategy: the sketch owns board-specific hardware I/O and feeds the
   // typed protocol facade directly. The core app owns Signal K TCP serving and
   // delta publishing only.
@@ -63,7 +69,8 @@ signalk_mini::SignalKMiniConfig make_config() {
     SIGNALK_SERVER_PORT,
     10000,
     32,
-    512);
+    512,
+    signalk_self_context);
 }
 
 signalk_mini::SignalKMiniConfig config = make_config();

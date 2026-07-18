@@ -52,8 +52,13 @@ int main() {
     REQUIRE(feed_and_pop("$GPBEC,123519,4807.038,N,01131.000,E,54.7,T,34.4,M,1.25,N,WPT2", "navigation.courseGreatCircle.nextPoint.distance", mapped, json, sizeof(json)));
     NEAR(mapped.number, 2315.0f, 1.0f);
 
-    REQUIRE(feed_and_pop("$IICUR,A,123.4,T,1.2,N", "environment.current.speed", mapped, json, sizeof(json)));
-    NEAR(mapped.number, 1.2f * 0.514444444f, 0.0001f);
+    REQUIRE(feed_and_pop("$IICUR,A,123.4,T,1.2,N", "environment.current", mapped, json, sizeof(json)));
+    REQUIRE(mapped.kind == signalk_mini::SignalKMappedValueKind::Object);
+    JsonDocument current_doc;
+    REQUIRE(!deserializeJson(current_doc, json));
+    JsonVariantConst current = current_doc["updates"][0]["values"][0]["value"];
+    NEAR(current["drift"].as<float>(), 1.2f * 0.514444444f, 0.0001f);
+    NEAR(current["setTrue"].as<float>(), 123.4f * 3.14159265358979323846f / 180.0f, 0.0001f);
 
     require_path_contains("!AIADS,ST01,SLOT,OK", "navigation.ais.dataLinkStatus", "SLOT");
     require_path_contains("!AIASD,1,1,SEQ,123456789,A,Safety text", "notifications.ais.safety", "Safety text");

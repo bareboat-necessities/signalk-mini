@@ -31,6 +31,8 @@
 #include "connection_registry.hpp"
 #include "nmea0183_input.hpp"
 #include "publisher.hpp"
+#include "signalk_full_model_writer.hpp"
+#include "signalk_identity.hpp"
 #include "seatalk_input.hpp"
 #include "ubx_input.hpp"
 #if !defined(ARDUINO)
@@ -196,6 +198,7 @@ public:
         None = 0,
         InvalidSignalKPort,
         InvalidSignalKMaxConnections,
+        InvalidSignalKIdentity,
         InvalidPublisherInterval,
         InvalidConnectorList,
         UnsupportedConnectorProtocol,
@@ -243,6 +246,11 @@ public:
     uint64_t dropped_change_count() const { return store_.dropped_change_count(); }
     uint64_t dropped_publish_count() const { return publisher_.dropped_publish_count(); }
     uint64_t published_delta_count() const { return publisher_.published_delta_count(); }
+    uint64_t published_snapshot_count() const { return publisher_.published_snapshot_count(); }
+    int write_full_model(char* dst, size_t dst_size) const {
+        SignalKFullModelWriter<Real> writer;
+        return writer.write(dst, dst_size, store_, config_, loop_.clock().micros());
+    }
     StartupError last_startup_error() const { return last_startup_error_; }
     size_t last_failed_connector_index() const { return last_failed_connector_index_; }
     uint32_t connector_start_failure_count() const { return connector_start_failure_count_; }
@@ -452,6 +460,10 @@ private:
 
     bool validate_config() {
         if (config_.signalk.port == 0) return set_startup_error(StartupError::InvalidSignalKPort, config_.connector_count);
+        if (!config_.identity.signalk_version || !config_.identity.signalk_version[0] ||
+            !signalk_valid_self_context(config_.identity.self)) {
+            return set_startup_error(StartupError::InvalidSignalKIdentity, config_.connector_count);
+        }
         if (config_.signalk.max_connections == 0 || config_.signalk.max_connections > MaxSignalKConnections) return set_startup_error(StartupError::InvalidSignalKMaxConnections, config_.connector_count);
         if (config_.signalk.websocket.enabled) {
             if (config_.signalk.websocket.port == 0) return set_startup_error(StartupError::InvalidSignalKPort, config_.connector_count);
@@ -493,11 +505,14 @@ private:
 
     int write_signal_k_hello(char* dst, size_t dst_size) const {
         SignalKHelloWriter writer;
+        char timestamp[32];
+        const char* timestamp_ptr = format_signalk_timestamp_utc(timestamp, sizeof(timestamp)) ? timestamp : nullptr;
         return writer.write(dst,
                             dst_size,
                             config_.identity.server_name,
-                            config_.identity.server_version,
-                            config_.identity.self);
+                            config_.identity.signalk_version,
+                            config_.identity.self,
+                            timestamp_ptr);
     }
 
     bool send_signal_k_hello(async_event_loop::ITcpConnection& connection) {
@@ -597,8 +612,8 @@ private:
         const int body_len = snprintf(
             body,
             sizeof(body),
-            "{\"endpoints\":{\"v1\":{\"signalk-http\":\"http://%s/signalk/v1/api/\",\"signalk-ws\":\"ws://%s/signalk/v1/stream\"}},\"server\":{\"id\":\"%s\",\"version\":\"%s\"}}",
-            host,
+            "{\"endpoints\":{\"v1\":{\"version\":\"%s\",\"signalk-ws\":\"ws://%s/signalk/v1/stream\"}},\"server\":{\"id\":\"%s\",\"version\":\"%s\"}}",
+            config_.identity.signalk_version ? config_.identity.signalk_version : "1.8.2",
             host,
             config_.identity.server_name ? config_.identity.server_name : "signalk-mini",
             config_.identity.server_version ? config_.identity.server_version : "0.1.0");
@@ -625,6 +640,67 @@ private:
                (resource[path_len] == '\0' || resource[path_len] == '?');
     }
 
+    enum class InitialStreamScope : uint8_t { None, Self, All };
+
+    static bool query_parameter_equals(const char* resource, const char* name, const char* expected) {
+        if (!resource || !name || !expected) return false;
+        const char* query = strchr(resource, '?');
+        if (!query) return false;
+        ++query;
+        const size_t name_len = strlen(name);
+        const size_t expected_len = strlen(expected);
+        while (*query) {
+            const char* end = strchr(query, '&');
+            if (!end) end = query + strlen(query);
+            const char* equals = static_cast<const char*>(memchr(query, '=', static_cast<size_t>(end - query)));
+            if (equals && static_cast<size_t>(equals - query) == name_len && strncmp(query, name, name_len) == 0) {
+                const char* value = equals + 1;
+                return static_cast<size_t>(end - value) == expected_len && strncmp(value, expected, expected_len) == 0;
+            }
+            query = *end ? end + 1 : end;
+        }
+        return false;
+    }
+
+    static InitialStreamScope websocket_initial_scope(const char* resource) {
+        if (query_parameter_equals(resource, "subscribe", "none")) return InitialStreamScope::None;
+        if (query_parameter_equals(resource, "subscribe", "all")) return InitialStreamScope::All;
+        return InitialStreamScope::Self;
+    }
+
+    static bool websocket_should_send_current_values(const char* resource) {
+        return !query_parameter_equals(resource, "sendCachedValues", "false");
+    }
+
+    struct TcpConnectionDeltaSink {
+        MiniSignalKServer& owner;
+        async_event_loop::ITcpConnection& connection;
+        void write_signal_k_delta(const char* json, size_t len) {
+            owner.write_all(connection, reinterpret_cast<const uint8_t*>(json), len);
+        }
+    };
+
+    struct WebSocketConnectionDeltaSink {
+        MiniSignalKServer& owner;
+        async_event_loop::ITcpConnection& connection;
+        void write_signal_k_delta(const char* json, size_t len) {
+            const size_t text_len = owner.signalk_text_len(json, len);
+            if (text_len) owner.signalk_websocket_protocol_.write_text(connection, json, text_len);
+        }
+    };
+
+    void send_current_values_tcp(async_event_loop::ITcpConnection& connection) {
+        update_server_clock_model(loop_.clock().micros());
+        TcpConnectionDeltaSink sink{*this, connection};
+        publisher_.publish_current(sink, loop_.clock().micros(), true);
+    }
+
+    void send_current_values_websocket(async_event_loop::ITcpConnection& connection, bool include_other_contexts) {
+        update_server_clock_model(loop_.clock().micros());
+        WebSocketConnectionDeltaSink sink{*this, connection};
+        publisher_.publish_current(sink, loop_.clock().micros(), include_other_contexts);
+    }
+
     struct SignalKConnectionHandler : async_event_loop::ITcpLineServerHandler {
         explicit SignalKConnectionHandler(MiniSignalKServer& owner_ref) : owner(owner_ref) {}
         MiniSignalKServer& owner;
@@ -649,7 +725,7 @@ private:
             if (!connections.allow_rx(connection)) return;
             if (owner.is_subscribe_all_line(line)) {
                 connections.set_allow_tx(connection, owner.config_.signalk.allow_tx);
-                owner.publish_server_clock();
+                if (owner.config_.signalk.allow_tx) owner.send_current_values_tcp(connection);
             }
         }
         void on_backpressure(async_event_loop::ITcpConnection& connection, const async_event_loop::TcpBackpressureInfo&) override {
@@ -679,12 +755,17 @@ private:
 
         void on_websocket_open(async_event_loop::ITcpConnection& connection,
                                const async_event_loop::TcpPeerInfo&,
-                               const async_event_loop::websocket::HandshakeRequest&) override {
+                               const async_event_loop::websocket::HandshakeRequest& request) override {
             if (connections.size() >= owner.config_.signalk.websocket.max_connections) {
                 connection.close();
                 return;
             }
-            ConnectionFlags flags{owner.config_.signalk.websocket.allow_rx, false};
+            const InitialStreamScope scope = owner.websocket_initial_scope(request.resource);
+            const bool active_subscription = scope != InitialStreamScope::None;
+            const bool tx_enabled = owner.config_.signalk.websocket.allow_tx && active_subscription;
+            const bool send_current = tx_enabled && owner.config_.publisher.send_current_values_on_connect &&
+                                      owner.websocket_should_send_current_values(request.resource);
+            ConnectionFlags flags{owner.config_.signalk.websocket.allow_rx, tx_enabled};
             if (!connections.add(connection, flags)) {
                 connection.close();
                 return;
@@ -692,7 +773,9 @@ private:
             if (!owner.send_signal_k_hello_websocket(connection)) {
                 connections.remove(connection);
                 connection.close();
+                return;
             }
+            if (send_current) owner.send_current_values_websocket(connection, scope == InitialStreamScope::All);
         }
 
         void on_websocket_text(async_event_loop::ITcpConnection& connection, const char* text, size_t len) override {
@@ -703,7 +786,7 @@ private:
             copy[copy_len] = '\0';
             if (owner.is_subscribe_all_text(copy)) {
                 connections.set_allow_tx(connection, owner.config_.signalk.websocket.allow_tx);
-                owner.publish_server_clock();
+                if (owner.config_.signalk.websocket.allow_tx) owner.send_current_values_websocket(connection, true);
             }
         }
 
@@ -1125,6 +1208,7 @@ private:
         server.source.value = ship_data_model::SensorSource::signalk;
         server.clock_s.set(server_clock_s(), now_us);
         server.last_update_us = now_us;
+        store_.record_current(ModelField::CommServerClockS, 0);
     }
 
     void publish_server_clock() {
@@ -1138,7 +1222,7 @@ private:
         const double clock_s = static_cast<double>(store_.model().comm.server.clock_s.value);
         const int len = signalk_write_scalar_delta(json,
                                                    sizeof(json),
-                                                   config_.identity.self ? config_.identity.self : "vessels.self",
+                                                   config_.identity.self ? config_.identity.self : "vessels.urn:mrn:signalk:uuid:00000000-0000-4000-8000-000000000001",
                                                    timestamp,
                                                    server_source_label(),
                                                    "communication.server.clock",

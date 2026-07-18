@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <ArduinoJson.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -56,6 +57,18 @@ public:
 
     bool append_bool(bool value) {
         return append_raw(value ? "true" : "false");
+    }
+
+    template<typename JsonValue>
+    bool append_json(const JsonValue& value) {
+        if (!ok_ || !dst_ || capacity_ == 0) return false;
+        const size_t required = measureJson(value);
+        if (pos_ + required >= capacity_) return fail();
+        const size_t written = serializeJson(value, dst_ + pos_, capacity_ - pos_);
+        if (written != required) return fail();
+        pos_ += written;
+        dst_[pos_] = '\0';
+        return true;
     }
 
     template<typename Real>
