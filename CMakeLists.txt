@@ -113,6 +113,10 @@ if(BUILD_TESTING)
   target_link_libraries(test_signalk_http_discovery PRIVATE signalk_mini_core Threads::Threads)
   add_test(NAME test_signalk_http_discovery COMMAND test_signalk_http_discovery)
 
+  add_executable(test_signalk_rest_api tests/test_signalk_rest_api.cpp)
+  target_link_libraries(test_signalk_rest_api PRIVATE signalk_mini_core Threads::Threads)
+  add_test(NAME test_signalk_rest_api COMMAND test_signalk_rest_api)
+
   add_executable(test_ubx_runtime tests/test_ubx_runtime.cpp)
   target_link_libraries(test_ubx_runtime PRIVATE signalk_mini_core Threads::Threads)
   add_test(NAME test_ubx_runtime COMMAND test_ubx_runtime)
