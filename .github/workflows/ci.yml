@@ -60,6 +60,7 @@ jobs:
             mcu/signalk-atoms3r
       - name: Compile generic ESP32 sketch
         run: |
+          set -o pipefail
           arduino-cli compile \
             --fqbn esp32:esp32:esp32:PartitionScheme=huge_app \
             --library . \
@@ -68,7 +69,14 @@ jobs:
             --library modules/nmea0183 \
             --library modules/seatalk \
             --library modules/ubx \
-            mcu/generic-esp32
+            mcu/generic-esp32 2>&1 | tee generic-esp32-compile.log
+      - name: Upload generic ESP32 compiler diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generic-esp32-compiler-diagnostics
+          path: generic-esp32-compile.log
+          if-no-files-found: error
       - name: Compile generic ESP32-S3 sketch
         run: |
           arduino-cli compile \
