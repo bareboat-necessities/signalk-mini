@@ -25,7 +25,7 @@ jobs:
           path: build/Testing/Temporary/
           if-no-files-found: ignore
 
-  arduino-esp32:
+  arduino-esp32s3:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -58,25 +58,6 @@ jobs:
             --library modules/seatalk \
             --library modules/ubx \
             mcu/signalk-atoms3r
-      - name: Compile generic ESP32 sketch
-        run: |
-          set -o pipefail
-          arduino-cli compile \
-            --fqbn esp32:esp32:esp32:PartitionScheme=huge_app \
-            --library . \
-            --library modules/async-event-loop \
-            --library modules/data-model \
-            --library modules/nmea0183 \
-            --library modules/seatalk \
-            --library modules/ubx \
-            mcu/generic-esp32 2>&1 | tee generic-esp32-compile.log
-      - name: Upload generic ESP32 compiler diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: generic-esp32-compiler-diagnostics
-          path: generic-esp32-compile.log
-          if-no-files-found: error
       - name: Compile generic ESP32-S3 sketch
         run: |
           arduino-cli compile \
