@@ -58,7 +58,7 @@ jobs:
             --library modules/seatalk \
             --library modules/ubx \
             mcu/signalk-atoms3r
-      - name: Compile generic ESP32-S3 sketch
+      - name: Compile Signal K ESP32-S3 sketch
         run: |
           arduino-cli compile \
             --fqbn esp32:esp32:esp32s3 \
@@ -68,4 +68,4 @@ jobs:
             --library modules/nmea0183 \
             --library modules/seatalk \
             --library modules/ubx \
-            mcu/generic-esp32s3
+            mcu/signalk-esp32s3

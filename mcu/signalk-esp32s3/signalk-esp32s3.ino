@@ -4,8 +4,8 @@
 #include <WiFi.h>
 #include <signalk_mini.hpp>
 
-#if __has_include("signalk_generic_esp32s3_wifi_secret.h")
-#include "signalk_generic_esp32s3_wifi_secret.h"
+#if __has_include("signalk_esp32s3_wifi_secret.h")
+#include "signalk_esp32s3_wifi_secret.h"
 #endif
 
 #ifndef SIGNALK_WIFI_SSID
@@ -60,8 +60,8 @@ signalk_mini::SignalKMiniConfig make_config() {
     0x534b4d494e490000ULL ^ chip_id,
     0x47454e4553335333ULL ^ (chip_id << 1));
   return signalk_mini::make_sketch_owned_io_config(
-    "signalk-mini-generic-esp32s3",
-    "generic-esp32s3",
+    "signalk-mini-esp32s3",
+    "signalk-esp32s3",
     SIGNALK_SERVER_PORT,
     10000,
     32,
@@ -203,7 +203,7 @@ void setup() {
   Serial.begin(115200);
   delay(100);
 
-  Serial.println("signalk-mini generic ESP32-S3 boot");
+  Serial.println("signalk-mini ESP32-S3 boot");
 
   begin_wifi();
   if (setup_failed) return;
