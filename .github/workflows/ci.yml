@@ -61,7 +61,7 @@ jobs:
       - name: Compile generic ESP32 sketch
         run: |
           arduino-cli compile \
-            --fqbn esp32:esp32:esp32 \
+            --fqbn esp32:esp32:esp32:PartitionScheme=huge_app \
             --library . \
             --library modules/async-event-loop \
             --library modules/data-model \
