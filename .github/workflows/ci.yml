@@ -25,7 +25,7 @@ jobs:
           path: build/Testing/Temporary/
           if-no-files-found: ignore
 
-  arduino-atoms3r:
+  arduino-esp32:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -58,3 +58,25 @@ jobs:
             --library modules/seatalk \
             --library modules/ubx \
             mcu/signalk-atoms3r
+      - name: Compile generic ESP32 sketch
+        run: |
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32 \
+            --library . \
+            --library modules/async-event-loop \
+            --library modules/data-model \
+            --library modules/nmea0183 \
+            --library modules/seatalk \
+            --library modules/ubx \
+            mcu/generic-esp32
+      - name: Compile generic ESP32-S3 sketch
+        run: |
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32s3 \
+            --library . \
+            --library modules/async-event-loop \
+            --library modules/data-model \
+            --library modules/nmea0183 \
+            --library modules/seatalk \
+            --library modules/ubx \
+            mcu/generic-esp32s3
