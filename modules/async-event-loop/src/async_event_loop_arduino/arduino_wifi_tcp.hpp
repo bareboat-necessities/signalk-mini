@@ -80,21 +80,9 @@ public:
             if (n == 0) {
                 break;
             }
-
-#if defined(ESP32) || defined(ESP8266)
-            const int writable = client_.availableForWrite();
-            if (writable <= 0) {
-                break;
-            }
-            if (n > static_cast<size_t>(writable)) {
-                n = static_cast<size_t>(writable);
-            }
-#else
             if (n > tx_flush_chunk) {
                 n = tx_flush_chunk;
             }
-#endif
-
             const size_t written = client_.write(tx_ + tx_head_, n);
             if (written == 0) {
                 break;
