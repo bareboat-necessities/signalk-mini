@@ -30,15 +30,15 @@
 #endif
 
 #ifndef SIGNALK_NMEA_BAUD
-#define SIGNALK_NMEA_BAUD 4800
+#define SIGNALK_NMEA_BAUD 9600  // GPS NMEA
 #endif
 
 #ifndef SIGNALK_NMEA_RX_PIN
-#define SIGNALK_NMEA_RX_PIN -1
+#define SIGNALK_NMEA_RX_PIN -1  // 1 - for atomS3R Uart Port.A
 #endif
 
 #ifndef SIGNALK_NMEA_TX_PIN
-#define SIGNALK_NMEA_TX_PIN -1
+#define SIGNALK_NMEA_TX_PIN -1  // 2 - for atomS3R Uart Port.A
 #endif
 
 #ifndef SIGNALK_STATUS_INTERVAL_MS
