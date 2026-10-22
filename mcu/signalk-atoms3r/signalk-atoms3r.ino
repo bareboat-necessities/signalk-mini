@@ -172,8 +172,16 @@ void begin_nmea_uart() {
 void publish_nmea_line(const char* line) {
   if (!line || !*line) return;
   ++nmea_lines_seen;
-  if (app.nmea0183().feed_line(line, signalk_mini::SourceId(1), static_cast<uint64_t>(micros()), true)) {
+  static int rejected_logged = 0;
+  if (app.nmea0183().feed_line(
+      line,
+      signalk_mini::SourceId(1),
+      static_cast<uint64_t>(micros()),
+      true)) {
     ++nmea_lines_accepted;
+  } else if (rejected_logged++ < 10) {
+    Serial.print("Rejected NMEA: ");
+    Serial.println(line);
   }
 }
 
