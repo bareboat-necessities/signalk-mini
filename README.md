@@ -14,12 +14,19 @@ The main project code is split under `src/signalk_mini/`.
 
 The mini server base is in `signalk_mini/server.hpp`. It has one event loop, one mandatory main Signal K TCP server, connector configuration, runtime connection registries, backpressure handling, NMEA line input, typed model updates, and Signal K delta publishing.
 
+`MiniSignalKServer` in `signalk_mini/server.hpp` owns the event loop, typed model store and publisher, validates configuration, and delegates to:
+
+- `signalk_stream_server.hpp`: Signal K TCP and WebSocket stream listeners, hello, subscribe handling, current-value snapshots and delta fan-out
+- `signalk_http.hpp`: read-only HTTP endpoints on the WebSocket listener (root page, discovery, REST API)
+- `connector_runtime.hpp`: configured connectors, transports, reconnect backoff, protocol input and SeaTalk transmit
+
 Project direction:
 
 - strongly typed internal data model, not Signal K as store
 - Signal K as an output adapter layer
 - `template<typename Real>` through core paths
 - unit suffixes preserved in data model field names
+- latitude/longitude always stored as `double` (`ship_data_model::Coordinate`), even when `Real` is `float`
 - ArduinoJson v7 at the JSON/protocol boundary
 - Linux daemon configuration uses libconfig `.conf`, not JSON
 
@@ -346,8 +353,13 @@ The AtomS3R sketch uses this mode. Core UDP/TCP/serial connector runtime support
 ```bash
 cmake -S . -B build
 cmake --build build --parallel
-ctest --test-dir build --output-on-failure
+ctest --test-dir build --output-on-failure --parallel "$(nproc)"
 ```
+
+CMake options used by CI:
+
+- `-DSIGNALK_MINI_STRICT_WARNINGS=ON`: build with `-Wall -Wextra -Werror`
+- `-DSIGNALK_MINI_SANITIZE=ON`: build with AddressSanitizer and UndefinedBehaviorSanitizer
 
 Linux build dependencies: libevent, libconfig, pkg-config.
 
