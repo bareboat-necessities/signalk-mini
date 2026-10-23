@@ -5,9 +5,20 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(SIGNALK_MINI_STRICT_WARNINGS "Build project code with -Wall -Wextra -Werror" OFF)
+option(SIGNALK_MINI_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+
 include(FetchContent)
 FetchContent_Declare(ArduinoJson GIT_REPOSITORY https://github.com/bblanchon/ArduinoJson.git GIT_TAG v7.4.3)
 FetchContent_MakeAvailable(ArduinoJson)
+
+if(SIGNALK_MINI_STRICT_WARNINGS)
+  add_compile_options(-Wall -Wextra -Werror)
+endif()
+if(SIGNALK_MINI_SANITIZE)
+  add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=address,undefined)
+endif()
 
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
@@ -62,6 +73,8 @@ if(BUILD_TESTING)
   target_compile_definitions(test_linux_default_config_startup PRIVATE SIGNALK_MINI_BINARY="$<TARGET_FILE:signalk-mini>")
   add_dependencies(test_linux_default_config_startup signalk-mini)
   add_test(NAME test_linux_default_config_startup COMMAND test_linux_default_config_startup)
+  # Starts the real binary on the fixed default ports (20223, 3001, UDP 10110).
+  set_tests_properties(test_linux_default_config_startup PROPERTIES RUN_SERIAL TRUE)
 
   add_signalk_mini_test(test_nmea_parser_span tests/test_nmea_parser_span.cpp)
   add_signalk_mini_test(test_nmea_tokenizer_examples tests/test_nmea_tokenizer_examples.cpp)

@@ -211,6 +211,7 @@ void test_udp_connector() {
     connector.transport.udp.listen_port = udp_port;
 
     signalk_mini::SignalKMiniConfig config;
+    config.signalk.websocket.enabled = false;
     config.signalk.host = "127.0.0.1";
     config.signalk.port = signalk_port;
     config.connectors = &connector;
@@ -239,6 +240,7 @@ void test_tcp_server_connector() {
     connector.transport.tcp_server.port = seatalk_port;
 
     signalk_mini::SignalKMiniConfig config;
+    config.signalk.websocket.enabled = false;
     config.signalk.host = "127.0.0.1";
     config.signalk.port = signalk_port;
     config.connectors = &connector;

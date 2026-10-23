@@ -60,7 +60,7 @@ public:
 
     void subscribe_all() {
         count_ = 1;
-        memset(entries_, 0, sizeof(entries_));
+        clear_entries();
         entries_[0].path[0] = '*';
         entries_[0].path[1] = '\0';
         entries_[0].timing = SubscriptionTiming{};
@@ -68,7 +68,7 @@ public:
 
     void unsubscribe_all() {
         count_ = 0;
-        memset(entries_, 0, sizeof(entries_));
+        clear_entries();
     }
 
     size_t size() const { return count_; }
@@ -111,6 +111,10 @@ public:
     }
 
 private:
+    void clear_entries() {
+        for (auto& entry : entries_) entry = SignalKSubscription<MaxPathLength>{};
+    }
+
     static bool supported_context(const char* context) {
         return context && (strcmp(context, "vessels.self") == 0 || strcmp(context, "*") == 0);
     }
