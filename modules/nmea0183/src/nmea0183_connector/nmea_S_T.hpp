@@ -52,11 +52,12 @@ bool apply_smv(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     if (parse_utc_time_of_day_s(sentence.field(2), value)) {
         rec.utc_time_s.set(static_cast<Real>(value), now_us);
     }
-    if (parse_lat_lon(sentence.field(3), sentence.field(4), value)) {
-        rec.latitude_deg.set(static_cast<Real>(value), now_us);
+    double coord_deg = 0.0;
+    if (parse_lat_lon(sentence.field(3), sentence.field(4), coord_deg)) {
+        rec.latitude_deg.set(coord_deg, now_us);
     }
-    if (parse_lat_lon(sentence.field(5), sentence.field(6), value)) {
-        rec.longitude_deg.set(static_cast<Real>(value), now_us);
+    if (parse_lat_lon(sentence.field(5), sentence.field(6), coord_deg)) {
+        rec.longitude_deg.set(coord_deg, now_us);
     }
     nmea_copy_span(rec.event_type, sizeof(rec.event_type), sentence.field(7));
     if (sentence.field_count > 8) {
@@ -171,11 +172,12 @@ bool apply_tll(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     if (parse_int32(sentence.field(0), n)) {
         model.ais.tracked_target.target_number.set(n, now_us);
     }
-    if (parse_lat_lon(sentence.field(1), sentence.field(2), v)) {
-        model.ais.tracked_target.latitude_deg.set(static_cast<Real>(v), now_us);
+    double coord_deg = 0.0;
+    if (parse_lat_lon(sentence.field(1), sentence.field(2), coord_deg)) {
+        model.ais.tracked_target.latitude_deg.set(coord_deg, now_us);
     }
-    if (parse_lat_lon(sentence.field(3), sentence.field(4), v)) {
-        model.ais.tracked_target.longitude_deg.set(static_cast<Real>(v), now_us);
+    if (parse_lat_lon(sentence.field(3), sentence.field(4), coord_deg)) {
+        model.ais.tracked_target.longitude_deg.set(coord_deg, now_us);
     }
     nmea_copy_span(model.ais.tracked_target.target_name, sizeof(model.ais.tracked_target.target_name), sentence.field(5));
     if (parse_utc_time_of_day_s(sentence.field(6), v)) {
@@ -270,11 +272,12 @@ bool apply_trf(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
         model.nav.transit_fix.utc_time_s.set(static_cast<Real>(value), now_us);
     }
     nmea_copy_span(model.nav.transit_fix.date_ddmmyy, sizeof(model.nav.transit_fix.date_ddmmyy), sentence.field(1));
-    if (parse_lat_lon(sentence.field(2), sentence.field(3), value)) {
-        model.nav.transit_fix.latitude_deg.set(static_cast<Real>(value), now_us);
+    double coord_deg = 0.0;
+    if (parse_lat_lon(sentence.field(2), sentence.field(3), coord_deg)) {
+        model.nav.transit_fix.latitude_deg.set(coord_deg, now_us);
     }
-    if (parse_lat_lon(sentence.field(4), sentence.field(5), value)) {
-        model.nav.transit_fix.longitude_deg.set(static_cast<Real>(value), now_us);
+    if (parse_lat_lon(sentence.field(4), sentence.field(5), coord_deg)) {
+        model.nav.transit_fix.longitude_deg.set(coord_deg, now_us);
     }
     if (parse_real(sentence.field(6), value)) {
         model.nav.transit_fix.elevation_angle_deg.set(static_cast<Real>(value), now_us);

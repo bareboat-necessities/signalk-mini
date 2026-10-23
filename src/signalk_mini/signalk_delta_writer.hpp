@@ -43,9 +43,7 @@ public:
     bool write_value(SignalKJsonStreamWriter& out,
                      const ship_data_model::DataModel<Real>& model,
                      const SignalKMappedValue<Real>& value) const {
-        if (value.kind != SignalKMappedValueKind::Object) {
-            return signalk_json_write_scalar_value(out, value.kind, value.number, value.boolean, value.text);
-        }
+        if (value.kind != SignalKMappedValueKind::Object) return signalk_json_write_mapped_scalar(out, value);
         JsonDocument doc;
         JsonVariant target = doc.to<JsonVariant>();
         if (!write_complex_value(model, value.object_kind, target)) return false;
@@ -66,6 +64,9 @@ private:
 
     int write_scalar(char* dst, size_t dst_size, const char* source_label, const SignalKMappedValue<Real>& value) const {
         if (!dst || dst_size == 0 || !value.path) return 0;
+        if (value.kind == SignalKMappedValueKind::Number && value.has_coordinate) {
+            return signalk_write_scalar_delta(dst, dst_size, source_label, value.path, value.kind, value.coordinate, false, nullptr);
+        }
         return signalk_write_scalar_delta(dst,
                                           dst_size,
                                           source_label,

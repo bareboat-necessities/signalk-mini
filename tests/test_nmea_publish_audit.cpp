@@ -29,6 +29,12 @@ static bool feed_and_pop(const char* line,
         const int len = writer.write_mapped(json, json_size, "audit", store.model(), mapped);
         REQUIRE(len > 0);
         found = mapped;
+        // mapped.text points into the local store; keep a copy that outlives it.
+        static char text_copy[128];
+        if (mapped.text) {
+            std::snprintf(text_copy, sizeof(text_copy), "%s", mapped.text);
+            found.text = text_copy;
+        }
         return true;
     }
 

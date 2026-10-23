@@ -179,7 +179,7 @@ static bool inmarsat_cstr_has_unknown_char(const char* text) {
     return false;
 }
 
-static bool inmarsat_parse_safetynet_lat_lon(NmeaSpan magnitude, NmeaSpan hemisphere, float& out_deg) {
+static bool inmarsat_parse_safetynet_lat_lon(NmeaSpan magnitude, NmeaSpan hemisphere, double& out_deg) {
     if (magnitude.empty() || hemisphere.empty()) return false;
     const char h = hemisphere[0];
     const bool lon = h == 'E' || h == 'W';
@@ -189,7 +189,7 @@ static bool inmarsat_parse_safetynet_lat_lon(NmeaSpan magnitude, NmeaSpan hemisp
     if (magnitude.length <= deg_digits) {
         int32_t deg = 0;
         if (!parse_int32(magnitude, deg)) return false;
-        out_deg = static_cast<float>(deg);
+        out_deg = static_cast<double>(deg);
         if (h == 'S' || h == 'W') out_deg = -out_deg;
         return true;
     }
@@ -368,13 +368,13 @@ bool apply_safetynet_sm3_header(const NmeaSentence& sentence,
                                 ship_data_model::SensorSource source) {
     if (sentence.field_count < 18) { last_error_ = "short SM3"; return false; }
     if (!parse_inmarsat_safetynet_common_header(sentence, rec, now_us, source, "circular_area")) return false;
-    float value = 0.0f;
-    if (inmarsat_parse_safetynet_lat_lon(sentence.field(13), sentence.field(14), value)) {
-        rec.circular_center_lat_deg = value;
+    double coord_deg = 0.0;
+    if (inmarsat_parse_safetynet_lat_lon(sentence.field(13), sentence.field(14), coord_deg)) {
+        rec.circular_center_lat_deg = coord_deg;
         rec.has_circular_center = true;
     }
-    if (inmarsat_parse_safetynet_lat_lon(sentence.field(15), sentence.field(16), value)) {
-        rec.circular_center_lon_deg = value;
+    if (inmarsat_parse_safetynet_lat_lon(sentence.field(15), sentence.field(16), coord_deg)) {
+        rec.circular_center_lon_deg = coord_deg;
         rec.has_circular_center = rec.has_circular_center && true;
     } else {
         rec.has_circular_center = false;
@@ -393,13 +393,13 @@ bool apply_safetynet_sm4_header(const NmeaSentence& sentence,
                                 ship_data_model::SensorSource source) {
     if (sentence.field_count < 19) { last_error_ = "short SM4"; return false; }
     if (!parse_inmarsat_safetynet_common_header(sentence, rec, now_us, source, "rectangular_area")) return false;
-    float value = 0.0f;
-    if (inmarsat_parse_safetynet_lat_lon(sentence.field(13), sentence.field(14), value)) {
-        rec.rectangle_sw_lat_deg = value;
+    double coord_deg = 0.0;
+    if (inmarsat_parse_safetynet_lat_lon(sentence.field(13), sentence.field(14), coord_deg)) {
+        rec.rectangle_sw_lat_deg = coord_deg;
         rec.has_rectangle_sw = true;
     }
-    if (inmarsat_parse_safetynet_lat_lon(sentence.field(15), sentence.field(16), value)) {
-        rec.rectangle_sw_lon_deg = value;
+    if (inmarsat_parse_safetynet_lat_lon(sentence.field(15), sentence.field(16), coord_deg)) {
+        rec.rectangle_sw_lon_deg = coord_deg;
         rec.has_rectangle_sw = rec.has_rectangle_sw && true;
     } else {
         rec.has_rectangle_sw = false;
@@ -452,13 +452,13 @@ bool commit_inmarsat_safetynet_message(Model& model, uint64_t now_us) {
     nmea_copy_cstr(dst.coastal_warning_subject_label, sizeof(dst.coastal_warning_subject_label), inmarsat_coastal_subject_label(rec.coastal_warning_subject));
     dst.coastal_warning_subject_mandatory = rec.coastal_warning_subject == 'A' || rec.coastal_warning_subject == 'B' || rec.coastal_warning_subject == 'D';
     if (rec.has_circular_center) {
-        dst.circular_center_lat_deg.set(static_cast<Real>(rec.circular_center_lat_deg), now_us);
-        dst.circular_center_lon_deg.set(static_cast<Real>(rec.circular_center_lon_deg), now_us);
+        dst.circular_center_lat_deg.set(rec.circular_center_lat_deg, now_us);
+        dst.circular_center_lon_deg.set(rec.circular_center_lon_deg, now_us);
     }
     if (rec.has_circular_radius) dst.circular_radius_nmi.set(rec.circular_radius_nmi, now_us);
     if (rec.has_rectangle_sw) {
-        dst.rectangle_sw_lat_deg.set(static_cast<Real>(rec.rectangle_sw_lat_deg), now_us);
-        dst.rectangle_sw_lon_deg.set(static_cast<Real>(rec.rectangle_sw_lon_deg), now_us);
+        dst.rectangle_sw_lat_deg.set(rec.rectangle_sw_lat_deg, now_us);
+        dst.rectangle_sw_lon_deg.set(rec.rectangle_sw_lon_deg, now_us);
     }
     if (rec.has_rectangle_extent) {
         dst.rectangle_extent_lat_deg.set(rec.rectangle_extent_lat_deg, now_us);

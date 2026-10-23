@@ -119,6 +119,7 @@ void test_udp_binary_and_nmea_tx() {
     connectors[1].transport.udp.remote_port = nmea_port;
 
     signalk_mini::SignalKMiniConfig config;
+    config.signalk.websocket.enabled = false;
     config.signalk.host = "127.0.0.1";
     config.signalk.port = signalk_port;
     config.connectors = connectors;

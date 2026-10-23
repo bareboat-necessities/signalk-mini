@@ -50,8 +50,8 @@ struct WaypointNavigationData {
     Stamped<Real> origin_elapsed_time_s;
     Stamped<Real> destination_utc_time_s;
     Stamped<Real> destination_time_remaining_s;
-    Stamped<Real> latitude_deg;
-    Stamped<Real> longitude_deg;
+    Stamped<Coordinate> latitude_deg;
+    Stamped<Coordinate> longitude_deg;
     Stamped<Real> bearing_true_deg;
     Stamped<Real> bearing_magnetic_deg;
     Stamped<Real> distance_nmi;
@@ -83,8 +83,8 @@ struct RmbData {
     char origin_id[16] = {0};
     char destination_id[16] = {0};
     Stamped<Real> xte_nmi;
-    Stamped<Real> destination_lat_deg;
-    Stamped<Real> destination_lon_deg;
+    Stamped<Coordinate> destination_lat_deg;
+    Stamped<Coordinate> destination_lon_deg;
     Stamped<Real> range_nmi;
     Stamped<Real> bearing_deg;
     Stamped<Real> closing_velocity_kn;

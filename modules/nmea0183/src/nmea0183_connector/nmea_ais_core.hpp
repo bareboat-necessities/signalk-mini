@@ -172,18 +172,18 @@ void ais_copy_text(char* out, size_t out_size, const char* payload, size_t paylo
     out[n] = '\0';
 }
 
-bool ais_position_deg(int32_t raw, bool longitude, Real& out_deg) const {
+bool ais_position_deg(int32_t raw, bool longitude, ship_data_model::Coordinate& out_deg) const {
     const int32_t unavailable = longitude ? 108600000 : 54600000;
     const int32_t max_abs = longitude ? 108000000 : 54000000;
     if (raw == unavailable || raw > max_abs || raw < -max_abs) return false;
-    out_deg = static_cast<Real>(static_cast<float>(raw) * AIS_POSITION_1_10000_MIN_TO_DEG);
+    out_deg = static_cast<ship_data_model::Coordinate>(raw) / 600000.0;
     return true;
 }
 
-bool ais_long_range_position_deg(int32_t raw, bool longitude, Real& out_deg) const {
+bool ais_long_range_position_deg(int32_t raw, bool longitude, ship_data_model::Coordinate& out_deg) const {
     const int32_t max_abs = longitude ? 108000 : 54000;
     if (raw > max_abs || raw < -max_abs) return false;
-    out_deg = static_cast<Real>(static_cast<float>(raw) * AIS_POSITION_1_10_MIN_TO_DEG);
+    out_deg = static_cast<ship_data_model::Coordinate>(raw) / 600.0;
     return true;
 }
 
@@ -316,8 +316,8 @@ bool ais_parse_position_report(const char* payload,
         }
         if (sog_raw < AIS_SOG_NOT_AVAILABLE) out.speed_over_ground_kn.set(static_cast<Real>(static_cast<float>(sog_raw) * AIS_TENTHS_SCALE), now_us);
         out.position_accuracy = accuracy;
-        Real lon = Real{};
-        Real lat = Real{};
+        ship_data_model::Coordinate lon = 0.0;
+        ship_data_model::Coordinate lat = 0.0;
         if (ais_position_deg(lon_raw, true, lon)) out.longitude_deg.set(lon, now_us);
         if (ais_position_deg(lat_raw, false, lat)) out.latitude_deg.set(lat, now_us);
         if (cog_raw < AIS_COG_NOT_AVAILABLE) out.course_over_ground_deg.set(static_cast<Real>(static_cast<float>(cog_raw) * AIS_TENTHS_SCALE), now_us);
@@ -336,8 +336,8 @@ bool ais_parse_position_report(const char* payload,
         if (!ok) return false;
         if (sog_raw < AIS_SOG_NOT_AVAILABLE) out.speed_over_ground_kn.set(static_cast<Real>(static_cast<float>(sog_raw) * AIS_TENTHS_SCALE), now_us);
         out.position_accuracy = accuracy;
-        Real lon = Real{};
-        Real lat = Real{};
+        ship_data_model::Coordinate lon = 0.0;
+        ship_data_model::Coordinate lat = 0.0;
         if (ais_position_deg(lon_raw, true, lon)) out.longitude_deg.set(lon, now_us);
         if (ais_position_deg(lat_raw, false, lat)) out.latitude_deg.set(lat, now_us);
         if (cog_raw < AIS_COG_NOT_AVAILABLE) out.course_over_ground_deg.set(static_cast<Real>(static_cast<float>(cog_raw) * AIS_TENTHS_SCALE), now_us);
@@ -376,8 +376,8 @@ bool ais_parse_sar_aircraft_position(const char* payload,
     if (altitude < AIS_ALTITUDE_NOT_AVAILABLE) out.altitude_m.set(altitude, now_us);
     if (sog_raw < AIS_SOG_NOT_AVAILABLE) out.speed_over_ground_kn.set(static_cast<Real>(static_cast<float>(sog_raw) * AIS_TENTHS_SCALE), now_us);
     out.position_accuracy = accuracy;
-    Real lon = Real{};
-    Real lat = Real{};
+    ship_data_model::Coordinate lon = 0.0;
+    ship_data_model::Coordinate lat = 0.0;
     if (ais_position_deg(lon_raw, true, lon)) out.longitude_deg.set(lon, now_us);
     if (ais_position_deg(lat_raw, false, lat)) out.latitude_deg.set(lat, now_us);
     if (cog_raw < AIS_COG_NOT_AVAILABLE) out.course_over_ground_deg.set(static_cast<Real>(static_cast<float>(cog_raw) * AIS_TENTHS_SCALE), now_us);
@@ -433,8 +433,8 @@ bool ais_parse_base_station(const char* payload,
     out.minute.set(minute, now_us);
     out.second.set(second, now_us);
     out.position_accuracy = accuracy;
-    Real lon = Real{};
-    Real lat = Real{};
+    ship_data_model::Coordinate lon = 0.0;
+    ship_data_model::Coordinate lat = 0.0;
     if (ais_position_deg(lon_raw, true, lon)) out.longitude_deg.set(lon, now_us);
     if (ais_position_deg(lat_raw, false, lat)) out.latitude_deg.set(lat, now_us);
     out.epfd_type.set(epfd, now_us);
@@ -593,8 +593,8 @@ bool ais_parse_aid_to_navigation(const char* payload,
     out.aid_type.set(aid_type, now_us);
     ais_copy_text(out.name, sizeof(out.name), payload, payload_len, 43, 20);
     out.position_accuracy = accuracy;
-    Real lon = Real{};
-    Real lat = Real{};
+    ship_data_model::Coordinate lon = 0.0;
+    ship_data_model::Coordinate lat = 0.0;
     if (ais_position_deg(lon_raw, true, lon)) out.longitude_deg.set(lon, now_us);
     if (ais_position_deg(lat_raw, false, lat)) out.latitude_deg.set(lat, now_us);
     out.dimension_to_bow_m.set(bow, now_us);
@@ -647,8 +647,8 @@ bool ais_parse_long_range_broadcast(const char* payload,
     out.navigation_status.set(nav_status, now_us);
     out.position_accuracy = accuracy;
     out.raim = raim;
-    Real lon = Real{};
-    Real lat = Real{};
+    ship_data_model::Coordinate lon = 0.0;
+    ship_data_model::Coordinate lat = 0.0;
     if (ais_long_range_position_deg(lon_raw, true, lon)) out.longitude_deg.set(lon, now_us);
     if (ais_long_range_position_deg(lat_raw, false, lat)) out.latitude_deg.set(lat, now_us);
     if (sog_raw < AIS_LONG_RANGE_SOG_NOT_AVAILABLE) out.speed_over_ground_kn.set(static_cast<Real>(sog_raw), now_us);

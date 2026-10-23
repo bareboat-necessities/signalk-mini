@@ -176,6 +176,9 @@ void mark_seatalk_changes(ModelStore<Real, QueueCapacity>& store,
         store.mark_changed(ModelField::RouteApbArrivalCircleEntered, source_id, now_us);
         store.mark_changed(ModelField::RouteApbPerpendicularPassed, source_id, now_us);
         break;
+
+    case Kind::none:
+        break;
     }
 }
 

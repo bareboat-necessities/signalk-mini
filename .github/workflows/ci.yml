@@ -6,22 +6,36 @@ on:
 
 jobs:
   linux:
+    name: linux (${{ matrix.name }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: debug
+            cmake_args: ""
+          - name: strict-warnings
+            cmake_args: "-DSIGNALK_MINI_STRICT_WARNINGS=ON"
+          - name: asan-ubsan
+            cmake_args: "-DSIGNALK_MINI_SANITIZE=ON"
+    env:
+      ASAN_OPTIONS: detect_stack_use_after_return=1:strict_string_checks=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
     steps:
       - uses: actions/checkout@v4
       - name: Install Linux dependencies
         run: sudo apt-get update && sudo apt-get install -y libevent-dev libconfig-dev pkg-config
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug ${{ matrix.cmake_args }}
       - name: Build
         run: cmake --build build --parallel
       - name: Test
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build --output-on-failure --parallel "$(nproc)"
       - name: Upload CTest diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: ctest-diagnostics
+          name: ctest-diagnostics-${{ matrix.name }}
           path: build/Testing/Temporary/
           if-no-files-found: ignore
 

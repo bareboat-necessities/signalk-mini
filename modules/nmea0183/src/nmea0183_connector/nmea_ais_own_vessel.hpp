@@ -23,10 +23,10 @@ bool ais_enough_bits(size_t payload_len, int32_t fill_bits, size_t bit_count) co
     return total - static_cast<size_t>(fill_bits) >= bit_count;
 }
 
-bool ais_app_position_deg(int32_t raw, bool longitude, Real& out_deg) const {
+bool ais_app_position_deg(int32_t raw, bool longitude, ship_data_model::Coordinate& out_deg) const {
     const int32_t max_abs = longitude ? 10800000 : 5400000;
     if (raw > max_abs || raw < -max_abs) return false;
-    out_deg = static_cast<Real>(static_cast<float>(raw) * AIS_APP_POSITION_1_1000_MIN_TO_DEG);
+    out_deg = static_cast<ship_data_model::Coordinate>(raw) / 60000.0;
     return true;
 }
 
@@ -62,8 +62,8 @@ void ais_decode_area_notice_subareas(const char* payload,
         if (!ok) break;
         app.subarea_shape[count].set(shape, now_us);
         app.subarea_scale_factor[count].set(scale, now_us);
-        Real lon = Real{};
-        Real lat = Real{};
+        ship_data_model::Coordinate lon = 0.0;
+        ship_data_model::Coordinate lat = 0.0;
         if (ais_app_position_deg(lon_raw, true, lon)) app.subarea_longitude_deg[count].set(lon, now_us);
         if (ais_app_position_deg(lat_raw, false, lat)) app.subarea_latitude_deg[count].set(lat, now_us);
         app.subarea_precision[count].set(precision, now_us);
@@ -90,8 +90,8 @@ void ais_decode_met_hydro_fields(const char* payload,
     if (remaining_bits < 65) return;
     const int32_t lon_raw = ais_get_s(payload, payload_len, payload_start, 25, ok);
     const int32_t lat_raw = ais_get_s(payload, payload_len, payload_start + 25u, 24, ok);
-    Real lon = Real{};
-    Real lat = Real{};
+    ship_data_model::Coordinate lon = 0.0;
+    ship_data_model::Coordinate lat = 0.0;
     if (ok && ais_app_position_deg(lon_raw, true, lon)) {
         app.longitude_deg.set(lon, now_us);
         ++decoded;

@@ -20,8 +20,8 @@ template<typename Real = float>
 struct TrackedTargetData {
     Setting<SensorSource> source;
     Stamped<int32_t> target_number;
-    Stamped<Real> latitude_deg;
-    Stamped<Real> longitude_deg;
+    Stamped<Coordinate> latitude_deg;
+    Stamped<Coordinate> longitude_deg;
     Stamped<Real> utc_time_s;
     Stamped<Real> distance_nmi;
     Stamped<Real> bearing_deg;
@@ -49,8 +49,8 @@ struct AisTargetData {
     Stamped<int32_t> last_message_type;
     Stamped<int32_t> repeat_indicator;
     Stamped<int32_t> navigation_status;
-    Stamped<Real> latitude_deg;
-    Stamped<Real> longitude_deg;
+    Stamped<Coordinate> latitude_deg;
+    Stamped<Coordinate> longitude_deg;
     Stamped<Real> speed_over_ground_kn;
     Stamped<Real> course_over_ground_deg;
     Stamped<Real> true_heading_deg;
@@ -86,8 +86,8 @@ template<typename Real = float>
 struct AisOwnVesselData : AisMessageHeaderData<Real> {
     bool valid = false;
     Stamped<int32_t> navigation_status;
-    Stamped<Real> latitude_deg;
-    Stamped<Real> longitude_deg;
+    Stamped<Coordinate> latitude_deg;
+    Stamped<Coordinate> longitude_deg;
     Stamped<Real> speed_over_ground_kn;
     Stamped<Real> course_over_ground_deg;
     Stamped<Real> true_heading_deg;
@@ -116,8 +116,8 @@ struct AisPositionReportData : AisMessageHeaderData<Real> {
     Stamped<Real> rate_of_turn_deg_min;
     Stamped<Real> speed_over_ground_kn;
     bool position_accuracy = false;
-    Stamped<Real> longitude_deg;
-    Stamped<Real> latitude_deg;
+    Stamped<Coordinate> longitude_deg;
+    Stamped<Coordinate> latitude_deg;
     Stamped<Real> course_over_ground_deg;
     Stamped<Real> true_heading_deg;
     Stamped<int32_t> timestamp_s;
@@ -139,8 +139,8 @@ struct AisSarAircraftPositionData : AisMessageHeaderData<Real> {
     Stamped<int32_t> altitude_m;
     Stamped<Real> speed_over_ground_kn;
     bool position_accuracy = false;
-    Stamped<Real> longitude_deg;
-    Stamped<Real> latitude_deg;
+    Stamped<Coordinate> longitude_deg;
+    Stamped<Coordinate> latitude_deg;
     Stamped<Real> course_over_ground_deg;
     Stamped<int32_t> timestamp_s;
     bool altitude_sensor_barometric = false;
@@ -159,8 +159,8 @@ struct AisBaseStationData : AisMessageHeaderData<Real> {
     Stamped<int32_t> minute;
     Stamped<int32_t> second;
     bool position_accuracy = false;
-    Stamped<Real> longitude_deg;
-    Stamped<Real> latitude_deg;
+    Stamped<Coordinate> longitude_deg;
+    Stamped<Coordinate> latitude_deg;
     Stamped<int32_t> epfd_type;
     bool raim = false;
     uint64_t last_update_us = 0;
@@ -218,8 +218,8 @@ struct AisAidToNavigationData : AisMessageHeaderData<Real> {
     char name_extension[16] = {0};
     Stamped<int32_t> name_extension_char_count;
     bool position_accuracy = false;
-    Stamped<Real> longitude_deg;
-    Stamped<Real> latitude_deg;
+    Stamped<Coordinate> longitude_deg;
+    Stamped<Coordinate> latitude_deg;
     Stamped<int32_t> dimension_to_bow_m;
     Stamped<int32_t> dimension_to_stern_m;
     Stamped<int32_t> dimension_to_port_m;
@@ -241,8 +241,8 @@ struct AisLongRangeBroadcastData : AisMessageHeaderData<Real> {
     Stamped<int32_t> navigation_status;
     bool position_accuracy = false;
     bool raim = false;
-    Stamped<Real> longitude_deg;
-    Stamped<Real> latitude_deg;
+    Stamped<Coordinate> longitude_deg;
+    Stamped<Coordinate> latitude_deg;
     Stamped<Real> speed_over_ground_kn;
     Stamped<Real> course_over_ground_deg;
     bool gnss_position_status = false;
@@ -294,15 +294,15 @@ struct AisBinaryApplicationData : AisMessageHeaderData<Real> {
     Stamped<int32_t> subarea_count;
     Stamped<int32_t> subarea_shape[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
     Stamped<int32_t> subarea_scale_factor[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
-    Stamped<Real> subarea_longitude_deg[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
-    Stamped<Real> subarea_latitude_deg[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
+    Stamped<Coordinate> subarea_longitude_deg[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
+    Stamped<Coordinate> subarea_latitude_deg[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
     Stamped<int32_t> subarea_precision[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
     Stamped<int32_t> subarea_radius_m[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
     Stamped<int32_t> subarea_dimension_e_m[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
     Stamped<int32_t> subarea_dimension_n_m[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
     Stamped<int32_t> subarea_orientation_deg[AIS_AREA_NOTICE_SUBAREA_CAPACITY];
-    Stamped<Real> longitude_deg;
-    Stamped<Real> latitude_deg;
+    Stamped<Coordinate> longitude_deg;
+    Stamped<Coordinate> latitude_deg;
     Stamped<int32_t> wind_speed_kn;
     Stamped<int32_t> wind_gust_kn;
     Stamped<int32_t> wind_direction_deg;
@@ -384,8 +384,8 @@ struct AisDataLinkManagementData : AisMessageHeaderData<Real> {
 
 template<typename Real = float>
 struct AisDgnssBroadcastData : AisMessageHeaderData<Real> {
-    Stamped<Real> longitude_deg;
-    Stamped<Real> latitude_deg;
+    Stamped<Coordinate> longitude_deg;
+    Stamped<Coordinate> latitude_deg;
     Stamped<int32_t> payload_bit_count;
     Stamped<int32_t> payload_start_bit;
     Stamped<int32_t> payload_byte_count;
@@ -403,10 +403,10 @@ struct AisChannelManagementData : AisMessageHeaderData<Real> {
     Stamped<int32_t> txrx_mode;
     bool high_power = false;
     bool addressed = false;
-    Stamped<Real> northeast_lon_deg;
-    Stamped<Real> northeast_lat_deg;
-    Stamped<Real> southwest_lon_deg;
-    Stamped<Real> southwest_lat_deg;
+    Stamped<Coordinate> northeast_lon_deg;
+    Stamped<Coordinate> northeast_lat_deg;
+    Stamped<Coordinate> southwest_lon_deg;
+    Stamped<Coordinate> southwest_lat_deg;
     Stamped<int32_t> first_destination_mmsi;
     Stamped<int32_t> second_destination_mmsi;
     bool bandwidth_a_12_5khz = false;
@@ -417,10 +417,10 @@ struct AisChannelManagementData : AisMessageHeaderData<Real> {
 
 template<typename Real = float>
 struct AisGroupAssignmentCommandData : AisMessageHeaderData<Real> {
-    Stamped<Real> northeast_lon_deg;
-    Stamped<Real> northeast_lat_deg;
-    Stamped<Real> southwest_lon_deg;
-    Stamped<Real> southwest_lat_deg;
+    Stamped<Coordinate> northeast_lon_deg;
+    Stamped<Coordinate> northeast_lat_deg;
+    Stamped<Coordinate> southwest_lon_deg;
+    Stamped<Coordinate> southwest_lat_deg;
     Stamped<int32_t> station_type;
     Stamped<int32_t> ship_type;
     Stamped<int32_t> txrx_mode;

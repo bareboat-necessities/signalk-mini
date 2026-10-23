@@ -5,6 +5,10 @@
 
 namespace ship_data_model {
 
+// Latitude/longitude in degrees are always stored as double: float only resolves
+// about 0.4-1.7 m at typical coordinates, which discards RTK/UBX precision.
+using Coordinate = double;
+
 enum class SensorSource : uint8_t {
     gpsd = 0,
     servo = 1,

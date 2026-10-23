@@ -190,12 +190,12 @@ bool apply_wpl(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
         return false;
     }
 
-    float v = 0.0f;
-    if (parse_lat_lon(sentence.field(0), sentence.field(1), v)) {
-        model.route.waypoint.latitude_deg.set(static_cast<Real>(v), now_us);
+    double coord_deg = 0.0;
+    if (parse_lat_lon(sentence.field(0), sentence.field(1), coord_deg)) {
+        model.route.waypoint.latitude_deg.set(coord_deg, now_us);
     }
-    if (parse_lat_lon(sentence.field(2), sentence.field(3), v)) {
-        model.route.waypoint.longitude_deg.set(static_cast<Real>(v), now_us);
+    if (parse_lat_lon(sentence.field(2), sentence.field(3), coord_deg)) {
+        model.route.waypoint.longitude_deg.set(coord_deg, now_us);
     }
     nmea_copy_span(model.route.waypoint.to_waypoint_id, sizeof(model.route.waypoint.to_waypoint_id), sentence.field(4));
     set_source(model.route.waypoint.source, source);

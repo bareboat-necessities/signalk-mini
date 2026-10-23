@@ -95,8 +95,8 @@ struct DscCallData {
     Stamped<int32_t> nature_or_first_telecommand;
     Stamped<int32_t> communication_or_second_telecommand;
     char position_code[16] = {0};
-    Stamped<Real> latitude_deg;
-    Stamped<Real> longitude_deg;
+    Stamped<Coordinate> latitude_deg;
+    Stamped<Coordinate> longitude_deg;
     Stamped<Real> utc_time_s;
     char address_or_distress_mmsi[16] = {0};
     char field10[16] = {0};

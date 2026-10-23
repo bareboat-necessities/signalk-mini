@@ -104,13 +104,20 @@ inline size_t make_rot(char* out, size_t out_size, float rate_deg_min, const cha
     return make_sentence(out, out_size, body);
 }
 
-inline void format_lat_lon_ddmm(char* out, size_t out_size, float degrees_value, char positive_hemi, char negative_hemi, char& hemi) {
+inline void format_lat_lon_ddmm(char* out, size_t out_size, double degrees_value, char positive_hemi, char negative_hemi, char& hemi) {
     if (!out || out_size == 0) return;
-    float a = degrees_value < 0.0f ? -degrees_value : degrees_value;
+    const double a = degrees_value < 0.0 ? -degrees_value : degrees_value;
     int deg_i = static_cast<int>(a);
-    float minutes = (a - static_cast<float>(deg_i)) * 60.0f;
-    hemi = degrees_value >= 0.0f ? positive_hemi : negative_hemi;
-    snprintf(out, out_size, "%02d%07.4f", deg_i, static_cast<double>(minutes));
+    // Round to the printed 1e-4 minute resolution first so 59.99995' carries into the degree.
+    long minutes_e4 = static_cast<long>((a - static_cast<double>(deg_i)) * 600000.0 + 0.5);
+    if (minutes_e4 >= 600000L) {
+        ++deg_i;
+        minutes_e4 -= 600000L;
+    }
+    hemi = degrees_value >= 0.0 ? positive_hemi : negative_hemi;
+    // NMEA 0183 uses ddmm.mmmm for latitude and dddmm.mmmm for longitude.
+    const int degree_digits = (positive_hemi == 'E' || positive_hemi == 'W') ? 3 : 2;
+    snprintf(out, out_size, "%0*d%02ld.%04ld", degree_digits, deg_i, minutes_e4 / 10000L, minutes_e4 % 10000L);
 }
 
 inline size_t make_rmc(char* out,
@@ -118,8 +125,8 @@ inline size_t make_rmc(char* out,
                        const char* sentence_id,
                        const char* utc_time,
                        bool valid,
-                       float lat_deg,
-                       float lon_deg,
+                       double lat_deg,
+                       double lon_deg,
                        float speed_kn,
                        float track_deg,
                        const char* date_ddmmyy) {
@@ -156,8 +163,8 @@ inline size_t make_ap_rmc(char* out,
                           const char* gps_id = "APRMC") {
     const auto& fix = model.gnss.fix;
     bool valid = fix.fix_lat_deg.valid && fix.fix_lon_deg.valid;
-    float lat = static_cast<float>(fix.fix_lat_deg.value);
-    float lon = static_cast<float>(fix.fix_lon_deg.value);
+    const double lat = static_cast<double>(fix.fix_lat_deg.value);
+    const double lon = static_cast<double>(fix.fix_lon_deg.value);
     float speed = fix.speed_kn.valid ? static_cast<float>(fix.speed_kn.value) : 0.0f;
     float track = fix.track_deg.valid ? static_cast<float>(fix.track_deg.value) : 0.0f;
     return make_rmc(out, out_size, gps_id, utc_time, valid, lat, lon, speed, track, date_ddmmyy);
