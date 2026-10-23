@@ -115,8 +115,9 @@ bool apply_gga(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     float value = 0.0f; int32_t integer_value = 0;
     copy_gnss_talker_id(model.gnss.fix.talker_id, sizeof(model.gnss.fix.talker_id), sentence);
     if (parse_utc_time_of_day_s(sentence.field(0), value)) model.gnss.fix.timestamp_s.set(static_cast<Real>(value), now_us);
-    if (parse_lat_lon(sentence.field(1), sentence.field(2), value)) model.gnss.fix.fix_lat_deg.set(static_cast<Real>(value), now_us);
-    if (parse_lat_lon(sentence.field(3), sentence.field(4), value)) model.gnss.fix.fix_lon_deg.set(static_cast<Real>(value), now_us);
+    double coord_deg = 0.0;
+    if (parse_lat_lon(sentence.field(1), sentence.field(2), coord_deg)) model.gnss.fix.fix_lat_deg.set(coord_deg, now_us);
+    if (parse_lat_lon(sentence.field(3), sentence.field(4), coord_deg)) model.gnss.fix.fix_lon_deg.set(coord_deg, now_us);
     if (parse_int32(sentence.field(5), integer_value)) {
         model.gnss.fix.fix_quality.set(integer_value, now_us);
         model.gnss.fix.fix_valid.set(integer_value > 0, now_us);
@@ -149,8 +150,9 @@ bool apply_gll(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     if (sentence.field_count < 6 || sentence.field(5)[0] != 'A') { last_error_ = "bad GLL"; return false; }
     float value = 0.0f;
     copy_gnss_talker_id(model.gnss.fix.talker_id, sizeof(model.gnss.fix.talker_id), sentence);
-    if (parse_lat_lon(sentence.field(0), sentence.field(1), value)) model.gnss.fix.fix_lat_deg.set(static_cast<Real>(value), now_us);
-    if (parse_lat_lon(sentence.field(2), sentence.field(3), value)) model.gnss.fix.fix_lon_deg.set(static_cast<Real>(value), now_us);
+    double coord_deg = 0.0;
+    if (parse_lat_lon(sentence.field(0), sentence.field(1), coord_deg)) model.gnss.fix.fix_lat_deg.set(coord_deg, now_us);
+    if (parse_lat_lon(sentence.field(2), sentence.field(3), coord_deg)) model.gnss.fix.fix_lon_deg.set(coord_deg, now_us);
     if (parse_utc_time_of_day_s(sentence.field(4), value)) model.gnss.fix.timestamp_s.set(static_cast<Real>(value), now_us);
     if (sentence.field_count > 6) model.gnss.fix.mode_indicator = sentence.field(6)[0];
     model.gnss.fix.fix_valid.set(true, now_us);
@@ -164,8 +166,9 @@ bool apply_gns(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     float value = 0.0f; int32_t integer_value = 0;
     copy_gnss_talker_id(model.gnss.fix.talker_id, sizeof(model.gnss.fix.talker_id), sentence);
     if (parse_utc_time_of_day_s(sentence.field(0), value)) model.gnss.fix.timestamp_s.set(static_cast<Real>(value), now_us);
-    if (parse_lat_lon(sentence.field(1), sentence.field(2), value)) model.gnss.fix.fix_lat_deg.set(static_cast<Real>(value), now_us);
-    if (parse_lat_lon(sentence.field(3), sentence.field(4), value)) model.gnss.fix.fix_lon_deg.set(static_cast<Real>(value), now_us);
+    double coord_deg = 0.0;
+    if (parse_lat_lon(sentence.field(1), sentence.field(2), coord_deg)) model.gnss.fix.fix_lat_deg.set(coord_deg, now_us);
+    if (parse_lat_lon(sentence.field(3), sentence.field(4), coord_deg)) model.gnss.fix.fix_lon_deg.set(coord_deg, now_us);
     nmea_copy_span(model.gnss.fix.fix_mode_indicator, sizeof(model.gnss.fix.fix_mode_indicator), sentence.field(5));
     const bool has_fix = gnss_mode_has_fix(sentence.field(5));
     model.gnss.fix.fix_quality.set(has_fix ? 1 : 0, now_us);
@@ -340,8 +343,9 @@ bool apply_gxa(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     if (sentence.field_count < 7) { last_error_ = "short GXA"; return false; }
     float value = 0.0f; int32_t integer_value = 0;
     if (parse_utc_time_of_day_s(sentence.field(0), value)) model.nav.transit_fix.utc_time_s.set(static_cast<Real>(value), now_us);
-    if (parse_lat_lon(sentence.field(1), sentence.field(2), value)) model.nav.transit_fix.latitude_deg.set(static_cast<Real>(value), now_us);
-    if (parse_lat_lon(sentence.field(3), sentence.field(4), value)) model.nav.transit_fix.longitude_deg.set(static_cast<Real>(value), now_us);
+    double coord_deg = 0.0;
+    if (parse_lat_lon(sentence.field(1), sentence.field(2), coord_deg)) model.nav.transit_fix.latitude_deg.set(coord_deg, now_us);
+    if (parse_lat_lon(sentence.field(3), sentence.field(4), coord_deg)) model.nav.transit_fix.longitude_deg.set(coord_deg, now_us);
     nmea_copy_span(model.nav.transit_fix.waypoint_id, sizeof(model.nav.transit_fix.waypoint_id), sentence.field(5));
     if (parse_int32(sentence.field(6), integer_value)) model.nav.transit_fix.satellite_number.set(integer_value, now_us);
     set_source(model.nav.transit_fix.source, source); model.nav.transit_fix.last_update_us = now_us;
@@ -367,8 +371,9 @@ bool apply_rma(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     if (sentence.field_count < 11 || sentence.field(0)[0] != 'A') { last_error_ = "bad RMA"; return false; }
     float v = 0.0f;
     copy_gnss_talker_id(model.gnss.fix.talker_id, sizeof(model.gnss.fix.talker_id), sentence); model.nav.rma.status = sentence.field(0)[0];
-    if (parse_lat_lon(sentence.field(1), sentence.field(2), v)) { model.nav.rma.latitude_deg.set(static_cast<Real>(v), now_us); model.gnss.fix.fix_lat_deg.set(static_cast<Real>(v), now_us); }
-    if (parse_lat_lon(sentence.field(3), sentence.field(4), v)) { model.nav.rma.longitude_deg.set(static_cast<Real>(v), now_us); model.gnss.fix.fix_lon_deg.set(static_cast<Real>(v), now_us); }
+    double coord_deg = 0.0;
+    if (parse_lat_lon(sentence.field(1), sentence.field(2), coord_deg)) { model.nav.rma.latitude_deg.set(coord_deg, now_us); model.gnss.fix.fix_lat_deg.set(coord_deg, now_us); }
+    if (parse_lat_lon(sentence.field(3), sentence.field(4), coord_deg)) { model.nav.rma.longitude_deg.set(coord_deg, now_us); model.gnss.fix.fix_lon_deg.set(coord_deg, now_us); }
     if (parse_real(sentence.field(5), v)) model.nav.rma.time_difference_a_us.set(static_cast<Real>(v), now_us);
     if (parse_real(sentence.field(6), v)) model.nav.rma.time_difference_b_us.set(static_cast<Real>(v), now_us);
     if (parse_real(sentence.field(7), v)) { model.nav.rma.speed_kn.set(static_cast<Real>(v), now_us); model.gnss.fix.speed_kn.set(static_cast<Real>(v), now_us); }
@@ -384,8 +389,9 @@ bool apply_rmc(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     if (sentence.field_count < 8 || sentence.field(1)[0] != 'A') { last_error_ = "invalid RMC"; return false; }
     float v = 0.0f;
     copy_gnss_talker_id(model.gnss.fix.talker_id, sizeof(model.gnss.fix.talker_id), sentence);
-    if (parse_lat_lon(sentence.field(2), sentence.field(3), v)) model.gnss.fix.fix_lat_deg.set(static_cast<Real>(v), now_us);
-    if (parse_lat_lon(sentence.field(4), sentence.field(5), v)) model.gnss.fix.fix_lon_deg.set(static_cast<Real>(v), now_us);
+    double coord_deg = 0.0;
+    if (parse_lat_lon(sentence.field(2), sentence.field(3), coord_deg)) model.gnss.fix.fix_lat_deg.set(coord_deg, now_us);
+    if (parse_lat_lon(sentence.field(4), sentence.field(5), coord_deg)) model.gnss.fix.fix_lon_deg.set(coord_deg, now_us);
     if (parse_real(sentence.field(6), v)) model.gnss.fix.speed_kn.set(static_cast<Real>(v), now_us);
     if (parse_real(sentence.field(7), v)) model.gnss.fix.track_deg.set(static_cast<Real>(wrap_360_deg(v)), now_us);
     if (sentence.field_count >= 9 && parse_rmc_timestamp_s(sentence.field(0), sentence.field(8), v)) model.gnss.fix.timestamp_s.set(static_cast<Real>(v), now_us);

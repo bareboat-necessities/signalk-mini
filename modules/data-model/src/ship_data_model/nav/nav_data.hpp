@@ -62,8 +62,8 @@ struct TransitFixData {
     Setting<SensorSource> source;
     Stamped<Real> utc_time_s;
     char date_ddmmyy[8] = {0};
-    Stamped<Real> latitude_deg;
-    Stamped<Real> longitude_deg;
+    Stamped<Coordinate> latitude_deg;
+    Stamped<Coordinate> longitude_deg;
     char waypoint_id[16] = {0};
     Stamped<Real> elevation_angle_deg;
     Stamped<int32_t> iterations;
@@ -130,8 +130,8 @@ template<typename Real = float>
 struct RmaData {
     Setting<SensorSource> source;
     char status = 0;
-    Stamped<Real> latitude_deg;
-    Stamped<Real> longitude_deg;
+    Stamped<Coordinate> latitude_deg;
+    Stamped<Coordinate> longitude_deg;
     Stamped<Real> time_difference_a_us;
     Stamped<Real> time_difference_b_us;
     Stamped<Real> speed_kn;

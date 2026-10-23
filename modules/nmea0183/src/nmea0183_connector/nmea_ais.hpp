@@ -227,9 +227,6 @@ static const int32_t AIS_LONG_RANGE_COG_NOT_AVAILABLE = 360;
 static constexpr float AIS_ROT_SCALE = 4.733f;
 static constexpr float AIS_TENTHS_SCALE = 0.1f;
 static constexpr float AIS_CENTIMETERS_TO_METERS_SCALE = 0.01f;
-static constexpr float AIS_POSITION_1_10000_MIN_TO_DEG = 1.0f / 600000.0f;
-static constexpr float AIS_POSITION_1_10_MIN_TO_DEG = 1.0f / 600.0f;
-static constexpr float AIS_APP_POSITION_1_1000_MIN_TO_DEG = 1.0f / 60000.0f;
 
 AisNavigationStatus ais_navigation_status_from_int(int32_t value) const {
     return value >= AIS_NAV_UNDER_WAY_USING_ENGINE && value <= AIS_NAV_UNDEFINED
@@ -504,8 +501,8 @@ bool ais_parse_dgnss_broadcast(const char* payload,
     bool ok = true;
     if (payload_len * 6u < 80u) return false;
     ais_set_control_header(out, header, now_us, source, target_table);
-    Real lon = Real{};
-    Real lat = Real{};
+    ship_data_model::Coordinate lon = 0.0;
+    ship_data_model::Coordinate lat = 0.0;
     const int32_t lon_raw = ais_get_s(payload, payload_len, 40, 18, ok);
     const int32_t lat_raw = ais_get_s(payload, payload_len, 58, 17, ok);
     if (!ok) return false;
@@ -538,10 +535,10 @@ bool ais_parse_channel_management(const char* payload,
         out.first_destination_mmsi.set(static_cast<int32_t>(ais_get_u(payload, payload_len, 69, 30, ok)), now_us);
         out.second_destination_mmsi.set(static_cast<int32_t>(ais_get_u(payload, payload_len, 104, 30, ok)), now_us);
     } else {
-        Real ne_lon = Real{};
-        Real ne_lat = Real{};
-        Real sw_lon = Real{};
-        Real sw_lat = Real{};
+        ship_data_model::Coordinate ne_lon = 0.0;
+        ship_data_model::Coordinate ne_lat = 0.0;
+        ship_data_model::Coordinate sw_lon = 0.0;
+        ship_data_model::Coordinate sw_lat = 0.0;
         if (ais_long_range_position_deg(ais_get_s(payload, payload_len, 69, 18, ok), true, ne_lon)) out.northeast_lon_deg.set(ne_lon, now_us);
         if (ais_long_range_position_deg(ais_get_s(payload, payload_len, 87, 17, ok), false, ne_lat)) out.northeast_lat_deg.set(ne_lat, now_us);
         if (ais_long_range_position_deg(ais_get_s(payload, payload_len, 104, 18, ok), true, sw_lon)) out.southwest_lon_deg.set(sw_lon, now_us);
@@ -565,10 +562,10 @@ bool ais_parse_group_assignment(const char* payload,
     bool ok = true;
     if (payload_len * 6u < 154u) return false;
     ais_set_control_header(out, header, now_us, source, target_table);
-    Real ne_lon = Real{};
-    Real ne_lat = Real{};
-    Real sw_lon = Real{};
-    Real sw_lat = Real{};
+    ship_data_model::Coordinate ne_lon = 0.0;
+    ship_data_model::Coordinate ne_lat = 0.0;
+    ship_data_model::Coordinate sw_lon = 0.0;
+    ship_data_model::Coordinate sw_lat = 0.0;
     if (ais_long_range_position_deg(ais_get_s(payload, payload_len, 40, 18, ok), true, ne_lon)) out.northeast_lon_deg.set(ne_lon, now_us);
     if (ais_long_range_position_deg(ais_get_s(payload, payload_len, 58, 17, ok), false, ne_lat)) out.northeast_lat_deg.set(ne_lat, now_us);
     if (ais_long_range_position_deg(ais_get_s(payload, payload_len, 75, 18, ok), true, sw_lon)) out.southwest_lon_deg.set(sw_lon, now_us);

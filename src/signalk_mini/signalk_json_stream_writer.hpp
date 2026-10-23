@@ -89,7 +89,9 @@ public:
     template<typename Real>
     bool append_real(Real value) {
         char tmp[32];
-        const int precision = sizeof(Real) <= sizeof(float) ? 9 : 17;
+        // float: 9 digits round-trips; double: 15 (DBL_DIG) keeps decimal input
+        // such as NMEA coordinates exact without binary-noise digits.
+        const int precision = sizeof(Real) <= sizeof(float) ? 9 : 15;
         const int n = snprintf(tmp, sizeof(tmp), "%.*g", precision, static_cast<double>(value));
         if (n <= 0 || static_cast<size_t>(n) >= sizeof(tmp)) return fail();
         return append_bytes(tmp, static_cast<size_t>(n));
@@ -155,6 +157,12 @@ inline bool signalk_json_write_scalar_value(SignalKJsonStreamWriter& out, Signal
     if (kind == SignalKMappedValueKind::Bool) return out.append_bool(boolean);
     if (kind == SignalKMappedValueKind::Text) return out.append_quoted(text ? text : "");
     return false;
+}
+
+template<typename Real>
+inline bool signalk_json_write_mapped_scalar(SignalKJsonStreamWriter& out, const SignalKMappedValue<Real>& value) {
+    if (value.kind == SignalKMappedValueKind::Number && value.has_coordinate) return out.append_real(value.coordinate);
+    return signalk_json_write_scalar_value(out, value.kind, value.number, value.boolean, value.text);
 }
 
 template<typename Real>

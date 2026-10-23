@@ -178,8 +178,8 @@ struct DscAlertData {
     char address_or_distress_mmsi[16] = {0};
     Stamped<int32_t> category;
     Stamped<int32_t> nature_or_first_telecommand;
-    Stamped<Real> latitude_deg;
-    Stamped<Real> longitude_deg;
+    Stamped<Coordinate> latitude_deg;
+    Stamped<Coordinate> longitude_deg;
     Stamped<Real> utc_time_s;
     char alert_text[96] = {0};
     bool active = false;
@@ -229,11 +229,11 @@ struct InmarsatSafetyNetMessageData {
     char coastal_warning_subject = 0;
     char coastal_warning_subject_label[56] = {0};
     bool coastal_warning_subject_mandatory = false;
-    Stamped<Real> circular_center_lat_deg;
-    Stamped<Real> circular_center_lon_deg;
+    Stamped<Coordinate> circular_center_lat_deg;
+    Stamped<Coordinate> circular_center_lon_deg;
     Stamped<int32_t> circular_radius_nmi;
-    Stamped<Real> rectangle_sw_lat_deg;
-    Stamped<Real> rectangle_sw_lon_deg;
+    Stamped<Coordinate> rectangle_sw_lat_deg;
+    Stamped<Coordinate> rectangle_sw_lon_deg;
     Stamped<int32_t> rectangle_extent_lat_deg;
     Stamped<int32_t> rectangle_extent_lon_deg;
     char sequential_message_id[8] = {0};
@@ -281,8 +281,8 @@ struct SmvData {
     Stamped<int32_t> mmsi;
     char mmsi_text[16] = {0};
     Stamped<Real> utc_time_s;
-    Stamped<Real> latitude_deg;
-    Stamped<Real> longitude_deg;
+    Stamped<Coordinate> latitude_deg;
+    Stamped<Coordinate> longitude_deg;
     char event_type[24] = {0};
     char sar_capability[32] = {0};
     char route_id[24] = {0};

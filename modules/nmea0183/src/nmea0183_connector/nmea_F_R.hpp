@@ -538,8 +538,9 @@ bool apply_rmb(const NmeaSentence& sentence, Model& model, uint64_t now_us, ship
     }
     nmea_copy_span(model.route.rmb.origin_id, sizeof(model.route.rmb.origin_id), sentence.field(3));
     nmea_copy_span(model.route.rmb.destination_id, sizeof(model.route.rmb.destination_id), sentence.field(4));
-    if (parse_lat_lon(sentence.field(5), sentence.field(6), v)) model.route.rmb.destination_lat_deg.set(static_cast<Real>(v), now_us);
-    if (parse_lat_lon(sentence.field(7), sentence.field(8), v)) model.route.rmb.destination_lon_deg.set(static_cast<Real>(v), now_us);
+    double coord_deg = 0.0;
+    if (parse_lat_lon(sentence.field(5), sentence.field(6), coord_deg)) model.route.rmb.destination_lat_deg.set(coord_deg, now_us);
+    if (parse_lat_lon(sentence.field(7), sentence.field(8), coord_deg)) model.route.rmb.destination_lon_deg.set(coord_deg, now_us);
     if (parse_real(sentence.field(9), v)) model.route.rmb.range_nmi.set(static_cast<Real>(v), now_us);
     if (parse_real(sentence.field(10), v)) {
         const Real bearing = static_cast<Real>(wrap_360_deg(v));

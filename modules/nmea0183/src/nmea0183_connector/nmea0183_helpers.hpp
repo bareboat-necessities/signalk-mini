@@ -131,7 +131,7 @@ inline bool verify_nmea_checksum(const char* line) {
     return nmea_checksum_range(line + 1, star) == expected;
 }
 
-inline bool parse_real(const char* field, size_t length, float& out) {
+inline bool parse_real(const char* field, size_t length, double& out) {
     if (!field || length == 0) return false;
     char local[32];
     size_t n = length;
@@ -141,6 +141,13 @@ inline bool parse_real(const char* field, size_t length, float& out) {
     char* end = nullptr;
     double v = strtod(local, &end);
     if (end == local) return false;
+    out = v;
+    return true;
+}
+
+inline bool parse_real(const char* field, size_t length, float& out) {
+    double v = 0.0;
+    if (!parse_real(field, length, v)) return false;
     out = static_cast<float>(v);
     return true;
 }
@@ -149,7 +156,15 @@ inline bool parse_real(NmeaSpan field, float& out) {
     return parse_real(field.data, field.length, out);
 }
 
+inline bool parse_real(NmeaSpan field, double& out) {
+    return parse_real(field.data, field.length, out);
+}
+
 inline bool parse_real(const char* field, float& out) {
+    return field ? parse_real(field, strlen(field), out) : false;
+}
+
+inline bool parse_real(const char* field, double& out) {
     return field ? parse_real(field, strlen(field), out) : false;
 }
 
@@ -239,7 +254,7 @@ inline bool parse_left_right_signed(NmeaSpan magnitude, NmeaSpan side, float& ou
     return true;
 }
 
-inline bool parse_lat_lon(NmeaSpan ddmm, NmeaSpan hemisphere, float& out_deg) {
+inline bool parse_lat_lon(NmeaSpan ddmm, NmeaSpan hemisphere, double& out_deg) {
     if (!ddmm.data || ddmm.length < 4 || hemisphere.empty()) return false;
     const char h = hemisphere[0];
     const uint8_t deg_digits = (h == 'E' || h == 'W') ? 3 : 2;
@@ -250,9 +265,9 @@ inline bool parse_lat_lon(NmeaSpan ddmm, NmeaSpan hemisphere, float& out_deg) {
         if (ddmm[i] < '0' || ddmm[i] > '9') return false;
         degrees = degrees * 10 + (ddmm[i] - '0');
     }
-    float minutes = 0.0f;
+    double minutes = 0.0;
     if (!parse_real(NmeaSpan(ddmm.data + deg_digits, ddmm.length - deg_digits), minutes)) return false;
-    out_deg = static_cast<float>(degrees) + minutes / 60.0f;
+    out_deg = static_cast<double>(degrees) + minutes / 60.0;
     if (h == 'S' || h == 'W') out_deg = -out_deg;
     else if (h != 'N' && h != 'E') return false;
     return true;

@@ -164,7 +164,7 @@ private:
             if (!out.append_raw("{\"path\":")) return 0;
             if (!out.append_quoted(value.path)) return 0;
             if (!out.append_raw(",\"value\":")) return 0;
-            if (!signalk_json_write_scalar_value(out, value.kind, value.number, value.boolean, value.text)) return 0;
+            if (!signalk_json_write_mapped_scalar(out, value)) return 0;
             if (!out.append_char('}')) return 0;
         }
 

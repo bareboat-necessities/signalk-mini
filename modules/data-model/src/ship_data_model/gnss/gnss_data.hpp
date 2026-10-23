@@ -68,8 +68,8 @@ struct GnssData {
     Stamped<Real> speed_kn;
     Stamped<Real> vertical_speed_m_s;
 
-    Stamped<Real> fix_lat_deg;
-    Stamped<Real> fix_lon_deg;
+    Stamped<Coordinate> fix_lat_deg;
+    Stamped<Coordinate> fix_lon_deg;
     Stamped<Real> fix_alt_msl_m;
     Stamped<Real> fix_alt_hae_m;
     Stamped<int32_t> fix_quality;

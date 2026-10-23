@@ -34,6 +34,10 @@ struct SignalKMappedValue {
     SignalKMappedValueKind kind = SignalKMappedValueKind::Number;
     SignalKObjectKind object_kind = SignalKObjectKind::None;
     Real number{};
+    // Set for latitude/longitude values; `coordinate` keeps full double precision
+    // and takes precedence over `number` when serializing.
+    bool has_coordinate = false;
+    ship_data_model::Coordinate coordinate{};
     bool boolean = false;
     const char* text = nullptr;
     SourceId source_id = 0;
@@ -175,8 +179,8 @@ public:
         case ModelField::RouteApbPerpendicularPassed: return map_stamped_bool(model.route.apb.perpendicular_passed, signalk_path::NavigationCourseGreatCirclePerpendicularPassed, out);
         case ModelField::RouteApbDestinationId: return map_text(model.route.apb.destination_id, signalk_path::NavigationCourseGreatCircleNextPointId, out);
         case ModelField::RouteRmbXteNmi: return map_number(model.route.rmb.xte_nmi, signalk_path::NavigationCourseGreatCircleCrossTrackError, out, UnitTransform::NmiToM);
-        case ModelField::RouteRmbDestinationLatDeg: return map_number(model.route.rmb.destination_lat_deg, signalk_path::NavigationCourseGreatCircleNextPointPositionLatitude, out);
-        case ModelField::RouteRmbDestinationLonDeg: return map_number(model.route.rmb.destination_lon_deg, signalk_path::NavigationCourseGreatCircleNextPointPositionLongitude, out);
+        case ModelField::RouteRmbDestinationLatDeg: return map_coordinate(model.route.rmb.destination_lat_deg, signalk_path::NavigationCourseGreatCircleNextPointPositionLatitude, out);
+        case ModelField::RouteRmbDestinationLonDeg: return map_coordinate(model.route.rmb.destination_lon_deg, signalk_path::NavigationCourseGreatCircleNextPointPositionLongitude, out);
         case ModelField::RouteRmbRangeNmi: return map_number(model.route.rmb.range_nmi, signalk_path::NavigationCourseGreatCircleNextPointDistance, out, UnitTransform::NmiToM);
         case ModelField::RouteRmbBearingDeg: return map_number(model.route.rmb.bearing_deg, signalk_path::NavigationCourseGreatCircleBearingTrue, out, UnitTransform::DegToRad);
         case ModelField::RouteRmbClosingVelocityKn: return map_number(model.route.rmb.closing_velocity_kn, signalk_path::NavigationCourseGreatCircleNextPointVelocityMadeGood, out, UnitTransform::KnotsToMps);
@@ -187,8 +191,8 @@ public:
         case ModelField::RouteWaypointOriginElapsedTimeS: return map_number(model.route.waypoint.origin_elapsed_time_s, signalk_path::NavigationCourseGreatCircleOriginElapsedTime, out);
         case ModelField::RouteWaypointDestinationUtcTimeS: return map_number(model.route.waypoint.destination_utc_time_s, signalk_path::NavigationCourseGreatCircleDestinationTime, out);
         case ModelField::RouteWaypointDestinationTimeRemainingS: return map_number(model.route.waypoint.destination_time_remaining_s, signalk_path::NavigationCourseGreatCircleTimeToGo, out);
-        case ModelField::RouteWaypointLatDeg: return map_number(model.route.waypoint.latitude_deg, signalk_path::NavigationCourseGreatCircleNextPointPositionLatitude, out);
-        case ModelField::RouteWaypointLonDeg: return map_number(model.route.waypoint.longitude_deg, signalk_path::NavigationCourseGreatCircleNextPointPositionLongitude, out);
+        case ModelField::RouteWaypointLatDeg: return map_coordinate(model.route.waypoint.latitude_deg, signalk_path::NavigationCourseGreatCircleNextPointPositionLatitude, out);
+        case ModelField::RouteWaypointLonDeg: return map_coordinate(model.route.waypoint.longitude_deg, signalk_path::NavigationCourseGreatCircleNextPointPositionLongitude, out);
         case ModelField::RouteWaypointBearingTrueDeg: return map_number(model.route.waypoint.bearing_true_deg, signalk_path::NavigationCourseGreatCircleBearingTrue, out, UnitTransform::DegToRad);
         case ModelField::RouteWaypointBearingMagneticDeg: return map_number(model.route.waypoint.bearing_magnetic_deg, signalk_path::NavigationCourseGreatCircleBearingMagnetic, out, UnitTransform::DegToRad);
         case ModelField::RouteWaypointDistanceNmi: return map_number(model.route.waypoint.distance_nmi, signalk_path::NavigationCourseGreatCircleNextPointDistance, out, UnitTransform::NmiToM);
@@ -253,10 +257,21 @@ private:
         return mapped;
     }
 
+    template<typename StampedCoordinate>
+    bool map_coordinate(const StampedCoordinate& stamped, const char* path, SignalKMappedValue<Real>& out) const {
+        if (!stamped.valid) return false;
+        map_number_value(static_cast<Real>(stamped.value), path, out);
+        out.has_coordinate = true;
+        out.coordinate = static_cast<ship_data_model::Coordinate>(stamped.value);
+        out.last_update_us = stamped.last_update_us;
+        return true;
+    }
+
     bool map_number_value(Real value, const char* path, SignalKMappedValue<Real>& out, UnitTransform transform = UnitTransform::None) const {
         out.path = path;
         out.kind = SignalKMappedValueKind::Number;
         out.number = transform_number(value, transform);
+        out.has_coordinate = false;
         return true;
     }
 

@@ -300,8 +300,8 @@ private:
         dop.pdop.set(accuracy.pdop.value, now_us);
 
         if (fix_ok) {
-            fix.fix_lon_deg.set(static_cast<Real>(read_i32_le(payload_ + 24)) / static_cast<Real>(10000000), now_us);
-            fix.fix_lat_deg.set(static_cast<Real>(read_i32_le(payload_ + 28)) / static_cast<Real>(10000000), now_us);
+            fix.fix_lon_deg.set(static_cast<ship_data_model::Coordinate>(read_i32_le(payload_ + 24)) / static_cast<ship_data_model::Coordinate>(10000000), now_us);
+            fix.fix_lat_deg.set(static_cast<ship_data_model::Coordinate>(read_i32_le(payload_ + 28)) / static_cast<ship_data_model::Coordinate>(10000000), now_us);
             fix.fix_alt_hae_m.set(static_cast<Real>(read_i32_le(payload_ + 32)) / static_cast<Real>(1000), now_us);
             fix.fix_alt_msl_m.set(static_cast<Real>(read_i32_le(payload_ + 36)) / static_cast<Real>(1000), now_us);
             fix.geoidal_separation_m.set(fix.fix_alt_hae_m.value - fix.fix_alt_msl_m.value, now_us);

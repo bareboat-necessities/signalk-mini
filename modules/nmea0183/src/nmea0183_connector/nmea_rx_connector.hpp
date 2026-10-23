@@ -270,25 +270,25 @@ private:
         parse_int_to_stamped(sentence.field(1), rec.station_type, now_us);
         parse_int_to_stamped(sentence.field(2), rec.ship_type, now_us);
 
-        float lat1 = 0.0f;
-        float lon1 = 0.0f;
-        float lat2 = 0.0f;
-        float lon2 = 0.0f;
+        double lat1 = 0.0;
+        double lon1 = 0.0;
+        double lat2 = 0.0;
+        double lon2 = 0.0;
         const bool have_lat1 = parse_lat_lon(sentence.field(3), sentence.field(4), lat1);
         const bool have_lon1 = parse_lat_lon(sentence.field(5), sentence.field(6), lon1);
         const bool have_lat2 = parse_lat_lon(sentence.field(7), sentence.field(8), lat2);
         const bool have_lon2 = parse_lat_lon(sentence.field(9), sentence.field(10), lon2);
         if (have_lat1 && have_lat2) {
-            const float north = lat1 > lat2 ? lat1 : lat2;
-            const float south = lat1 > lat2 ? lat2 : lat1;
-            rec.northeast_lat_deg.set(static_cast<Real>(north), now_us);
-            rec.southwest_lat_deg.set(static_cast<Real>(south), now_us);
+            const double north = lat1 > lat2 ? lat1 : lat2;
+            const double south = lat1 > lat2 ? lat2 : lat1;
+            rec.northeast_lat_deg.set(north, now_us);
+            rec.southwest_lat_deg.set(south, now_us);
         }
         if (have_lon1 && have_lon2) {
-            const float east = lon1 > lon2 ? lon1 : lon2;
-            const float west = lon1 > lon2 ? lon2 : lon1;
-            rec.northeast_lon_deg.set(static_cast<Real>(east), now_us);
-            rec.southwest_lon_deg.set(static_cast<Real>(west), now_us);
+            const double east = lon1 > lon2 ? lon1 : lon2;
+            const double west = lon1 > lon2 ? lon2 : lon1;
+            rec.northeast_lon_deg.set(east, now_us);
+            rec.southwest_lon_deg.set(west, now_us);
         }
 
         parse_int_to_stamped(sentence.field(11), rec.report_interval, now_us);
@@ -311,12 +311,12 @@ private:
         parse_int_to_stamped(sentence.field(1), rec.epfd_type, now_us);
 
         const uint8_t lat_index = sentence.field_count >= 10 ? 3 : 2;
-        float value = 0.0f;
-        if (parse_lat_lon(sentence.field(lat_index), sentence.field(lat_index + 1), value)) {
-            rec.latitude_deg.set(static_cast<Real>(value), now_us);
+        double coord_deg = 0.0;
+        if (parse_lat_lon(sentence.field(lat_index), sentence.field(lat_index + 1), coord_deg)) {
+            rec.latitude_deg.set(coord_deg, now_us);
         }
-        if (parse_lat_lon(sentence.field(lat_index + 2), sentence.field(lat_index + 3), value)) {
-            rec.longitude_deg.set(static_cast<Real>(value), now_us);
+        if (parse_lat_lon(sentence.field(lat_index + 2), sentence.field(lat_index + 3), coord_deg)) {
+            rec.longitude_deg.set(coord_deg, now_us);
         }
         const NmeaSpan accuracy = sentence.field_count > lat_index + 4 ? sentence.field(lat_index + 4) : NmeaSpan();
         if (!accuracy.empty()) rec.position_accuracy = accuracy[0] == '1' || accuracy[0] == 'A' || accuracy[0] == 'H';
@@ -342,11 +342,12 @@ private:
         if (sentence.field_count > 2 && parse_utc_time_of_day_s(sentence.field(2), value)) {
             rec.utc_time_s.set(static_cast<Real>(value), now_us);
         }
-        if (sentence.field_count > 4 && parse_lat_lon(sentence.field(3), sentence.field(4), value)) {
-            rec.latitude_deg.set(static_cast<Real>(value), now_us);
+        double coord_deg = 0.0;
+        if (sentence.field_count > 4 && parse_lat_lon(sentence.field(3), sentence.field(4), coord_deg)) {
+            rec.latitude_deg.set(coord_deg, now_us);
         }
-        if (sentence.field_count > 6 && parse_lat_lon(sentence.field(5), sentence.field(6), value)) {
-            rec.longitude_deg.set(static_cast<Real>(value), now_us);
+        if (sentence.field_count > 6 && parse_lat_lon(sentence.field(5), sentence.field(6), coord_deg)) {
+            rec.longitude_deg.set(coord_deg, now_us);
         }
         if (sentence.field_count > 7) nmea_copy_span(rec.description, sizeof(rec.description), sentence.field(7));
         else nmea_copy_cstr(rec.description, sizeof(rec.description), "MOB event");

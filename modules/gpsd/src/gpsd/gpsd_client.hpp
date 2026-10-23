@@ -245,8 +245,8 @@ private:
 
         double value = 0.0;
         if (valid_fix) {
-            if (read_number(object, "lat", value)) fix.fix_lat_deg.set(static_cast<Real>(value), now_us);
-            if (read_number(object, "lon", value)) fix.fix_lon_deg.set(static_cast<Real>(value), now_us);
+            if (read_number(object, "lat", value)) fix.fix_lat_deg.set(static_cast<ship_data_model::Coordinate>(value), now_us);
+            if (read_number(object, "lon", value)) fix.fix_lon_deg.set(static_cast<ship_data_model::Coordinate>(value), now_us);
             if (read_number(object, "altMSL", value)) fix.fix_alt_msl_m.set(static_cast<Real>(value), now_us);
             if (read_number(object, "altHAE", value)) fix.fix_alt_hae_m.set(static_cast<Real>(value), now_us);
             if (fix.fix_alt_msl_m.valid && fix.fix_alt_hae_m.valid &&

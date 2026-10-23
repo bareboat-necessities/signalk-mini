@@ -69,11 +69,11 @@ struct NmeaSafetyNetAssemblyRecord {
     int32_t coastal_warning_navarea_metarea = 0;
     char coastal_warning_area = 0;
     char coastal_warning_subject = 0;
-    float circular_center_lat_deg = 0.0f;
-    float circular_center_lon_deg = 0.0f;
+    double circular_center_lat_deg = 0.0;
+    double circular_center_lon_deg = 0.0;
     int32_t circular_radius_nmi = 0;
-    float rectangle_sw_lat_deg = 0.0f;
-    float rectangle_sw_lon_deg = 0.0f;
+    double rectangle_sw_lat_deg = 0.0;
+    double rectangle_sw_lon_deg = 0.0;
     int32_t rectangle_extent_lat_deg = 0;
     int32_t rectangle_extent_lon_deg = 0;
     bool has_navarea_metarea_code = false;

@@ -246,8 +246,9 @@ bool apply_bwc_bwr(const NmeaSentence& sentence, Model& model, uint64_t now_us, 
     if (sentence.field_count < 12) { last_error_ = sentence_is(sentence, "BWC") ? "short BWC" : "short BWR"; return false; }
     float value = 0.0f;
     if (parse_utc_time_of_day_s(sentence.field(0), value)) model.route.waypoint.utc_time_s.set(static_cast<Real>(value), now_us);
-    if (parse_lat_lon(sentence.field(1), sentence.field(2), value)) model.route.waypoint.latitude_deg.set(static_cast<Real>(value), now_us);
-    if (parse_lat_lon(sentence.field(3), sentence.field(4), value)) model.route.waypoint.longitude_deg.set(static_cast<Real>(value), now_us);
+    double coord_deg = 0.0;
+    if (parse_lat_lon(sentence.field(1), sentence.field(2), coord_deg)) model.route.waypoint.latitude_deg.set(coord_deg, now_us);
+    if (parse_lat_lon(sentence.field(3), sentence.field(4), coord_deg)) model.route.waypoint.longitude_deg.set(coord_deg, now_us);
     if (parse_real(sentence.field(5), value)) model.route.waypoint.bearing_true_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
     if (parse_real(sentence.field(7), value)) model.route.waypoint.bearing_magnetic_deg.set(static_cast<Real>(wrap_360_deg(value)), now_us);
     if (parse_distance_nmi(sentence.field(9), sentence.field(10), value)) model.route.waypoint.distance_nmi.set(static_cast<Real>(value), now_us);

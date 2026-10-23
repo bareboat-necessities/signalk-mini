@@ -17,15 +17,15 @@ int main() {
     REQUIRE(input.feed_octets(reinterpret_cast<const uint8_t*>(tpv), std::strlen(tpv), 10, 1000));
     REQUIRE(store.pending_change_count() > 0);
     REQUIRE(model.gnss.fix.fix_valid.value);
-    NEAR(model.gnss.fix.fix_lat_deg.value, 40.7654321f, 0.00001);
-    NEAR(model.gnss.fix.fix_lon_deg.value, -74.1234567f, 0.00001);
+    NEAR(model.gnss.fix.fix_lat_deg.value, 40.7654321, 1e-9);
+    NEAR(model.gnss.fix.fix_lon_deg.value, -74.1234567, 1e-9);
     NEAR(model.gnss.fix.speed_kn.value, 9.71922f, 0.001);
     NEAR(model.gnss.fix.timestamp_s.value, 18367.5f, 0.001);
     REQUIRE(model.gnss.fix.date_year.value == 2026);
     NEAR(model.gnss.fix.geoidal_separation_m.value, 30.9f, 0.001);
     NEAR(model.gnss.fix_accuracy.horizontal_accuracy_m.value, 1.5f, 0.001);
 
-    const float saved_lat = model.gnss.fix.fix_lat_deg.value;
+    const double saved_lat = model.gnss.fix.fix_lat_deg.value;
     const char* nofix = "{\"class\":\"TPV\",\"device\":\"/dev/ttyACM0\",\"mode\":1,\"lat\":0,\"lon\":0}\n";
     input.feed_octets(reinterpret_cast<const uint8_t*>(nofix), std::strlen(nofix), 10, 1100);
     REQUIRE(!model.gnss.fix.fix_valid.value);

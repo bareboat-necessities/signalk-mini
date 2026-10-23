@@ -242,8 +242,8 @@ bool dsc_alert_matches_current(const Alert& alert) const {
     }
     if (dsc.has_position) {
         if (!alert.latitude_deg.valid || !alert.longitude_deg.valid) return false;
-        if (alert.latitude_deg.value != static_cast<Real>(dsc.latitude_deg)) return false;
-        if (alert.longitude_deg.value != static_cast<Real>(dsc.longitude_deg)) return false;
+        if (alert.latitude_deg.value != static_cast<ship_data_model::Coordinate>(dsc.latitude_deg)) return false;
+        if (alert.longitude_deg.value != static_cast<ship_data_model::Coordinate>(dsc.longitude_deg)) return false;
     }
     return true;
 }
@@ -278,8 +278,8 @@ bool commit_dsc_alert(Model& model,
         alert.nature_or_first_telecommand.set(dsc.nature_or_first_telecommand.value, now_us);
     }
     if (dsc.has_position) {
-        alert.latitude_deg.set(static_cast<Real>(dsc.latitude_deg), now_us);
-        alert.longitude_deg.set(static_cast<Real>(dsc.longitude_deg), now_us);
+        alert.latitude_deg.set(static_cast<ship_data_model::Coordinate>(dsc.latitude_deg), now_us);
+        alert.longitude_deg.set(static_cast<ship_data_model::Coordinate>(dsc.longitude_deg), now_us);
     }
     if (dsc.has_utc_time) alert.utc_time_s.set(static_cast<Real>(dsc.utc_time_s), now_us);
     nmea_copy_cstr(alert.alert_text, sizeof(alert.alert_text), alert_text);
@@ -351,8 +351,8 @@ bool commit_dsc_message_to_model(Model& model,
 
     nmea_copy_cstr(dst.position_code, sizeof(dst.position_code), dsc.position_code);
     if (dsc.has_position) {
-        dst.latitude_deg.set(static_cast<Real>(dsc.latitude_deg), now_us);
-        dst.longitude_deg.set(static_cast<Real>(dsc.longitude_deg), now_us);
+        dst.latitude_deg.set(static_cast<ship_data_model::Coordinate>(dsc.latitude_deg), now_us);
+        dst.longitude_deg.set(static_cast<ship_data_model::Coordinate>(dsc.longitude_deg), now_us);
     }
     if (dsc.has_utc_time) dst.utc_time_s.set(static_cast<Real>(dsc.utc_time_s), now_us);
 
