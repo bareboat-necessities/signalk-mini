@@ -10,7 +10,9 @@
 #include "config.hpp"
 #include "model_store.hpp"
 #include "signalk_full_model_writer.hpp"
+#include "memory_profile.hpp"
 #include "signalk_json_stream_writer.hpp"
+#include "signalk_rest_stream.hpp"
 
 namespace signalk_mini {
 namespace http {
@@ -196,13 +198,52 @@ inline bool query_parameter_equals(const char* resource, const char* name, const
 
 } // namespace http
 
+// Lets SignalKHttpApi keep a response open and write it as the client drains.
+struct IHttpResponseControl {
+    virtual ~IHttpResponseControl() = default;
+    virtual bool hold(async_event_loop::ITcpConnection& connection) = 0;
+    virtual void finish(async_event_loop::ITcpConnection& connection) = 0;
+    virtual void abort(async_event_loop::ITcpConnection& connection) = 0;
+    // Bytes that can be written now without exceeding the client's buffer.
+    virtual size_t room(async_event_loop::ITcpConnection& connection) = 0;
+    virtual uint32_t now_ms() = 0;
+};
+
 // Read-only HTTP endpoints served on the WebSocket listener: the root page,
 // Signal K discovery (/signalk) and the REST API (/signalk/v1/api/...).
-template<typename Real>
+// A REST response that fits the client's buffer is sent at once with a
+// Content-Length; a larger one is resumed from the typed model as the client
+// drains (no Content-Length; the response ends when the connection closes).
+template<typename Real, size_t MaxResumableResponses = DefaultMaxResumableRestResponses>
 class SignalKHttpApi {
 public:
     SignalKHttpApi(const ModelStore<Real>& store, const SignalKMiniConfig& config)
         : store_(store), config_(config) {}
+
+    void set_response_control(IHttpResponseControl* control) { control_ = control; }
+
+    // Continues a held response (on write-ready or a timer tick).
+    void pump(async_event_loop::ITcpConnection& connection) {
+        RestResumeJob* job = find_job(&connection);
+        if (job) pump_job(*job);
+    }
+
+    void pump_all() {
+        for (RestResumeJob& job : jobs_) {
+            if (job.active()) pump_job(job);
+        }
+    }
+
+    void release(async_event_loop::ITcpConnection& connection) {
+        RestResumeJob* job = find_job(&connection);
+        if (job) *job = RestResumeJob{};
+    }
+
+    size_t resumable_response_count() const {
+        size_t count = 0;
+        for (const RestResumeJob& job : jobs_) if (job.active()) ++count;
+        return count;
+    }
 
     bool handle_request(async_event_loop::ITcpConnection& connection,
                         const char* header,
@@ -385,6 +426,28 @@ private:
             return send_http_response(connection, "500 Internal Server Error", "application/json", "{\"message\":\"Serialization failed\"}");
         }
 
+        static constexpr char ResumableHeader[] =
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: application/json\r\n"
+            "Connection: close\r\n"
+            "Access-Control-Allow-Origin: *\r\n"
+            "\r\n";
+        if (control_ && count_sink.size + sizeof(ResumableHeader) > control_->room(connection) &&
+            strlen(relative_path) < RestResumeJob::MaxPathLength) {
+            RestResumeJob* job = find_job(nullptr);
+            if (!job) {
+                return send_http_response(connection, "503 Service Unavailable", "application/json",
+                                          "{\"message\":\"Busy\"}", "Retry-After: 1\r\n");
+            }
+            if (!control_->hold(connection)) return false;
+            job->connection = &connection;
+            memcpy(job->path, relative_path, strlen(relative_path) + 1);
+            job->now_us = now_us;
+            job->last_progress_ms = control_->now_ms();
+            pump_job(*job);
+            return true;
+        }
+
         char response_header[256];
         const int response_header_len = snprintf(
             response_header,
@@ -409,8 +472,70 @@ private:
                body_out.size() == count_sink.size && body_sink.flush();
     }
 
+    RestResumeJob* find_job(const void* connection) {
+        for (RestResumeJob& job : jobs_) {
+            if (job.connection == connection) return &job;
+        }
+        return nullptr;
+    }
+
+    void pump_job(RestResumeJob& job) {
+        if (!control_ || !job.active()) return;
+        auto& connection = *static_cast<async_event_loop::ITcpConnection*>(job.connection);
+        static constexpr char Header[] =
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: application/json\r\n"
+            "Connection: close\r\n"
+            "Access-Control-Allow-Origin: *\r\n"
+            "\r\n";
+        const uint32_t now = control_->now_ms();
+        const uint32_t sent_before = job.leaves_sent;
+        RestPassResult result = RestPassResult::Paused;
+
+        if (!job.header_sent) {
+            if (control_->room(connection) >= sizeof(Header) - 1) {
+                if (connection.write(reinterpret_cast<const uint8_t*>(Header), sizeof(Header) - 1) != static_cast<int>(sizeof(Header) - 1)) {
+                    result = RestPassResult::Failed;
+                } else {
+                    job.header_sent = true;
+                    job.last_progress_ms = now;
+                }
+            }
+        }
+        if (job.header_sent && result != RestPassResult::Failed) {
+            auto write = [&](const char* data, size_t len) {
+                return connection.write(reinterpret_cast<const uint8_t*>(data), len) == static_cast<int>(len);
+            };
+            auto room = [&]() { return control_->room(connection); };
+            RestResumeSink<decltype(write), decltype(room)> sink(job, write, room);
+            SignalKJsonStreamWriter out(&RestResumeSink<decltype(write), decltype(room)>::write, &sink);
+            SignalKFullModelWriter<Real> model_writer;
+            const SignalKModelWriteResult written = model_writer.write_api_path(out, job.path, store_, config_, job.now_us);
+            if (sink.result() != RestPassResult::Complete) {
+                result = sink.result();
+            } else {
+                result = written == SignalKModelWriteResult::Written ? sink.finish() : RestPassResult::Failed;
+            }
+            if (job.leaves_sent != sent_before) job.last_progress_ms = now;
+        }
+
+        const uint32_t timeout = config_.publisher.stalled_client_timeout_ms;
+        if (result == RestPassResult::Paused && timeout != 0 && now - job.last_progress_ms > timeout) {
+            result = RestPassResult::Failed;
+        }
+        if (result == RestPassResult::Complete) {
+            job = RestResumeJob{};
+            control_->finish(connection);
+        } else if (result == RestPassResult::Failed) {
+            job = RestResumeJob{};
+            control_->abort(connection);
+        }
+    }
+
     const ModelStore<Real>& store_;
     const SignalKMiniConfig& config_;
+    IHttpResponseControl* control_ = nullptr;
+    RestResumeJob jobs_[MaxResumableResponses]{};
 };
 
 } // namespace signalk_mini

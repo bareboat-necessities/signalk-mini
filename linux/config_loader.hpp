@@ -114,6 +114,7 @@ private:
         if (config_setting_lookup_string(s, "host", &value)) config.signalk.host = keep(value);
         read_u16(s, "port", config.signalk.port);
         read_u16(s, "max_connections", config.signalk.max_connections);
+        read_u32(s, "max_client_queue_bytes", config.signalk.max_client_queue_bytes);
         read_bool(s, "allow_rx", config.signalk.allow_rx);
         read_bool(s, "allow_tx", config.signalk.allow_tx);
         load_signalk_websocket(s);

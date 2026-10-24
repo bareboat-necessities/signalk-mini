@@ -11,12 +11,15 @@ static constexpr size_t DefaultSignalKJsonBufferSize = 384;
 static constexpr size_t DefaultSignalKBatchValues = 8;
 static constexpr uint16_t DefaultMaxChangesPerTick = 16;
 static constexpr uint16_t DefaultSignalKMaxConnections = 4;
+// REST responses that did not fit the transmit buffer and are being resumed.
+static constexpr size_t DefaultMaxResumableRestResponses = 1;
 #else
 static constexpr size_t DefaultModelChangeQueueCapacity = 512;
 static constexpr size_t DefaultSignalKJsonBufferSize = 1024;
 static constexpr size_t DefaultSignalKBatchValues = 32;
 static constexpr uint16_t DefaultMaxChangesPerTick = 32;
 static constexpr uint16_t DefaultSignalKMaxConnections = 8;
+static constexpr size_t DefaultMaxResumableRestResponses = 4;
 #endif
 
 static constexpr size_t MaxSupportedModelChangeQueueCapacity = 65535;

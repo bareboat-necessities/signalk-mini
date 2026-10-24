@@ -33,6 +33,11 @@ struct SignalKProtocolServerConfig {
     uint16_t max_connections = DefaultSignalKMaxConnections;
     bool allow_rx = true;
     bool allow_tx = true;
+    // Upper bound on bytes queued for one stream or HTTP client (TCP and
+    // WebSocket). Frames that would exceed it are not written; the client is
+    // caught up from the model instead. 0 uses the transport default (its
+    // fixed buffer on Arduino, the backpressure high-water mark on Linux).
+    uint32_t max_client_queue_bytes = 0;
     SignalKWebSocketServerConfig websocket;
 };
 

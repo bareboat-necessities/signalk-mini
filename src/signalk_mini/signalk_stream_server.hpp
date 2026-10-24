@@ -39,7 +39,13 @@ public:
           signalk_connections_(*this),
           signalk_websocket_handler_(*this),
           signalk_websocket_protocol_(signalk_websocket_handler_, signalk_backpressure_options()),
-          signalk_line_handler_(signalk_connections_, signalk_options()) {}
+          signalk_line_handler_(signalk_connections_, signalk_options()),
+          http_control_(*this) {
+        http_.set_response_control(&http_control_);
+    }
+
+    SignalKStreamServer(const SignalKStreamServer&) = delete;
+    SignalKStreamServer& operator=(const SignalKStreamServer&) = delete;
 
     bool listen() {
         if (!listen_tcp(signalk_tcp_server_, signalk_line_handler_, config_.signalk.host, config_.signalk.port)) return false;
@@ -57,7 +63,10 @@ public:
         publisher_.publish_pending(fanout);
         pump_resync();
         close_stalled_clients();
+        http_.pump_all();
     }
+
+    size_t resumable_rest_response_count() const { return http_.resumable_response_count(); }
 
     // Clients that could not take a whole delta and were switched to catch-up.
     uint32_t catch_up_count() const { return catch_up_count_; }
@@ -143,16 +152,20 @@ private:
 
     // Free space for whole frames: the transport's fixed buffer on embedded
     // targets, or the backpressure high-water mark where buffering is unbounded.
-    static size_t frame_room(async_event_loop::ITcpConnection& connection) {
+    size_t frame_room(async_event_loop::ITcpConnection& connection) const {
         size_t limit = connection.output_capacity();
-        const size_t high_water = signalk_backpressure_options().high_water_bytes;
-        if (high_water != 0 && high_water < limit) limit = high_water;
+        // Never below one whole delta (plus a WebSocket header), or nothing could be sent.
+        const size_t min_queue = static_cast<size_t>(config_.publisher.json_buffer_size) + 16u;
+        size_t configured = config_.signalk.max_client_queue_bytes;
+        if (configured != 0 && configured < min_queue) configured = min_queue;
+        const size_t queue_limit = configured != 0 ? configured : signalk_backpressure_options().high_water_bytes;
+        if (queue_limit != 0 && queue_limit < limit) limit = queue_limit;
         const size_t used = connection.output_size();
         return used >= limit ? 0 : limit - used;
     }
 
     // Writes a whole frame or nothing, so a client never receives a partial delta.
-    static bool write_tcp_frame(async_event_loop::ITcpConnection& connection, const char* data, size_t len) {
+    bool write_tcp_frame(async_event_loop::ITcpConnection& connection, const char* data, size_t len) const {
         if (!data || len == 0 || !connection.valid() || frame_room(connection) < len) return false;
         return connection.write(reinterpret_cast<const uint8_t*>(data), len) == static_cast<int>(len);
     }
@@ -189,7 +202,7 @@ private:
     struct TcpConnectionDeltaSink {
         SignalKStreamServer& owner;
         async_event_loop::ITcpConnection& connection;
-        bool write_signal_k_delta(const char* json, size_t len) { return write_tcp_frame(connection, json, len); }
+        bool write_signal_k_delta(const char* json, size_t len) { return owner.write_tcp_frame(connection, json, len); }
     };
 
     struct WebSocketConnectionDeltaSink {
@@ -346,6 +359,9 @@ private:
             return owner.http_.handle_request(connection, header, header_len, owner.loop_.clock().micros());
         }
 
+        void on_http_write_ready(async_event_loop::ITcpConnection& connection) override { owner.http_.pump(connection); }
+        void on_http_closed(async_event_loop::ITcpConnection& connection) override { owner.http_.release(connection); }
+
         bool accept_websocket_request(const async_event_loop::websocket::HandshakeRequest& request) override {
             return owner.is_signalk_stream_resource(request.resource);
         }
@@ -402,7 +418,7 @@ private:
         void write_signal_k_delta(const char* json, size_t len) {
             if (!json || len == 0) return;
             owner.signalk_connections_.connections.for_each_tx_state([&](async_event_loop::ITcpConnection& connection, StreamDeliveryState& state) {
-                if (!write_tcp_frame(connection, json, len)) owner.request_catch_up(state);
+                if (!owner.write_tcp_frame(connection, json, len)) owner.request_catch_up(state);
             });
             owner.signalk_websocket_handler_.connections.for_each_tx_state([&](async_event_loop::ITcpConnection& connection, StreamDeliveryState& state) {
                 if (!owner.write_websocket_frame(connection, json, len)) owner.request_catch_up(state);
@@ -443,6 +459,23 @@ private:
     SignalKWebSocketHandler signalk_websocket_handler_;
     async_event_loop::WebSocketServerHandler<MaxSignalKConnections, async_event_loop::websocket::DefaultHandshakeBufferSize, async_event_loop::websocket::DefaultMaxPayloadSize> signalk_websocket_protocol_;
     async_event_loop::TcpLineServerHandler<256, MaxSignalKConnections> signalk_line_handler_;
+    struct HttpControl final : IHttpResponseControl {
+        explicit HttpControl(SignalKStreamServer& owner_ref) : owner(owner_ref) {}
+        bool hold(async_event_loop::ITcpConnection& connection) override {
+            return owner.signalk_websocket_protocol_.hold_http_response(connection);
+        }
+        void finish(async_event_loop::ITcpConnection& connection) override {
+            owner.signalk_websocket_protocol_.finish_http_response(connection);
+        }
+        void abort(async_event_loop::ITcpConnection& connection) override {
+            owner.signalk_websocket_protocol_.abort_http_response(connection);
+        }
+        size_t room(async_event_loop::ITcpConnection& connection) override { return owner.frame_room(connection); }
+        uint32_t now_ms() override { return owner.now_ms(); }
+        SignalKStreamServer& owner;
+    };
+
+    HttpControl http_control_;
     uint32_t catch_up_count_ = 0;
     uint32_t stalled_client_close_count_ = 0;
 };
