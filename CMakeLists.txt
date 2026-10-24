@@ -130,6 +130,10 @@ if(BUILD_TESTING)
   target_link_libraries(test_signalk_http_discovery PRIVATE signalk_mini_core Threads::Threads)
   add_test(NAME test_signalk_http_discovery COMMAND test_signalk_http_discovery)
 
+  add_executable(test_signalk_slow_client tests/test_signalk_slow_client.cpp)
+  target_link_libraries(test_signalk_slow_client PRIVATE signalk_mini_core)
+  add_test(NAME test_signalk_slow_client COMMAND test_signalk_slow_client)
+
   add_executable(test_signalk_rest_api tests/test_signalk_rest_api.cpp)
   target_link_libraries(test_signalk_rest_api PRIVATE signalk_mini_core Threads::Threads)
   add_test(NAME test_signalk_rest_api COMMAND test_signalk_rest_api)

@@ -43,6 +43,9 @@ struct PublisherConfig {
     const char* source_label = "signalk-mini";
     bool send_current_values_on_connect = true;
     uint32_t current_value_timeout_ms = 0;
+    // A stream client whose queued output has not drained at all for this long
+    // is disconnected. 0 disables the check.
+    uint32_t stalled_client_timeout_ms = 15000;
 };
 
 enum class ConnectorProtocol : uint8_t {

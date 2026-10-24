@@ -46,6 +46,9 @@ public:
     virtual const TcpPeerInfo& peer() const = 0;
     virtual size_t input_size() const = 0;
     virtual size_t output_size() const = 0;
+    // Bytes this connection can hold queued for sending. SIZE_MAX means the
+    // platform buffers without a fixed limit.
+    virtual size_t output_capacity() const { return SIZE_MAX; }
 
     int read(uint8_t* dst, size_t max_len) override = 0;
     int write(const uint8_t* src, size_t len) override = 0;

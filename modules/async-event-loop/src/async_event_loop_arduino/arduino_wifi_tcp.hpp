@@ -45,6 +45,7 @@ public:
     const TcpPeerInfo& peer() const override { return peer_; }
     size_t input_size() const override { return active_ ? static_cast<size_t>(client_.available()) : 0; }
     size_t output_size() const override { return tx_size_; }
+    size_t output_capacity() const override { return tx_capacity; }
 
     int read(uint8_t* dst, size_t max_len) override {
         if (!active_ || !dst || max_len == 0) {

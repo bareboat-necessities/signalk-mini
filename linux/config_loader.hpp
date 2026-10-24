@@ -140,6 +140,7 @@ private:
         read_u16(s, "json_buffer_size", config.publisher.json_buffer_size);
         read_bool(s, "send_current_values_on_connect", config.publisher.send_current_values_on_connect);
         read_u32(s, "current_value_timeout_ms", config.publisher.current_value_timeout_ms);
+        read_u32(s, "stalled_client_timeout_ms", config.publisher.stalled_client_timeout_ms);
         if (config_setting_lookup_string(s, "source_label", &value)) config.publisher.source_label = keep(value);
     }
 

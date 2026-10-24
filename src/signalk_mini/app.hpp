@@ -51,6 +51,10 @@ public:
     uint64_t dropped_publish_count() const { return server_.dropped_publish_count(); }
     uint64_t published_delta_count() const { return server_.published_delta_count(); }
     uint64_t published_snapshot_count() const { return server_.published_snapshot_count(); }
+    uint64_t truncated_value_count() const { return server_.truncated_value_count(); }
+    uint32_t stream_catch_up_count() const { return server_.stream_catch_up_count(); }
+    uint32_t stalled_client_close_count() const { return server_.stalled_client_close_count(); }
+    size_t catching_up_client_count() { return server_.catching_up_client_count(); }
     int write_full_model(char* dst, size_t dst_size) const { return server_.write_full_model(dst, dst_size); }
     typename MiniSignalKServer<Real>::StartupError last_startup_error() const {
         return app_startup_error_ != MiniSignalKServer<Real>::StartupError::None ? app_startup_error_ : server_.last_startup_error();

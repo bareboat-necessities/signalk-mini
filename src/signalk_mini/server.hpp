@@ -83,6 +83,10 @@ public:
     uint64_t dropped_publish_count() const { return publisher_.dropped_publish_count(); }
     uint64_t published_delta_count() const { return publisher_.published_delta_count(); }
     uint64_t published_snapshot_count() const { return publisher_.published_snapshot_count(); }
+    uint64_t truncated_value_count() const { return publisher_.truncated_value_count(); }
+    uint32_t stream_catch_up_count() const { return stream_.catch_up_count(); }
+    uint32_t stalled_client_close_count() const { return stream_.stalled_client_close_count(); }
+    size_t catching_up_client_count() { return stream_.catching_up_client_count(); }
     int write_full_model(char* dst, size_t dst_size) const {
         SignalKFullModelWriter<Real> writer;
         return writer.write(dst, dst_size, store_, config_, loop_.clock().micros());

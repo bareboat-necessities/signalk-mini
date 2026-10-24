@@ -11,6 +11,18 @@ struct ConnectionFlags {
     bool allow_tx = true;
 };
 
+// Delivery state for a Signal K stream client (unused by connector registries).
+// A client that could not take a whole delta is caught up from the typed model
+// with a resumable snapshot instead of queueing deltas for it.
+struct StreamDeliveryState {
+    uint16_t resync_cursor = 0;
+    bool resync = false;
+    bool resync_again = false;
+    bool include_other_contexts = true;
+    uint32_t last_output_bytes = 0;
+    uint32_t last_drain_ms = 0;
+};
+
 template<size_t MaxConnections>
 class ConnectionRegistry {
 public:
@@ -22,6 +34,7 @@ public:
         }
         for (size_t i = 0; i < MaxConnections; ++i) {
             if (!entries_[i].connection) {
+                entries_[i] = Entry{};
                 entries_[i].connection = &connection;
                 entries_[i].flags = flags;
                 ++count_;
@@ -68,17 +81,32 @@ public:
         }
     }
 
-    void write_signal_k_delta(const char* json, size_t len) {
-        if (!json || len == 0) return;
-        for_each_tx([&](async_event_loop::ITcpConnection& connection) {
-            connection.write(reinterpret_cast<const uint8_t*>(json), len);
-        });
+    StreamDeliveryState* stream_state(async_event_loop::ITcpConnection& connection) {
+        const int index = index_of(connection);
+        return index >= 0 ? &entries_[index].stream : nullptr;
+    }
+
+    template<typename Callback>
+    void for_each_tx_state(Callback callback) {
+        for (size_t i = 0; i < MaxConnections; ++i) {
+            async_event_loop::ITcpConnection* c = entries_[i].connection;
+            if (c && c->valid() && entries_[i].flags.allow_tx) callback(*c, entries_[i].stream);
+        }
+    }
+
+    template<typename Callback>
+    void for_each_state(Callback callback) {
+        for (size_t i = 0; i < MaxConnections; ++i) {
+            async_event_loop::ITcpConnection* c = entries_[i].connection;
+            if (c && c->valid()) callback(*c, entries_[i].stream);
+        }
     }
 
 private:
     struct Entry {
         async_event_loop::ITcpConnection* connection = nullptr;
         ConnectionFlags flags{};
+        StreamDeliveryState stream{};
     };
 
     int index_of(async_event_loop::ITcpConnection& connection) const {

@@ -50,9 +50,24 @@ public:
         return true;
     }
 
+    // Sends pending deltas, then continues catch-up snapshots for clients that
+    // fell behind, then disconnects clients whose output stopped draining.
     void publish() {
-        SignalKDeltaFanout fanout{signalk_connections_.connections, signalk_websocket_handler_};
+        SignalKDeltaFanout fanout{*this};
         publisher_.publish_pending(fanout);
+        pump_resync();
+        close_stalled_clients();
+    }
+
+    // Clients that could not take a whole delta and were switched to catch-up.
+    uint32_t catch_up_count() const { return catch_up_count_; }
+    uint32_t stalled_client_close_count() const { return stalled_client_close_count_; }
+    size_t catching_up_client_count() {
+        size_t count = 0;
+        auto add = [&](async_event_loop::ITcpConnection&, StreamDeliveryState& state) { if (state.resync) ++count; };
+        signalk_connections_.connections.for_each_tx_state(add);
+        signalk_websocket_handler_.connections.for_each_tx_state(add);
+        return count;
     }
 
     void publish_server_clock() {
@@ -75,7 +90,7 @@ public:
                                                    false,
                                                    nullptr);
         if (len <= 0 || static_cast<size_t>(len) >= sizeof(json)) return;
-        SignalKDeltaFanout fanout{signalk_connections_.connections, signalk_websocket_handler_};
+        SignalKDeltaFanout fanout{*this};
         fanout.write_signal_k_delta(json, static_cast<size_t>(len));
     }
 
@@ -116,15 +131,38 @@ private:
         char hello[256];
         const int len = write_signal_k_hello(hello, sizeof(hello));
         if (len <= 0) return false;
-        return write_all(connection, reinterpret_cast<const uint8_t*>(hello), static_cast<size_t>(len));
+        return write_tcp_frame(connection, hello, static_cast<size_t>(len));
     }
 
     bool send_signal_k_hello_websocket(async_event_loop::ITcpConnection& connection) {
         char hello[256];
         const int len = write_signal_k_hello(hello, sizeof(hello));
         if (len <= 0) return false;
-        const size_t text_len = signalk_text_len(hello, static_cast<size_t>(len));
-        return signalk_websocket_protocol_.write_text(connection, hello, text_len);
+        return write_websocket_frame(connection, hello, static_cast<size_t>(len));
+    }
+
+    // Free space for whole frames: the transport's fixed buffer on embedded
+    // targets, or the backpressure high-water mark where buffering is unbounded.
+    static size_t frame_room(async_event_loop::ITcpConnection& connection) {
+        size_t limit = connection.output_capacity();
+        const size_t high_water = signalk_backpressure_options().high_water_bytes;
+        if (high_water != 0 && high_water < limit) limit = high_water;
+        const size_t used = connection.output_size();
+        return used >= limit ? 0 : limit - used;
+    }
+
+    // Writes a whole frame or nothing, so a client never receives a partial delta.
+    static bool write_tcp_frame(async_event_loop::ITcpConnection& connection, const char* data, size_t len) {
+        if (!data || len == 0 || !connection.valid() || frame_room(connection) < len) return false;
+        return connection.write(reinterpret_cast<const uint8_t*>(data), len) == static_cast<int>(len);
+    }
+
+    bool write_websocket_frame(async_event_loop::ITcpConnection& connection, const char* json, size_t len) {
+        const size_t text_len = signalk_text_len(json, len);
+        if (!json || text_len == 0) return false;
+        const size_t header = text_len < 126 ? 2 : (text_len <= 0xFFFFu ? 4 : 10);
+        if (!connection.valid() || frame_room(connection) < text_len + header) return false;
+        return signalk_websocket_protocol_.write_text(connection, json, text_len);
     }
 
     static bool is_signalk_stream_resource(const char* resource) {
@@ -147,33 +185,114 @@ private:
         return !http::query_parameter_equals(resource, "sendCachedValues", "false");
     }
 
+    // Catch-up sinks: a refused frame stops the resumable snapshot at its cursor.
     struct TcpConnectionDeltaSink {
         SignalKStreamServer& owner;
         async_event_loop::ITcpConnection& connection;
-        void write_signal_k_delta(const char* json, size_t len) {
-            write_all(connection, reinterpret_cast<const uint8_t*>(json), len);
-        }
+        bool write_signal_k_delta(const char* json, size_t len) { return write_tcp_frame(connection, json, len); }
     };
 
     struct WebSocketConnectionDeltaSink {
         SignalKStreamServer& owner;
         async_event_loop::ITcpConnection& connection;
-        void write_signal_k_delta(const char* json, size_t len) {
-            const size_t text_len = owner.signalk_text_len(json, len);
-            if (text_len) owner.signalk_websocket_protocol_.write_text(connection, json, text_len);
-        }
+        bool write_signal_k_delta(const char* json, size_t len) { return owner.write_websocket_frame(connection, json, len); }
     };
 
-    void send_current_values_tcp(async_event_loop::ITcpConnection& connection) {
-        update_server_clock_model(loop_.clock().micros());
-        TcpConnectionDeltaSink sink{*this, connection};
-        publisher_.publish_current(sink, loop_.clock().micros(), true);
+    void request_catch_up(StreamDeliveryState& state) {
+        if (!state.resync && catch_up_count_ < UINT32_MAX) ++catch_up_count_;
+        request_resync(state);
     }
 
-    void send_current_values_websocket(async_event_loop::ITcpConnection& connection, bool include_other_contexts) {
+    static void request_resync(StreamDeliveryState& state) {
+        if (state.resync) {
+            state.resync_again = true;
+            return;
+        }
+        state.resync = true;
+        state.resync_again = false;
+        state.resync_cursor = 0;
+    }
+
+    // Starts the stream for a client with a full current-value snapshot, which
+    // uses the same resumable path as catch-up.
+    template<typename Registry>
+    void start_stream(Registry& registry, async_event_loop::ITcpConnection& connection, bool include_other_contexts) {
+        StreamDeliveryState* state = registry.stream_state(connection);
+        if (!state) return;
+        *state = StreamDeliveryState{};
+        state->include_other_contexts = include_other_contexts;
+        state->last_drain_ms = now_ms();
         update_server_clock_model(loop_.clock().micros());
-        WebSocketConnectionDeltaSink sink{*this, connection};
-        publisher_.publish_current(sink, loop_.clock().micros(), include_other_contexts);
+        request_resync(*state);
+        pump_one(connection, *state, &registry == &signalk_websocket_handler_.connections);
+    }
+
+    void stop_stream(StreamDeliveryState* state) {
+        if (state) *state = StreamDeliveryState{};
+    }
+
+    void pump_one(async_event_loop::ITcpConnection& connection, StreamDeliveryState& state, bool websocket) {
+        if (!state.resync) return;
+        const uint64_t now_us = loop_.clock().micros();
+        bool complete = false;
+        if (websocket) {
+            WebSocketConnectionDeltaSink sink{*this, connection};
+            complete = publisher_.publish_current(sink, now_us, state.include_other_contexts, &state.resync_cursor);
+        } else {
+            TcpConnectionDeltaSink sink{*this, connection};
+            complete = publisher_.publish_current(sink, now_us, state.include_other_contexts, &state.resync_cursor);
+        }
+        if (!complete) return;
+        if (state.resync_again) {
+            state.resync_again = false;
+            state.resync_cursor = 0;
+        } else {
+            state.resync = false;
+        }
+    }
+
+    void pump_resync() {
+        signalk_connections_.connections.for_each_tx_state([&](async_event_loop::ITcpConnection& connection, StreamDeliveryState& state) {
+            pump_one(connection, state, false);
+        });
+        signalk_websocket_handler_.connections.for_each_tx_state([&](async_event_loop::ITcpConnection& connection, StreamDeliveryState& state) {
+            pump_one(connection, state, true);
+        });
+    }
+
+    uint32_t now_ms() const { return static_cast<uint32_t>(loop_.clock().micros() / 1000ULL); }
+
+    // Progress means the queued output shrank or emptied since the last check.
+    bool stalled(async_event_loop::ITcpConnection& connection, StreamDeliveryState& state, uint32_t now) const {
+        const size_t queued = connection.output_size();
+        const uint32_t queued32 = queued > UINT32_MAX ? UINT32_MAX : static_cast<uint32_t>(queued);
+        if (queued32 == 0 || queued32 < state.last_output_bytes || state.last_drain_ms == 0) state.last_drain_ms = now;
+        state.last_output_bytes = queued32;
+        const uint32_t timeout = config_.publisher.stalled_client_timeout_ms;
+        return timeout != 0 && queued32 != 0 && now - state.last_drain_ms > timeout;
+    }
+
+    void close_stalled_clients() {
+        if (config_.publisher.stalled_client_timeout_ms == 0) return;
+        const uint32_t now = now_ms();
+        async_event_loop::ITcpConnection* stalled_tcp[MaxSignalKConnections]{};
+        async_event_loop::ITcpConnection* stalled_ws[MaxSignalKConnections]{};
+        size_t tcp_count = 0;
+        size_t ws_count = 0;
+        signalk_connections_.connections.for_each_state([&](async_event_loop::ITcpConnection& connection, StreamDeliveryState& state) {
+            if (stalled(connection, state, now) && tcp_count < MaxSignalKConnections) stalled_tcp[tcp_count++] = &connection;
+        });
+        signalk_websocket_handler_.connections.for_each_state([&](async_event_loop::ITcpConnection& connection, StreamDeliveryState& state) {
+            if (stalled(connection, state, now) && ws_count < MaxSignalKConnections) stalled_ws[ws_count++] = &connection;
+        });
+        if (stalled_client_close_count_ < UINT32_MAX - (tcp_count + ws_count)) {
+            stalled_client_close_count_ += static_cast<uint32_t>(tcp_count + ws_count);
+        }
+        for (size_t i = 0; i < tcp_count; ++i) {
+            signalk_connections_.connections.remove(*stalled_tcp[i]);
+            stalled_tcp[i]->close();
+        }
+        for (size_t i = 0; i < ws_count; ++i) signalk_websocket_protocol_.close_connection(*stalled_ws[i]);
     }
 
     struct SignalKConnectionHandler : async_event_loop::ITcpLineServerHandler {
@@ -201,15 +320,15 @@ private:
             const SignalKStreamCommand command = signalk_stream_command(line.data, line.size);
             if (command == SignalKStreamCommand::Unsubscribe) {
                 connections.set_allow_tx(connection, false);
+                owner.stop_stream(connections.stream_state(connection));
             } else if (command == SignalKStreamCommand::SubscribeAll) {
                 connections.set_allow_tx(connection, owner.config_.signalk.allow_tx);
-                if (owner.config_.signalk.allow_tx) owner.send_current_values_tcp(connection);
+                if (owner.config_.signalk.allow_tx) owner.start_stream(connections, connection, true);
             }
         }
-        void on_backpressure(async_event_loop::ITcpConnection& connection, const async_event_loop::TcpBackpressureInfo&) override {
-            connections.remove(connection);
-            connection.close();
-        }
+        // A client above the high-water mark only stops getting deltas until it
+        // drains (then it is caught up); it is closed only if it stalls.
+        void on_backpressure(async_event_loop::ITcpConnection&, const async_event_loop::TcpBackpressureInfo&) override {}
         void on_close(async_event_loop::ITcpConnection& connection) override { connections.remove(connection); }
         void on_error(async_event_loop::ITcpConnection& connection, int) override { connections.remove(connection); }
         void on_too_many_connections(async_event_loop::ITcpConnection& connection) override { connection.close(); }
@@ -253,7 +372,7 @@ private:
                 connection.close();
                 return;
             }
-            if (send_current) owner.send_current_values_websocket(connection, scope == InitialStreamScope::All);
+            if (send_current) owner.start_stream(connections, connection, scope == InitialStreamScope::All);
         }
 
         void on_websocket_text(async_event_loop::ITcpConnection& connection, const char* text, size_t len) override {
@@ -261,31 +380,33 @@ private:
             const SignalKStreamCommand command = signalk_stream_command(text, len);
             if (command == SignalKStreamCommand::Unsubscribe) {
                 connections.set_allow_tx(connection, false);
+                owner.stop_stream(connections.stream_state(connection));
             } else if (command == SignalKStreamCommand::SubscribeAll) {
                 connections.set_allow_tx(connection, owner.config_.signalk.websocket.allow_tx);
-                if (owner.config_.signalk.websocket.allow_tx) owner.send_current_values_websocket(connection, true);
+                if (owner.config_.signalk.websocket.allow_tx) owner.start_stream(connections, connection, true);
             }
         }
 
         void on_websocket_close(async_event_loop::ITcpConnection& connection) override { connections.remove(connection); }
         void on_websocket_error(async_event_loop::ITcpConnection& connection, async_event_loop::WebSocketError) override { connections.remove(connection); }
 
-        void write_signal_k_delta(const char* json, size_t len) {
-            const size_t text_len = owner.signalk_text_len(json, len);
-            if (!json || text_len == 0) return;
-            connections.for_each_tx([&](async_event_loop::ITcpConnection& connection) {
-                owner.signalk_websocket_protocol_.write_text(connection, json, text_len);
-            });
-        }
     };
 
+    // Live deltas go to every streaming client that can take the whole frame
+    // now. A client that cannot is skipped and marked for catch-up, which later
+    // sends it the current model; while it catches up it still gets deltas
+    // that fit.
     struct SignalKDeltaFanout {
-        ConnectionRegistry<MaxSignalKConnections>& tcp;
-        SignalKWebSocketHandler& websocket;
+        SignalKStreamServer& owner;
 
         void write_signal_k_delta(const char* json, size_t len) {
-            tcp.write_signal_k_delta(json, len);
-            websocket.write_signal_k_delta(json, len);
+            if (!json || len == 0) return;
+            owner.signalk_connections_.connections.for_each_tx_state([&](async_event_loop::ITcpConnection& connection, StreamDeliveryState& state) {
+                if (!write_tcp_frame(connection, json, len)) owner.request_catch_up(state);
+            });
+            owner.signalk_websocket_handler_.connections.for_each_tx_state([&](async_event_loop::ITcpConnection& connection, StreamDeliveryState& state) {
+                if (!owner.write_websocket_frame(connection, json, len)) owner.request_catch_up(state);
+            });
         }
     };
 
@@ -322,6 +443,8 @@ private:
     SignalKWebSocketHandler signalk_websocket_handler_;
     async_event_loop::WebSocketServerHandler<MaxSignalKConnections, async_event_loop::websocket::DefaultHandshakeBufferSize, async_event_loop::websocket::DefaultMaxPayloadSize> signalk_websocket_protocol_;
     async_event_loop::TcpLineServerHandler<256, MaxSignalKConnections> signalk_line_handler_;
+    uint32_t catch_up_count_ = 0;
+    uint32_t stalled_client_close_count_ = 0;
 };
 
 } // namespace signalk_mini
