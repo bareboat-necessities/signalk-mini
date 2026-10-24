@@ -14,6 +14,7 @@
 #include "model_store.hpp"
 #include "signalk_mapper.hpp"
 #include "signalk_typed_view.hpp"
+#include "source_value_recorder.hpp"
 
 namespace signalk_mini {
 
@@ -114,6 +115,9 @@ public:
 
         SignalKDeltaFrame frame(json_, json_capacity);
         SourceId frame_source_id = 0;
+        // Fields that share a path (latitude and longitude both map to
+        // navigation.position) are queued as separate changes; send it once.
+        const char* last_path = nullptr;
         ModelChange change;
         size_t processed = 0;
         const size_t max_changes = static_cast<size_t>(config_.publisher.max_changes_per_tick);
@@ -134,6 +138,7 @@ public:
                 continue;
             }
             if (!mapped_ok) continue;
+            if (frame.open() && change.source_id == frame_source_id && mapped.path == last_path) continue;
 
             if (frame.open() && (change.source_id != frame_source_id || frame.count() >= MaxBatchValues)) flush(sink, frame);
             if (!frame.open()) {
@@ -143,7 +148,17 @@ public:
                 }
                 frame_source_id = change.source_id;
             }
-            add_value(sink, frame, mapped);
+            // For a multi-source path the model holds whichever source wrote
+            // last; send this change's own source value instead.
+            last_path = mapped.path;
+            const SourceValueEntry* own = store_.source_values().find(mapped.path, change.source_id);
+            if (own) {
+                add_or_split(sink, frame, mapped.path, [&](SignalKJsonStreamWriter& out) {
+                    return signalk_write_source_value(out, *own);
+                });
+            } else {
+                add_value(sink, frame, mapped);
+            }
         }
 
         flush(sink, frame);

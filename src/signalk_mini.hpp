@@ -7,6 +7,7 @@
 #include "signalk_mini/signalk_paths.hpp"
 #include "signalk_mini/connection_registry.hpp"
 #include "signalk_mini/model_store.hpp"
+#include "signalk_mini/source_value_recorder.hpp"
 #include "signalk_mini/nmea0183_input.hpp"
 #include "signalk_mini/seatalk_input.hpp"
 #include "signalk_mini/ubx_input.hpp"

@@ -23,6 +23,7 @@
 #include "signalk_full_model_writer.hpp"
 #include "signalk_identity.hpp"
 #include "signalk_stream_server.hpp"
+#include "source_value_recorder.hpp"
 #include "ubx_input.hpp"
 
 namespace signalk_mini {
@@ -52,7 +53,12 @@ public:
           publisher_(store_, config_),
           stream_(config_, loop_, store_, publisher_),
           publish_on_change_(stream_),
-          connectors_(config_, loop_, store_, nmea_, publish_on_change_) {}
+          connectors_(config_, loop_, store_, nmea_, publish_on_change_) {
+        store_.set_mark_observer(&source_values_);
+    }
+
+    MiniSignalKServer(const MiniSignalKServer&) = delete;
+    MiniSignalKServer& operator=(const MiniSignalKServer&) = delete;
 
     bool begin() {
         reset_startup_diagnostics();
@@ -261,6 +267,7 @@ private:
     SignalKMiniConfig config_;
     async_event_loop::EventLoop<> loop_;
     ModelStore<Real> store_{};
+    SourceValueRecorder<Real> source_values_{store_};
     Nmea0183Input<Real> nmea_{store_};
     SeaTalkInput<Real> seatalk_{store_};
     UbxInput<Real> ubx_{store_};
