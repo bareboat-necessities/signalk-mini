@@ -15,13 +15,25 @@ struct ConnectionFlags {
 // A client that could not take a whole delta is caught up from the typed model
 // with a resumable snapshot instead of queueing deltas for it.
 struct StreamDeliveryState {
-    uint16_t resync_cursor = 0;
+    uint16_t resync_position = 0;
+    uint16_t resync_value = 0;
     bool resync = false;
     bool resync_again = false;
     bool include_other_contexts = true;
     uint32_t last_output_bytes = 0;
+    // Bytes queued for this client since last_output_bytes was sampled.
+    uint32_t queued_since_sample = 0;
     uint32_t last_drain_ms = 0;
 };
+
+// True when some queued output was sent between two samples: less is queued
+// now than at the last sample plus what was added since. Comparing queue sizes
+// alone would miss a queue that drained completely and was refilled to the
+// same size before the next sample.
+inline bool stream_output_progressed(uint32_t queued_now, uint32_t queued_at_sample, uint32_t queued_since_sample) {
+    return queued_now == 0 ||
+           static_cast<uint64_t>(queued_now) < static_cast<uint64_t>(queued_at_sample) + queued_since_sample;
+}
 
 template<size_t MaxConnections>
 class ConnectionRegistry {

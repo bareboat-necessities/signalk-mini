@@ -149,6 +149,9 @@ public:
     RestPassResult finish() {
         if (result_ != RestPassResult::Complete) return result_;
         if (lexer_.finish_leaf() && !boundary()) return result_;
+        // The regenerated document ended before the part already sent: its
+        // structure changed and the sent prefix cannot be completed.
+        if (leaf_index_ < job_.leaves_sent) return RestPassResult::Failed;
         if (!commit()) return result_;
         return RestPassResult::Complete;
     }

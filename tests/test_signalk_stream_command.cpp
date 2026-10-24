@@ -31,6 +31,16 @@ int main() {
     const char line[] = {'*', 'u', 'n', 's'};
     REQUIRE(signalk_mini::signalk_stream_command(line, 1) == SignalKStreamCommand::SubscribeAll);
 
+    // Stall detection: an ESP32 ring that drained fully and was refilled to the
+    // same 700 bytes before the next sample has made progress.
+    REQUIRE(signalk_mini::stream_output_progressed(700, 700, 700));
+    REQUIRE(signalk_mini::stream_output_progressed(0, 700, 0));
+    REQUIRE(signalk_mini::stream_output_progressed(500, 700, 0));
+    // Nothing sent: same queue, nothing added.
+    REQUIRE(!signalk_mini::stream_output_progressed(700, 700, 0));
+    // Nothing sent, 300 added: queue grew by exactly that.
+    REQUIRE(!signalk_mini::stream_output_progressed(1000, 700, 300));
+
     std::puts("test_signalk_stream_command passed");
     return 0;
 }

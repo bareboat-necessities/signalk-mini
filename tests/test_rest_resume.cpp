@@ -150,12 +150,39 @@ void test_structure_change_aborts() {
     REQUIRE(result == RestPassResult::Failed);
 }
 
+// Runs one pass over a fixed JSON text instead of the model writer.
+RestPassResult pass_text(RestResumeJob& job, const char* json, size_t budget, std::string& client) {
+    size_t written = 0;
+    auto write = [&](const char* data, size_t len) {
+        client.append(data, len);
+        written += len;
+        return true;
+    };
+    auto room = [&]() { return budget > written ? budget - written : 0; };
+    signalk_mini::RestResumeSink<decltype(write), decltype(room)> sink(job, write, room);
+    signalk_mini::SignalKJsonStreamWriter out(&decltype(sink)::write, &sink);
+    if (!out.append_raw(json)) return sink.result();
+    return sink.finish();
+}
+
+void test_shorter_document_aborts() {
+    RestResumeJob job;
+    job.connection = &job;
+    std::string client;
+    // Two leaf segments of 6 bytes fit; the third does not.
+    REQUIRE(pass_text(job, "{\"a\":1,\"b\":2,\"c\":3}", 12, client) == RestPassResult::Paused);
+    REQUIRE(job.leaves_sent == 2);
+    // The document lost values before the resume point: it must not complete.
+    REQUIRE(pass_text(job, "{\"a\":1}", 100, client) == RestPassResult::Failed);
+}
+
 } // namespace
 
 int main() {
     test_lexer_marks_leaves_only();
     test_resume_survives_changing_values();
     test_structure_change_aborts();
+    test_shorter_document_aborts();
     std::puts("test_rest_resume passed");
     return 0;
 }

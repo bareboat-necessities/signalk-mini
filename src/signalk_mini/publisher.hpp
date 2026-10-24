@@ -60,11 +60,18 @@ public:
                              out_.append_raw(",\"value\":") && write_value(out_) &&
                              out_.append_char('}') && out_.ok();
         if (written) {
+            last_mark_ = mark;
             ++count_;
             return AddResult::Added;
         }
         out_.rewind(mark);
         return count_ == 0 ? AddResult::TooLarge : AddResult::Full;
+    }
+
+    // Removes the value added by the last successful add().
+    void undo_last() {
+        if (count_ == 0 || !out_.rewind(last_mark_)) return;
+        --count_;
     }
 
     size_t finish() {
@@ -85,8 +92,17 @@ private:
     char* buffer_;
     SignalKJsonStreamWriter out_;
     size_t header_len_ = 0;
+    size_t last_mark_ = 0;
     size_t count_ = 0;
     bool open_ = false;
+};
+
+// Position of a resumable snapshot: a model field (or AIS slot), and how many
+// values of it were already delivered when one field spans several deltas.
+struct SignalKSnapshotCursor {
+    uint16_t position = 0;
+    uint16_t value = 0;
+    bool started() const { return position != 0; }
 };
 
 template<typename Real, size_t MaxJsonBufferSize = DefaultSignalKJsonBufferSize, size_t MaxBatchValues = DefaultSignalKBatchValues>
@@ -166,32 +182,31 @@ public:
 
     // Sends the current typed model as deltas. With a cursor the snapshot is
     // resumable: if the sink refuses a delta (its write_signal_k_delta returns
-    // false), *cursor is left at the first value of that delta and false is
+    // false), *cursor is left at the first value of that delta (a field, and a
+    // value within it when one field spans several deltas) and false is
     // returned; calling again with the same cursor continues from there.
     template<typename DeltaSink>
-    bool publish_current(DeltaSink& sink, uint64_t now_us = 0, bool include_other_contexts = false, uint16_t* cursor = nullptr) {
+    bool publish_current(DeltaSink& sink, uint64_t now_us = 0, bool include_other_contexts = false,
+                         SignalKSnapshotCursor* cursor = nullptr) {
         const size_t json_capacity = effective_json_buffer_size();
         if (json_capacity == 0) return true;
         char timestamp[32];
         if (!format_signalk_timestamp_utc(timestamp, sizeof(timestamp))) return true;
 
-        uint16_t local_cursor = 0;
-        uint16_t& position = cursor ? *cursor : local_cursor;
-        if (position == 0) position = 1;
+        SignalKSnapshotCursor local_cursor;
+        SignalKSnapshotCursor& resume = cursor ? *cursor : local_cursor;
+        if (!resume.started()) resume = SignalKSnapshotCursor{1, 0};
+        SnapshotTracking tracking(*this, resume);
 
         SignalKTypedModelView<Real> view(store_, config_, now_us);
         SignalKDeltaFrame frame(json_, json_capacity);
         SourceId frame_source_id = 0;
-        uint16_t frame_first = position;
 
-        for (; position < SnapshotAisCursorBase; ++position) {
+        for (uint16_t position = resume.position; position < SnapshotAisCursorBase; ++position) {
             SignalKMappedValue<Real> mapped;
             if (!view.selected_current_value(static_cast<ModelField>(position), mapped)) continue;
             if (frame.open() && (mapped.source_id != frame_source_id || frame.count() >= MaxBatchValues)) {
-                if (!flush(sink, frame)) {
-                    position = frame_first;
-                    return false;
-                }
+                if (!flush(sink, frame)) return tracking.refused();
             }
             if (!frame.open()) {
                 if (!frame.begin(context(), timestamp, view.source_label(mapped.source_id))) {
@@ -199,29 +214,25 @@ public:
                     continue;
                 }
                 frame_source_id = mapped.source_id;
-                frame_first = position;
             }
-            if (!add_value(sink, frame, mapped, &frame_first, position)) {
-                position = frame_first;
-                return false;
-            }
+            tracking.enter(position);
+            if (!add_value(sink, frame, mapped)) return tracking.refused();
         }
-        if (!flush(sink, frame)) {
-            position = frame_first;
-            return false;
-        }
+        if (!flush(sink, frame)) return tracking.refused();
 
         const auto& ais_table = store_.model().ais.targets;
         const bool send_ais = include_other_contexts && ais_table.target_count.valid &&
             view.field_is_current(ModelField::AisTargetsObject, ais_table.target_count.last_update_us);
         if (send_ais) {
             const char* source_label = view.source_label(store_.source_id_for(ModelField::AisTargetsObject));
-            for (; position < SnapshotCursorEnd; ++position) {
+            const uint16_t first = resume.position > SnapshotAisCursorBase ? resume.position : SnapshotAisCursorBase;
+            for (uint16_t position = first; position < SnapshotCursorEnd; ++position) {
+                tracking.enter(position);
                 const uint8_t slot = static_cast<uint8_t>(position - SnapshotAisCursorBase);
-                if (!publish_ais_target(sink, frame, timestamp, source_label, slot, &view)) return false;
+                if (!publish_ais_target(sink, frame, timestamp, source_label, slot, &view)) return tracking.refused();
             }
         }
-        position = 0;
+        resume = SignalKSnapshotCursor{};
         ++published_snapshot_count_;
         return true;
     }
@@ -294,38 +305,81 @@ private:
         return true;
     }
 
+    // During a resumable snapshot: counts the values added for the current
+    // field, skips those already delivered, and remembers where the delta
+    // being built started so a refused delta can be resumed exactly.
+    struct SnapshotTracking {
+        SnapshotTracking(SignalKPublisher& owner_ref, SignalKSnapshotCursor& cursor_ref)
+            : owner(owner_ref), cursor(cursor_ref), start_position(cursor_ref.position), skip(cursor_ref.value), frame_start(cursor_ref) {
+            owner.tracking_ = this;
+        }
+        ~SnapshotTracking() { owner.tracking_ = nullptr; }
+
+        // Values to skip belong to the resumed field only (it may have expired).
+        void enter(uint16_t field_position) {
+            if (field_position == position) return;
+            if (field_position != start_position) skip = 0;
+            position = field_position;
+            value = 0;
+        }
+
+        bool refused() {
+            cursor = frame_start;
+            return false;
+        }
+
+        SignalKPublisher& owner;
+        SignalKSnapshotCursor& cursor;
+        uint16_t start_position = 0;
+        uint16_t position = 0;
+        uint16_t value = 0;
+        uint16_t skip = 0;
+        SignalKSnapshotCursor frame_start;
+    };
+
     // `result` is TooLarge when the value does not fit even an empty delta.
     template<typename DeltaSink, typename WriteValue>
     bool add_or_split_result(DeltaSink& sink,
                              SignalKDeltaFrame& frame,
                              const char* path,
                              WriteValue&& write_value,
-                             SignalKDeltaFrame::AddResult& result,
-                             uint16_t* frame_first = nullptr,
-                             uint16_t position = 0) {
+                             SignalKDeltaFrame::AddResult& result) {
+        const bool was_empty = frame.count() == 0;
         result = frame.add(path, write_value);
         if (result == SignalKDeltaFrame::AddResult::Full) {
             if (!flush(sink, frame)) return false;
             frame.reopen();
-            if (frame_first) *frame_first = position;
             result = frame.add(path, write_value);
+            if (result == SignalKDeltaFrame::AddResult::Added) note_added(frame, true);
+            return true;
         }
+        if (result == SignalKDeltaFrame::AddResult::Added) note_added(frame, was_empty);
         return true;
+    }
+
+    void note_added(SignalKDeltaFrame& frame, bool first_in_frame) {
+        SnapshotTracking* t = tracking_;
+        if (!t) return;
+        if (t->skip > 0) {
+            // Already delivered in an earlier pass.
+            frame.undo_last();
+            --t->skip;
+            ++t->value;
+            return;
+        }
+        if (first_in_frame) t->frame_start = SignalKSnapshotCursor{t->position, t->value};
+        ++t->value;
     }
 
     // Adds one mapped value. If it cannot fit even an empty delta, an object is
     // sent member by member under sub-paths (path.member, same Signal K tree),
     // and text is shortened to fit; only what still cannot fit is dropped.
     template<typename DeltaSink>
-    bool add_value(DeltaSink& sink,
-                   SignalKDeltaFrame& frame,
-                   const SignalKMappedValue<Real>& mapped,
-                   uint16_t* frame_first = nullptr,
-                   uint16_t position = 0) {
+    bool add_value(DeltaSink& sink, SignalKDeltaFrame& frame, const SignalKMappedValue<Real>& mapped) {
         SignalKDeltaFrame::AddResult result = SignalKDeltaFrame::AddResult::Added;
         if (!add_or_split_result(sink, frame, mapped.path, [&](SignalKJsonStreamWriter& out) {
                 return writer_.write_value(out, store_.model(), mapped);
-            }, result, frame_first, position)) return false;
+            }, result)) return false;
         if (result != SignalKDeltaFrame::AddResult::TooLarge) return true;
 
         if (mapped.kind == SignalKMappedValueKind::Text) {
@@ -463,6 +517,7 @@ private:
     uint64_t published_value_count_ = 0;
     uint64_t published_snapshot_count_ = 0;
     uint64_t truncated_value_count_ = 0;
+    SnapshotTracking* tracking_ = nullptr;
 };
 
 } // namespace signalk_mini

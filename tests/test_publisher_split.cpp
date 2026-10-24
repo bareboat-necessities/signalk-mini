@@ -98,7 +98,7 @@ void test_snapshot_resumes_from_cursor() {
 
     // A sink that accepts one delta per call must receive the same values, in order, across calls.
     std::vector<std::string> resumed;
-    uint16_t cursor = 0;
+    signalk_mini::SignalKSnapshotCursor cursor;
     size_t calls = 0;
     for (;;) {
         CollectingSink one;
@@ -108,11 +108,56 @@ void test_snapshot_resumes_from_cursor() {
         ++calls;
         REQUIRE(calls < 64);
         if (done) break;
-        REQUIRE(cursor != 0);
+        REQUIRE(cursor.started());
     }
-    REQUIRE(cursor == 0);
+    REQUIRE(!cursor.started());
     REQUIRE(calls >= full.deltas.size());
     REQUIRE(paths_of(resumed, 384) == expected);
+}
+
+template<size_t N>
+void fill_text(char (&text)[N], char c) {
+    for (size_t i = 0; i + 1 < N; ++i) text[i] = c;
+    text[N - 1] = '\0';
+}
+
+// A composite object split into several deltas must resume inside the object:
+// a client that takes one delta per pass still gets every member.
+void test_snapshot_resumes_inside_split_object() {
+    const auto config = config_with_buffer(384);
+    signalk_mini::ModelStore<float> store;
+    auto& alerts = store.model().notifications.alerts;
+    const uint64_t now_us = 1000000ULL;
+    fill_text(alerts.alert_report.alert_text, 'r');
+    alerts.alert_report.last_update_us = now_us;
+    fill_text(alerts.condition.description, 'c');
+    alerts.condition.last_update_us = now_us;
+    fill_text(alerts.command_refused.reason_text, 'x');
+    alerts.command_refused.last_update_us = now_us;
+    fill_text(alerts.alarm_state.description, 'a');
+    alerts.alarm_state.last_update_us = now_us;
+    store.mark_changed(signalk_mini::ModelField::AlertStructuredNotification, 7, now_us);
+    signalk_mini::SignalKPublisher<float, 384, 32> publisher(store, config);
+
+    CollectingSink full;
+    REQUIRE(publisher.publish_current(full, 2000000ULL, true));
+    REQUIRE(full.deltas.size() >= 3);
+    const auto expected = paths_of(full.deltas, 384);
+
+    std::vector<std::string> resumed;
+    signalk_mini::SignalKSnapshotCursor cursor;
+    size_t calls = 0;
+    for (;;) {
+        CollectingSink one;
+        one.accept_limit = 1;
+        const bool done = publisher.publish_current(one, 2000000ULL, true, &cursor);
+        resumed.insert(resumed.end(), one.deltas.begin(), one.deltas.end());
+        ++calls;
+        REQUIRE(calls < 64);
+        if (done) break;
+    }
+    REQUIRE(paths_of(resumed, 384) == expected);
+    REQUIRE(resumed.size() == full.deltas.size());
 }
 
 void test_header_that_cannot_fit_is_counted() {
@@ -133,6 +178,7 @@ void test_header_that_cannot_fit_is_counted() {
 int main() {
     test_small_buffer_splits_without_dropping();
     test_snapshot_resumes_from_cursor();
+    test_snapshot_resumes_inside_split_object();
     test_header_that_cannot_fit_is_counted();
     std::puts("test_publisher_split passed");
     return 0;
