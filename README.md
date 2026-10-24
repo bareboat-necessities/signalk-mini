@@ -226,6 +226,14 @@ Core object-valued paths are emitted in schema form:
 
 `SignalKMiniApp::write_full_model(dst, capacity)` serializes a current full-model view directly from the typed store. The caller owns the output buffer. Live current-value snapshots use the normal bounded publisher buffer and do not consume the model-change queue.
 
+## Delivery to slow clients and memory use
+
+Every delta is built in one fixed JSON buffer (384 bytes on ESP32, 1 KB on Linux). When the next value does not fit, the current delta is sent and a new one starts; an object too large for an empty delta is sent member by member under sub-paths, and text that still cannot fit is shortened (`truncated_value_count`).
+
+A frame is written to a client only if it fits whole into that client's transmit buffer, so a client never receives part of a delta. A client that cannot take a delta is skipped and caught up from the typed model as it drains: it receives the current values, not a backlog. It keeps receiving live deltas that fit meanwhile. The initial snapshot uses the same path, so it is not limited by the transmit buffer. A client whose queued output does not drain at all for `publisher.stalled_client_timeout_ms` (default 15000; 0 disables) is disconnected. `signalk.max_client_queue_bytes` caps the bytes queued per client (0 uses the fixed buffer on Arduino and 32 KiB on Linux).
+
+Per-client RAM for this is 12 bytes; no per-client queue of deltas is kept. Diagnostics: `stream_catch_up_count()`, `stalled_client_close_count()`, `dropped_publish_count()`.
+
 WebSocket clients receive current values after hello by default. Add `?subscribe=none` to suppress the initial snapshot. Raw TCP clients receive the current typed snapshot when they send the existing subscribe-all request. `publisher.current_value_timeout_ms` can exclude stale values; `0` retains the latest valid typed value indefinitely.
 
 ## Read-only Signal K REST API
@@ -249,13 +257,17 @@ The API root returns the current full Signal K document. The model can also be t
 
 `vessels/self` is a REST alias for the stable vessel key configured by `identity.self`; the actual UUID- or MMSI-based key is also accepted. Unknown or currently unavailable paths return `404`. The API is intentionally read-only, and methods other than `GET` return `405 Method Not Allowed`.
 
-REST responses are generated directly from the typed model. The server first counts the selected JSON representation, sends a `Content-Length` header, and then streams the same typed projection through a small fixed buffer. It does not retain a second Signal K tree or allocate a complete response body.
+REST responses are generated directly from the typed model. The server first counts the selected JSON representation, and when the response fits the client's transmit buffer it sends a `Content-Length` header and streams the same typed projection through a small fixed buffer. It does not retain a second Signal K tree or allocate a complete response body.
+
+A response larger than the client's transmit buffer (on ESP32 the full model is much larger than the 1 KB TCP buffer) is resumed as the client drains. Each pass regenerates the response from the typed model and skips what was already sent, resuming at leaf values, so a value that changed in between is sent as its newer value. Such responses have no `Content-Length` and end when the connection closes. If a value appears or expires in the part already sent, the response is aborted rather than sending invalid JSON. Up to one resumed response at a time on Arduino and four on Linux; further large requests get `503` with `Retry-After`.
+
+When two or more sources report the same path (for example two GPS receivers), REST adds a Signal K `values` object with each source's latest value, keyed by source ref (`connector0`, `connector1`, ...). Each source's deltas carry that source's own value. A path becomes multi-source the first time a second source overwrites it, so the first source's entry appears with its next update. The table holds 8 entries on Arduino and 32 on Linux; the oldest is replaced when full.
 
 ## Minimal Signal K subscribe-all
 
 The main Signal K TCP server sends a hello line immediately after a client connects. Deltas are not sent to that client until it sends a minimal subscribe-all line.
 
-This stage intentionally does not implement the full Signal K subscription protocol yet. To receive all deltas, send one line after reading hello:
+signalk-mini streams everything or nothing; it does not implement per-path Signal K subscriptions. To receive all deltas, send one line after reading hello:
 
 ```text
 {"subscribe":"all"}\r\n
@@ -268,6 +280,8 @@ subscribe all\r\n
 subscribe\r\n
 *\r\n
 ```
+
+A Signal K unsubscribe message (`{"context":"*","unsubscribe":[{"path":"*"}]}`, or a line starting with `unsubscribe`) stops the stream for that connection.
 
 After subscribing, the server publishes all model-change deltas for that connection. It also publishes a server clock delta once per second so a client can verify that the connection is alive even when no NMEA0183 or SeaTalk data is arriving.
 
