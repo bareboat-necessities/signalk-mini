@@ -96,10 +96,10 @@ private:
 enum class SourceValueKind : uint8_t { Empty, Number, Bool, Position };
 
 struct SourceValueEntry {
-    const char* path = nullptr;
     uint64_t last_update_us = 0;
     double a = 0.0; // number, bool (0/1) or latitude
     double b = 0.0; // longitude
+    const char* path = nullptr;
     SourceId source_id = 0;
     SourceValueKind kind = SourceValueKind::Empty;
 };

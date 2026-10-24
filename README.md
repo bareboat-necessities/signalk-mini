@@ -232,7 +232,7 @@ Every delta is built in one fixed JSON buffer (384 bytes on ESP32, 1 KB on Linux
 
 A frame is written to a client only if it fits whole into that client's transmit buffer, so a client never receives part of a delta. A client that cannot take a delta is skipped and caught up from the typed model as it drains: it receives the current values, not a backlog. It keeps receiving live deltas that fit meanwhile. The initial snapshot uses the same path, so it is not limited by the transmit buffer. A client whose queued output does not drain at all for `publisher.stalled_client_timeout_ms` (default 15000; 0 disables) is disconnected. `signalk.max_client_queue_bytes` caps the bytes queued per client (0 uses the fixed buffer on Arduino and 32 KiB on Linux).
 
-Per-client RAM for this is 12 bytes; no per-client queue of deltas is kept. Diagnostics: `stream_catch_up_count()`, `stalled_client_close_count()`, `dropped_publish_count()`.
+Per-client RAM for this is 16 bytes; no per-client queue of deltas is kept. Diagnostics: `stream_catch_up_count()`, `stalled_client_close_count()`, `dropped_publish_count()`.
 
 WebSocket clients receive current values after hello by default. Add `?subscribe=none` to suppress the initial snapshot. Raw TCP clients receive the current typed snapshot when they send the existing subscribe-all request. `publisher.current_value_timeout_ms` can exclude stale values; `0` retains the latest valid typed value indefinitely.
 
@@ -261,7 +261,7 @@ REST responses are generated directly from the typed model. The server first cou
 
 A response larger than the client's transmit buffer (on ESP32 the full model is much larger than the 1 KB TCP buffer) is resumed as the client drains. Each pass regenerates the response from the typed model and skips what was already sent, resuming at leaf values, so a value that changed in between is sent as its newer value. Such responses have no `Content-Length` and end when the connection closes. If a value appears or expires in the part already sent, the response is aborted rather than sending invalid JSON. Up to one resumed response at a time on Arduino and four on Linux; further large requests get `503` with `Retry-After`.
 
-When two or more sources report the same path (for example two GPS receivers), REST adds a Signal K `values` object with each source's latest value, keyed by source ref (`connector0`, `connector1`, ...). Each source's deltas carry that source's own value. A path becomes multi-source the first time a second source overwrites it, so the first source's entry appears with its next update. The table holds 8 entries on Arduino and 32 on Linux; the oldest is replaced when full.
+When two or more sources report the same path (for example two GPS receivers), REST adds a Signal K `values` object with each source's latest value, keyed by source ref (`connector0`, `connector1`, ...). Each source's deltas carry that source's own value. A path becomes multi-source the first time a second source overwrites it, so the first source's entry appears with its next update. The table holds 8 entries on Arduino (32 bytes each) and 32 on Linux; the oldest is replaced when full.
 
 ## Minimal Signal K subscribe-all
 
