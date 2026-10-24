@@ -132,6 +132,7 @@ const char* default_config_text() {
         "  source_label = \"signalk-mini\";\n"
         "  send_current_values_on_connect = true;\n"
         "  current_value_timeout_ms = 0;\n"
+        "  stalled_client_timeout_ms = 15000;\n"
         "};\n"
         "\n"
         "connectors = (\n"

@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <type_traits>
 
 #include "config.hpp"
 #include "memory_profile.hpp"
@@ -13,17 +14,113 @@
 #include "model_store.hpp"
 #include "signalk_mapper.hpp"
 #include "signalk_typed_view.hpp"
+#include "source_value_recorder.hpp"
 
 namespace signalk_mini {
+
+// Builds one Signal K delta in a caller-owned fixed buffer:
+// {"context":C,"updates":[{"timestamp":T,"source":{"label":L},"values":[V,...]}]}\r\n
+// Room for the closing bytes is reserved up front, so every accepted value
+// leaves a complete delta. After finish() the header is still in the buffer,
+// so reopen() starts the next delta of a split without rebuilding it.
+class SignalKDeltaFrame {
+public:
+    enum class AddResult : uint8_t { Added, Full, TooLarge };
+
+    SignalKDeltaFrame(char* buffer, size_t capacity)
+        : buffer_(buffer), out_(buffer, capacity > TrailerLen ? capacity - TrailerLen : 0) {}
+
+    bool open() const { return open_; }
+    size_t count() const { return count_; }
+
+    bool begin(const char* context, const char* timestamp, const char* source_label) {
+        out_.rewind(0);
+        open_ = out_.append_raw("{\"context\":") && out_.append_quoted(context) &&
+                out_.append_raw(",\"updates\":[{\"timestamp\":") && out_.append_quoted(timestamp) &&
+                out_.append_raw(",\"source\":{\"label\":") &&
+                out_.append_quoted(source_label ? source_label : "signalk-mini") &&
+                out_.append_raw("},\"values\":[") && out_.ok();
+        header_len_ = open_ ? out_.size() : 0;
+        count_ = 0;
+        return open_;
+    }
+
+    void reopen() {
+        if (header_len_ == 0 || !out_.rewind(header_len_)) return;
+        open_ = true;
+        count_ = 0;
+    }
+
+    // write_value appends one JSON value for `path`.
+    template<typename WriteValue>
+    AddResult add(const char* path, WriteValue&& write_value) {
+        const size_t mark = out_.size();
+        const bool written = (count_ == 0 || out_.append_char(',')) &&
+                             out_.append_raw("{\"path\":") && out_.append_quoted(path ? path : "") &&
+                             out_.append_raw(",\"value\":") && write_value(out_) &&
+                             out_.append_char('}') && out_.ok();
+        if (written) {
+            last_mark_ = mark;
+            ++count_;
+            return AddResult::Added;
+        }
+        out_.rewind(mark);
+        return count_ == 0 ? AddResult::TooLarge : AddResult::Full;
+    }
+
+    // Removes the value added by the last successful add().
+    void undo_last() {
+        if (count_ == 0 || !out_.rewind(last_mark_)) return;
+        --count_;
+    }
+
+    size_t finish() {
+        const bool has_values = open_ && count_ != 0;
+        open_ = false;
+        if (!has_values) return 0;
+        size_t len = out_.size();
+        memcpy(buffer_ + len, Trailer, TrailerLen);
+        len += TrailerLen;
+        buffer_[len] = '\0';
+        return len;
+    }
+
+private:
+    static constexpr char Trailer[] = "]}]}\r\n";
+    static constexpr size_t TrailerLen = sizeof(Trailer) - 1;
+
+    char* buffer_;
+    SignalKJsonStreamWriter out_;
+    size_t header_len_ = 0;
+    size_t last_mark_ = 0;
+    size_t count_ = 0;
+    bool open_ = false;
+};
+
+// Position of a resumable snapshot: a model field (or AIS slot), and how many
+// values of it were already delivered when one field spans several deltas.
+struct SignalKSnapshotCursor {
+    uint16_t position = 0;
+    uint16_t value = 0;
+    bool started() const { return position != 0; }
+};
 
 template<typename Real, size_t MaxJsonBufferSize = DefaultSignalKJsonBufferSize, size_t MaxBatchValues = DefaultSignalKBatchValues>
 class SignalKPublisher {
 public:
+    // Resumable snapshot cursor: model fields first, then one slot per AIS target.
+    static constexpr uint16_t SnapshotAisCursorBase = static_cast<uint16_t>(ModelField::Count);
+    static constexpr uint16_t SnapshotCursorEnd =
+        static_cast<uint16_t>(SnapshotAisCursorBase + ship_data_model::AIS_TARGET_TABLE_CAPACITY);
+
     SignalKPublisher(ModelStore<Real>& store, const SignalKMiniConfig& config)
         : store_(store), config_(config) {
         static_assert(MaxBatchValues > 0, "SignalKPublisher batch size must be greater than zero");
     }
 
+    // Sends queued model changes, batched per source. A delta is closed and sent
+    // when the next value does not fit the JSON buffer, so nothing is dropped
+    // unless a single value is larger than the whole buffer.
     template<typename DeltaSink>
     void publish_pending(DeltaSink& sink) {
         const size_t json_capacity = effective_json_buffer_size();
@@ -32,10 +129,12 @@ public:
         char timestamp[32];
         if (!format_signalk_timestamp_utc(timestamp, sizeof(timestamp))) return;
 
+        SignalKDeltaFrame frame(json_, json_capacity);
+        SourceId frame_source_id = 0;
+        // Fields that share a path (latitude and longitude both map to
+        // navigation.position) are queued as separate changes; send it once.
+        const char* last_path = nullptr;
         ModelChange change;
-        SourceId batch_source_id = 0;
-        const char* batch_source_label = nullptr;
-        size_t batch_count = 0;
         size_t processed = 0;
         const size_t max_changes = static_cast<size_t>(config_.publisher.max_changes_per_tick);
 
@@ -43,78 +142,107 @@ public:
             ++processed;
 
             const char* source_label = label_for_source(change.source_id);
-            if (change.field == ModelField::AisTargetsObject) {
-                flush_scalar_batch(sink, json_capacity, timestamp, batch_source_label, scalar_batch_, batch_count);
-                publish_ais_targets(sink, json_capacity, timestamp, source_label);
-                continue;
-            }
-
             SignalKMappedValue<Real> mapped;
-            if (!mapper_.map_change(store_.model(), change, mapped) || !mapped.path) continue;
-            if (mapped.kind == SignalKMappedValueKind::Object) {
-                flush_scalar_batch(sink, json_capacity, timestamp, batch_source_label, scalar_batch_, batch_count);
-                if (mapped.object_kind == SignalKObjectKind::AisTargets) {
-                    publish_ais_targets(sink, json_capacity, timestamp, source_label);
-                } else {
-                    publish_single(sink, json_capacity, timestamp, source_label, mapped);
+            const bool mapped_ok = change.field != ModelField::AisTargetsObject &&
+                                   mapper_.map_change(store_.model(), change, mapped) && mapped.path;
+            if (change.field == ModelField::AisTargetsObject ||
+                (mapped_ok && mapped.kind == SignalKMappedValueKind::Object && mapped.object_kind == SignalKObjectKind::AisTargets)) {
+                flush(sink, frame);
+                for (uint8_t i = 0; i < ship_data_model::AIS_TARGET_TABLE_CAPACITY; ++i) {
+                    publish_ais_target(sink, frame, timestamp, source_label, i, nullptr);
                 }
                 continue;
             }
+            if (!mapped_ok) continue;
+            if (frame.open() && change.source_id == frame_source_id && mapped.path == last_path) continue;
 
-            if (batch_count != 0 && (change.source_id != batch_source_id || batch_count >= MaxBatchValues)) {
-                flush_scalar_batch(sink, json_capacity, timestamp, batch_source_label, scalar_batch_, batch_count);
+            if (frame.open() && (change.source_id != frame_source_id || frame.count() >= MaxBatchValues)) flush(sink, frame);
+            if (!frame.open()) {
+                if (!frame.begin(context(), timestamp, source_label)) {
+                    ++dropped_publish_count_;
+                    continue;
+                }
+                frame_source_id = change.source_id;
             }
-            if (batch_count == 0) {
-                batch_source_id = change.source_id;
-                batch_source_label = source_label;
+            // For a multi-source path the model holds whichever source wrote
+            // last; send this change's own source value instead.
+            last_path = mapped.path;
+            const SourceValueEntry* own = store_.source_values().find(mapped.path, change.source_id);
+            if (own) {
+                add_or_split(sink, frame, mapped.path, [&](SignalKJsonStreamWriter& out) {
+                    return signalk_write_source_value(out, *own);
+                });
+            } else {
+                add_value(sink, frame, mapped);
             }
-            scalar_batch_[batch_count++] = mapped;
         }
 
-        flush_scalar_batch(sink, json_capacity, timestamp, batch_source_label, scalar_batch_, batch_count);
+        flush(sink, frame);
     }
 
+    // Sends the current typed model as deltas. With a cursor the snapshot is
+    // resumable: if the sink refuses a delta (its write_signal_k_delta returns
+    // false), *cursor is left at the first value of that delta (a field, and a
+    // value within it when one field spans several deltas) and false is
+    // returned; calling again with the same cursor continues from there.
     template<typename DeltaSink>
-    void publish_current(DeltaSink& sink, uint64_t now_us = 0, bool include_other_contexts = false) {
+    bool publish_current(DeltaSink& sink, uint64_t now_us = 0, bool include_other_contexts = false,
+                         SignalKSnapshotCursor* cursor = nullptr) {
         const size_t json_capacity = effective_json_buffer_size();
-        if (json_capacity == 0) return;
+        if (json_capacity == 0) return true;
         char timestamp[32];
-        if (!format_signalk_timestamp_utc(timestamp, sizeof(timestamp))) return;
+        if (!format_signalk_timestamp_utc(timestamp, sizeof(timestamp))) return true;
+
+        SignalKSnapshotCursor local_cursor;
+        SignalKSnapshotCursor& resume = cursor ? *cursor : local_cursor;
+        if (!resume.started()) resume = SignalKSnapshotCursor{1, 0};
+        SnapshotTracking tracking(*this, resume);
 
         SignalKTypedModelView<Real> view(store_, config_, now_us);
-        SourceId batch_source_id = 0;
-        const char* batch_source_label = nullptr;
-        size_t batch_count = 0;
-        view.for_each_current_value([&](ModelField, const SignalKMappedValue<Real>& mapped) {
-            const char* source_label = view.source_label(mapped.source_id);
-            if (mapped.kind == SignalKMappedValueKind::Object) {
-                flush_scalar_batch(sink, json_capacity, timestamp, batch_source_label, scalar_batch_, batch_count);
-                publish_single(sink, json_capacity, timestamp, source_label, mapped);
-                return;
+        SignalKDeltaFrame frame(json_, json_capacity);
+        SourceId frame_source_id = 0;
+
+        for (uint16_t position = resume.position; position < SnapshotAisCursorBase; ++position) {
+            SignalKMappedValue<Real> mapped;
+            if (!view.selected_current_value(static_cast<ModelField>(position), mapped)) continue;
+            if (frame.open() && (mapped.source_id != frame_source_id || frame.count() >= MaxBatchValues)) {
+                if (!flush(sink, frame)) return tracking.refused();
             }
-            if (batch_count != 0 && (mapped.source_id != batch_source_id || batch_count >= MaxBatchValues)) {
-                flush_scalar_batch(sink, json_capacity, timestamp, batch_source_label, scalar_batch_, batch_count);
+            if (!frame.open()) {
+                if (!frame.begin(context(), timestamp, view.source_label(mapped.source_id))) {
+                    ++dropped_publish_count_;
+                    continue;
+                }
+                frame_source_id = mapped.source_id;
             }
-            if (batch_count == 0) {
-                batch_source_id = mapped.source_id;
-                batch_source_label = source_label;
-            }
-            scalar_batch_[batch_count++] = mapped;
-        });
-        flush_scalar_batch(sink, json_capacity, timestamp, batch_source_label, scalar_batch_, batch_count);
-        const auto& ais_table = store_.model().ais.targets;
-        if (include_other_contexts && ais_table.target_count.valid &&
-            view.field_is_current(ModelField::AisTargetsObject, ais_table.target_count.last_update_us)) {
-            publish_ais_targets(sink, json_capacity, timestamp,
-                                view.source_label(store_.source_id_for(ModelField::AisTargetsObject)), &view);
+            tracking.enter(position);
+            if (!add_value(sink, frame, mapped)) return tracking.refused();
         }
+        if (!flush(sink, frame)) return tracking.refused();
+
+        const auto& ais_table = store_.model().ais.targets;
+        const bool send_ais = include_other_contexts && ais_table.target_count.valid &&
+            view.field_is_current(ModelField::AisTargetsObject, ais_table.target_count.last_update_us);
+        if (send_ais) {
+            const char* source_label = view.source_label(store_.source_id_for(ModelField::AisTargetsObject));
+            const uint16_t first = resume.position > SnapshotAisCursorBase ? resume.position : SnapshotAisCursorBase;
+            for (uint16_t position = first; position < SnapshotCursorEnd; ++position) {
+                tracking.enter(position);
+                const uint8_t slot = static_cast<uint8_t>(position - SnapshotAisCursorBase);
+                if (!publish_ais_target(sink, frame, timestamp, source_label, slot, &view)) return tracking.refused();
+            }
+        }
+        resume = SignalKSnapshotCursor{};
         ++published_snapshot_count_;
+        return true;
     }
 
     uint64_t dropped_publish_count() const { return dropped_publish_count_; }
     uint64_t published_delta_count() const { return published_delta_count_; }
     uint64_t published_value_count() const { return published_value_count_; }
     uint64_t published_snapshot_count() const { return published_snapshot_count_; }
+    // Text values shortened because they could not fit an empty delta.
+    uint64_t truncated_value_count() const { return truncated_value_count_; }
 
 private:
     size_t effective_json_buffer_size() const {
@@ -140,193 +268,234 @@ private:
         return config_.publisher.source_label ? config_.publisher.source_label : config_.identity.server_name;
     }
 
-    int write_scalar_batch(char* dst,
-                           size_t dst_size,
-                           const char* timestamp,
-                           const char* source_label,
-                           const SignalKMappedValue<Real>* values,
-                           size_t value_count) const {
-        if (!dst || dst_size == 0 || !timestamp || !values || value_count == 0) return 0;
-
-        SignalKJsonStreamWriter out(dst, dst_size);
-        if (!out.append_raw("{\"context\":")) return 0;
-        if (!out.append_quoted(context())) return 0;
-        if (!out.append_raw(",\"updates\":[{\"timestamp\":")) return 0;
-        if (!out.append_quoted(timestamp)) return 0;
-        if (!out.append_raw(",\"source\":{\"label\":")) return 0;
-        if (!out.append_quoted(source_label ? source_label : "signalk-mini")) return 0;
-        if (!out.append_raw("},\"values\":[")) return 0;
-
-        for (size_t i = 0; i < value_count; ++i) {
-            const SignalKMappedValue<Real>& value = values[i];
-            if (!value.path || value.kind == SignalKMappedValueKind::Object) return 0;
-            if (i != 0 && !out.append_char(',')) return 0;
-            if (!out.append_raw("{\"path\":")) return 0;
-            if (!out.append_quoted(value.path)) return 0;
-            if (!out.append_raw(",\"value\":")) return 0;
-            if (!signalk_json_write_mapped_scalar(out, value)) return 0;
-            if (!out.append_char('}')) return 0;
+    // A sink may return bool to refuse a delta (used by resumable snapshots);
+    // sinks returning void always accept.
+    template<typename DeltaSink>
+    static bool deliver(DeltaSink& sink, const char* json, size_t len) {
+        using Result = decltype(sink.write_signal_k_delta(json, len));
+        if constexpr (std::is_same<Result, bool>::value) {
+            return sink.write_signal_k_delta(json, len);
+        } else {
+            sink.write_signal_k_delta(json, len);
+            return true;
         }
-
-        if (!out.append_raw("]}]}")) return 0;
-        if (!out.finish_crlf()) return 0;
-        return out.ok() ? static_cast<int>(out.size()) : 0;
     }
 
-    static bool insert_bytes(char* json,
-                             size_t& len,
-                             size_t capacity,
-                             size_t offset,
-                             const char* text,
-                             size_t text_len) {
-        if (!json || !text || offset > len || len + text_len >= capacity) return false;
-        memmove(json + offset + text_len, json + offset, len - offset + 1);
-        memcpy(json + offset, text, text_len);
-        len += text_len;
+    template<typename DeltaSink>
+    bool flush(DeltaSink& sink, SignalKDeltaFrame& frame) {
+        const size_t values = frame.count();
+        const size_t len = frame.finish();
+        if (len == 0) return true;
+        if (!deliver(sink, json_, len)) return false;
+        ++published_delta_count_;
+        published_value_count_ += values;
         return true;
     }
 
-    bool add_object_delta_envelope(char* json,
-                                   size_t& len,
-                                   size_t capacity,
-                                   const char* timestamp) const {
-        if (!json || !timestamp || len < 13 || strncmp(json, "{\"updates\":[{", 13) != 0) return false;
-
-        char root_prefix[160];
-        const int root_len = snprintf(root_prefix,
-                                      sizeof(root_prefix),
-                                      "\"context\":\"%s\",",
-                                      context());
-        if (root_len <= 0 || static_cast<size_t>(root_len) >= sizeof(root_prefix)) return false;
-        if (!insert_bytes(json, len, capacity, 1, root_prefix, static_cast<size_t>(root_len))) return false;
-
-        const char* updates = strstr(json, "\"updates\":[{");
-        if (!updates) return false;
-        const size_t update_offset = static_cast<size_t>(updates - json) + strlen("\"updates\":[{");
-
-        char update_prefix[96];
-        const int update_len = snprintf(update_prefix,
-                                        sizeof(update_prefix),
-                                        "\"timestamp\":\"%s\",",
-                                        timestamp);
-        if (update_len <= 0 || static_cast<size_t>(update_len) >= sizeof(update_prefix)) return false;
-        return insert_bytes(json,
-                            len,
-                            capacity,
-                            update_offset,
-                            update_prefix,
-                            static_cast<size_t>(update_len));
+    // Adds one path/value, sending the current delta and continuing in a new one
+    // when it does not fit. Returns false only if the sink refused that delta.
+    template<typename DeltaSink, typename WriteValue>
+    bool add_or_split(DeltaSink& sink,
+                      SignalKDeltaFrame& frame,
+                      const char* path,
+                      WriteValue&& write_value) {
+        SignalKDeltaFrame::AddResult result = SignalKDeltaFrame::AddResult::Added;
+        if (!add_or_split_result(sink, frame, path, write_value, result)) return false;
+        if (result == SignalKDeltaFrame::AddResult::TooLarge) ++dropped_publish_count_;
+        return true;
     }
 
-    template<typename DeltaSink>
-    void write_to_sink(DeltaSink& sink, const char* json, size_t len) {
-        sink.write_signal_k_delta(json, len);
+    // During a resumable snapshot: counts the values added for the current
+    // field, skips those already delivered, and remembers where the delta
+    // being built started so a refused delta can be resumed exactly.
+    struct SnapshotTracking {
+        SnapshotTracking(SignalKPublisher& owner_ref, SignalKSnapshotCursor& cursor_ref)
+            : owner(owner_ref), cursor(cursor_ref), start_position(cursor_ref.position), skip(cursor_ref.value), frame_start(cursor_ref) {
+            owner.tracking_ = this;
+        }
+        ~SnapshotTracking() { owner.tracking_ = nullptr; }
+
+        // Values to skip belong to the resumed field only (it may have expired).
+        void enter(uint16_t field_position) {
+            if (field_position == position) return;
+            if (field_position != start_position) skip = 0;
+            position = field_position;
+            value = 0;
+        }
+
+        bool refused() {
+            cursor = frame_start;
+            return false;
+        }
+
+        SignalKPublisher& owner;
+        SignalKSnapshotCursor& cursor;
+        uint16_t start_position = 0;
+        uint16_t position = 0;
+        uint16_t value = 0;
+        uint16_t skip = 0;
+        SignalKSnapshotCursor frame_start;
+    };
+
+    // `result` is TooLarge when the value does not fit even an empty delta.
+    template<typename DeltaSink, typename WriteValue>
+    bool add_or_split_result(DeltaSink& sink,
+                             SignalKDeltaFrame& frame,
+                             const char* path,
+                             WriteValue&& write_value,
+                             SignalKDeltaFrame::AddResult& result) {
+        const bool was_empty = frame.count() == 0;
+        result = frame.add(path, write_value);
+        if (result == SignalKDeltaFrame::AddResult::Full) {
+            if (!flush(sink, frame)) return false;
+            frame.reopen();
+            result = frame.add(path, write_value);
+            if (result == SignalKDeltaFrame::AddResult::Added) note_added(frame, true);
+            return true;
+        }
+        if (result == SignalKDeltaFrame::AddResult::Added) note_added(frame, was_empty);
+        return true;
     }
 
-    template<typename DeltaSink>
-    void flush_scalar_batch(DeltaSink& sink,
-                            size_t json_capacity,
-                            const char* timestamp,
-                            const char* source_label,
-                            SignalKMappedValue<Real>* values,
-                            size_t& value_count) {
-        if (value_count == 0) return;
-        const int len = write_scalar_batch(json_, json_capacity, timestamp, source_label, values, value_count);
-        if (len <= 0 || static_cast<size_t>(len) >= json_capacity) {
-            ++dropped_publish_count_;
-            value_count = 0;
+    void note_added(SignalKDeltaFrame& frame, bool first_in_frame) {
+        SnapshotTracking* t = tracking_;
+        if (!t) return;
+        if (t->skip > 0) {
+            // Already delivered in an earlier pass.
+            frame.undo_last();
+            --t->skip;
+            ++t->value;
             return;
         }
-        write_to_sink(sink, json_, static_cast<size_t>(len));
-        ++published_delta_count_;
-        published_value_count_ += value_count;
-        value_count = 0;
+        if (first_in_frame) t->frame_start = SignalKSnapshotCursor{t->position, t->value};
+        ++t->value;
     }
 
+    // Adds one mapped value. If it cannot fit even an empty delta, an object is
+    // sent member by member under sub-paths (path.member, same Signal K tree),
+    // and text is shortened to fit; only what still cannot fit is dropped.
     template<typename DeltaSink>
-    void publish_ais_targets(DeltaSink& sink,
-                             size_t json_capacity,
-                             const char* timestamp,
-                             const char* source_label,
-                             const SignalKTypedModelView<Real>* current_view = nullptr) {
-        const auto& table = store_.model().ais.targets;
-        for (uint8_t i = 0; i < ship_data_model::AIS_TARGET_TABLE_CAPACITY; ++i) {
-            const auto& target = table.targets[i];
-            if (!target.occupied || (current_view && !current_view->ais_target_is_current(target)) ||
-                !target.mmsi.valid || !is_vessel_mmsi(target.mmsi.value)) continue;
-            const int len = write_ais_target_delta(json_, json_capacity, timestamp, source_label, target);
-            if (len <= 0 || static_cast<size_t>(len) >= json_capacity) {
+    bool add_value(DeltaSink& sink, SignalKDeltaFrame& frame, const SignalKMappedValue<Real>& mapped) {
+        SignalKDeltaFrame::AddResult result = SignalKDeltaFrame::AddResult::Added;
+        if (!add_or_split_result(sink, frame, mapped.path, [&](SignalKJsonStreamWriter& out) {
+                return writer_.write_value(out, store_.model(), mapped);
+            }, result)) return false;
+        if (result != SignalKDeltaFrame::AddResult::TooLarge) return true;
+
+        if (mapped.kind == SignalKMappedValueKind::Text) {
+            return add_truncated_text(sink, frame, mapped.path, mapped.text, mapped.text ? strlen(mapped.text) : 0);
+        }
+        if (mapped.kind != SignalKMappedValueKind::Object) {
+            ++dropped_publish_count_;
+            return true;
+        }
+        JsonDocument doc;
+        JsonVariant value = doc.to<JsonVariant>();
+        // An object with no members present has no value to send; that is not a drop.
+        if (!writer_.build_object_value(store_.model(), mapped, value)) return true;
+        return add_json_split(sink, frame, mapped.path, value, 0);
+    }
+
+    static constexpr uint8_t MaxObjectSplitDepth = 3;
+
+    template<typename DeltaSink>
+    bool add_json_split(DeltaSink& sink, SignalKDeltaFrame& frame, const char* path, JsonVariantConst value, uint8_t depth) {
+        SignalKDeltaFrame::AddResult result = SignalKDeltaFrame::AddResult::Added;
+        if (!add_or_split_result(sink, frame, path, [&](SignalKJsonStreamWriter& out) {
+                return out.append_json(value);
+            }, result)) return false;
+        if (result != SignalKDeltaFrame::AddResult::TooLarge) return true;
+
+        if (value.is<const char*>()) {
+            const char* text = value.as<const char*>();
+            return add_truncated_text(sink, frame, path, text, text ? strlen(text) : 0);
+        }
+        if (!value.is<JsonObjectConst>() || depth >= MaxObjectSplitDepth) {
+            ++dropped_publish_count_;
+            return true;
+        }
+        for (JsonPairConst member : value.as<JsonObjectConst>()) {
+            char child_path[160];
+            const int len = path && path[0]
+                ? snprintf(child_path, sizeof(child_path), "%s.%s", path, member.key().c_str())
+                : snprintf(child_path, sizeof(child_path), "%s", member.key().c_str());
+            if (len <= 0 || static_cast<size_t>(len) >= sizeof(child_path)) {
                 ++dropped_publish_count_;
                 continue;
             }
-            write_to_sink(sink, json_, static_cast<size_t>(len));
-            ++published_delta_count_;
+            if (!add_json_split(sink, frame, child_path, member.value(), static_cast<uint8_t>(depth + 1))) return false;
         }
+        return true;
     }
 
-    template<typename Target>
-    int write_ais_target_delta(char* dst,
-                               size_t capacity,
-                               const char* timestamp,
-                               const char* source_label,
-                               const Target& target) const {
+    // Sends the longest prefix of `text` that fits an empty delta.
+    template<typename DeltaSink>
+    bool add_truncated_text(DeltaSink& sink, SignalKDeltaFrame& frame, const char* path, const char* text, size_t len) {
+        while (len > 0) {
+            len = len > 16 ? len - len / 4 : len - 1;
+            while (len > 0 && (static_cast<unsigned char>(text[len]) & 0xC0u) == 0x80u) --len;
+            SignalKDeltaFrame::AddResult result = SignalKDeltaFrame::AddResult::Added;
+            if (!add_or_split_result(sink, frame, path, [&](SignalKJsonStreamWriter& out) {
+                    return out.append_quoted(text, len);
+                }, result)) return false;
+            if (result != SignalKDeltaFrame::AddResult::TooLarge) {
+                ++truncated_value_count_;
+                return true;
+            }
+        }
+        ++dropped_publish_count_;
+        return true;
+    }
+
+    // Publishes one AIS target table slot in its own vessel context. Large
+    // targets are split across deltas like any other batch.
+    template<typename DeltaSink>
+    bool publish_ais_target(DeltaSink& sink,
+                            SignalKDeltaFrame& frame,
+                            const char* timestamp,
+                            const char* source_label,
+                            uint8_t slot,
+                            const SignalKTypedModelView<Real>* current_view) {
+        const auto& target = store_.model().ais.targets.targets[slot];
+        if (!target.occupied || (current_view && !current_view->ais_target_is_current(target)) ||
+            !target.mmsi.valid || !is_vessel_mmsi(target.mmsi.value)) return true;
+
         char mmsi[10];
-        if (!format_mmsi(mmsi, sizeof(mmsi), target.mmsi.value)) return 0;
-        char context[64];
-        const int context_len = snprintf(context, sizeof(context), "vessels.urn:mrn:imo:mmsi:%s", mmsi);
-        if (context_len <= 0 || static_cast<size_t>(context_len) >= sizeof(context)) return 0;
-        SignalKJsonStreamWriter out(dst, capacity);
-        if (!out.append_raw("{\"context\":")) return 0;
-        if (!out.append_quoted(context)) return 0;
-        if (!out.append_raw(",\"updates\":[{\"timestamp\":")) return 0;
-        if (!out.append_quoted(timestamp)) return 0;
-        if (!out.append_raw(",\"source\":{\"label\":")) return 0;
-        if (!out.append_quoted(source_label ? source_label : "signalk-mini")) return 0;
-        if (!out.append_raw("},\"values\":[")) return 0;
-        bool first = true;
-        auto start_value = [&](const char* path) -> bool {
-            if (!first && !out.append_char(',')) return false;
-            first = false;
-            return out.append_raw("{\"path\":") && out.append_quoted(path) && out.append_raw(",\"value\":");
-        };
-        if (target.vessel_name[0] || target.mmsi.valid) {
-            if (!start_value("") || !out.append_char('{')) return 0;
-            bool static_first = true;
-            if (target.vessel_name[0]) {
-                if (!out.append_raw("\"name\":") || !out.append_quoted(target.vessel_name)) return 0;
-                static_first = false;
-            }
-            if (target.mmsi.valid) {
-                if (!static_first && !out.append_char(',')) return 0;
-                if (!out.append_raw("\"mmsi\":") || !out.append_quoted(mmsi)) return 0;
-            }
-            if (!out.append_raw("}}")) return 0;
+        if (!format_mmsi(mmsi, sizeof(mmsi), target.mmsi.value)) return true;
+        char target_context[64];
+        const int context_len = snprintf(target_context, sizeof(target_context), "vessels.urn:mrn:imo:mmsi:%s", mmsi);
+        if (context_len <= 0 || static_cast<size_t>(context_len) >= sizeof(target_context)) return true;
+        if (!frame.begin(target_context, timestamp, source_label)) {
+            ++dropped_publish_count_;
+            return true;
         }
-        if (target.latitude_deg.valid && target.longitude_deg.valid) {
-            if (!start_value("navigation.position") || !out.append_char('{')) return 0;
-            bool position_first = true;
-            if (target.latitude_deg.valid) {
-                if (!out.append_raw("\"latitude\":" ) || !out.append_real(target.latitude_deg.value)) return 0;
-                position_first = false;
-            }
-            if (target.longitude_deg.valid) {
-                if (!position_first && !out.append_char(',')) return 0;
-                if (!out.append_raw("\"longitude\":" ) || !out.append_real(target.longitude_deg.value)) return 0;
-            }
-            if (!out.append_raw("}}")) return 0;
-        }
-        if (target.speed_over_ground_kn.valid) {
-            if (!start_value("navigation.speedOverGround") || !out.append_real(knots_to_mps<Real>(target.speed_over_ground_kn.value)) || !out.append_char('}')) return 0;
-        }
-        if (target.course_over_ground_deg.valid) {
-            if (!start_value("navigation.courseOverGroundTrue") || !out.append_real(deg_to_rad<Real>(target.course_over_ground_deg.value)) || !out.append_char('}')) return 0;
-        }
-        if (target.true_heading_deg.valid) {
-            if (!start_value("navigation.headingTrue") || !out.append_real(deg_to_rad<Real>(target.true_heading_deg.value)) || !out.append_char('}')) return 0;
-        }
-        if (!out.append_raw("]}]}")) return 0;
-        if (!out.finish_crlf()) return 0;
-        return out.ok() ? static_cast<int>(out.size()) : 0;
+
+        auto add = [&](const char* path, auto&& write) { return add_or_split(sink, frame, path, write); };
+        if (!add("", [&](SignalKJsonStreamWriter& out) {
+                if (!out.append_char('{')) return false;
+                if (target.vessel_name[0] &&
+                    (!out.append_raw("\"name\":") || !out.append_quoted(target.vessel_name) || !out.append_char(','))) return false;
+                return out.append_raw("\"mmsi\":") && out.append_quoted(mmsi) && out.append_char('}');
+            })) return false;
+        if (target.latitude_deg.valid && target.longitude_deg.valid &&
+            !add("navigation.position", [&](SignalKJsonStreamWriter& out) {
+                return out.append_raw("{\"latitude\":") && out.append_real(target.latitude_deg.value) &&
+                       out.append_raw(",\"longitude\":") && out.append_real(target.longitude_deg.value) &&
+                       out.append_char('}');
+            })) return false;
+        if (target.speed_over_ground_kn.valid &&
+            !add("navigation.speedOverGround", [&](SignalKJsonStreamWriter& out) {
+                return out.append_real(knots_to_mps<Real>(target.speed_over_ground_kn.value));
+            })) return false;
+        if (target.course_over_ground_deg.valid &&
+            !add("navigation.courseOverGroundTrue", [&](SignalKJsonStreamWriter& out) {
+                return out.append_real(deg_to_rad<Real>(target.course_over_ground_deg.value));
+            })) return false;
+        if (target.true_heading_deg.valid &&
+            !add("navigation.headingTrue", [&](SignalKJsonStreamWriter& out) {
+                return out.append_real(deg_to_rad<Real>(target.true_heading_deg.value));
+            })) return false;
+        return flush(sink, frame);
     }
 
     static bool is_vessel_mmsi(int32_t mmsi) {
@@ -338,40 +507,17 @@ private:
         return snprintf(dst, dst_size, "%09ld", static_cast<long>(mmsi)) == 9;
     }
 
-    template<typename DeltaSink>
-    void publish_single(DeltaSink& sink,
-                        size_t json_capacity,
-                        const char* timestamp,
-                        const char* source_label,
-                        const SignalKMappedValue<Real>& mapped) {
-        int len = writer_.write_mapped(json_, json_capacity, source_label, store_.model(), mapped);
-        size_t object_len = len > 0 ? static_cast<size_t>(len) : 0;
-        if (object_len >= 2 && json_[object_len - 2] == '\r' && json_[object_len - 1] == '\n') {
-            object_len -= 2;
-            json_[object_len] = '\0';
-        }
-        if (len <= 0 || !add_object_delta_envelope(json_, object_len, json_capacity, timestamp) || object_len + 2 >= json_capacity) {
-            ++dropped_publish_count_;
-            return;
-        }
-        json_[object_len++] = '\r';
-        json_[object_len++] = '\n';
-        json_[object_len] = '\0';
-        write_to_sink(sink, json_, object_len);
-        ++published_delta_count_;
-        ++published_value_count_;
-    }
-
     ModelStore<Real>& store_;
     const SignalKMiniConfig& config_;
     SignalKMapper<Real> mapper_;
     SignalKDeltaWriter<Real> writer_;
-    SignalKMappedValue<Real> scalar_batch_[MaxBatchValues]{};
     char json_[MaxJsonBufferSize]{};
     uint64_t dropped_publish_count_ = 0;
     uint64_t published_delta_count_ = 0;
     uint64_t published_value_count_ = 0;
     uint64_t published_snapshot_count_ = 0;
+    uint64_t truncated_value_count_ = 0;
+    SnapshotTracking* tracking_ = nullptr;
 };
 
 } // namespace signalk_mini

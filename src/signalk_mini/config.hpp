@@ -33,6 +33,11 @@ struct SignalKProtocolServerConfig {
     uint16_t max_connections = DefaultSignalKMaxConnections;
     bool allow_rx = true;
     bool allow_tx = true;
+    // Upper bound on bytes queued for one stream or HTTP client (TCP and
+    // WebSocket). Frames that would exceed it are not written; the client is
+    // caught up from the model instead. It can only lower the backpressure
+    // high-water mark (768 bytes on Arduino, 32 KiB on Linux); 0 uses it.
+    uint32_t max_client_queue_bytes = 0;
     SignalKWebSocketServerConfig websocket;
 };
 
@@ -43,6 +48,9 @@ struct PublisherConfig {
     const char* source_label = "signalk-mini";
     bool send_current_values_on_connect = true;
     uint32_t current_value_timeout_ms = 0;
+    // A stream client whose queued output has not drained at all for this long
+    // is disconnected. 0 disables the check.
+    uint32_t stalled_client_timeout_ms = 15000;
 };
 
 enum class ConnectorProtocol : uint8_t {

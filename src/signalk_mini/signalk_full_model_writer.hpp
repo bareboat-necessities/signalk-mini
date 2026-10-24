@@ -9,6 +9,7 @@
 #include "signalk_identity.hpp"
 #include "signalk_json_stream_writer.hpp"
 #include "signalk_typed_view.hpp"
+#include "source_value_recorder.hpp"
 #include "units.hpp"
 
 namespace signalk_mini {
@@ -296,7 +297,34 @@ private:
         if (!out.append_quoted(source_key)) return false;
         if (!out.append_raw(",\"timestamp\":")) return false;
         if (!out.append_quoted(timestamp)) return false;
+        if (!write_source_values(out, view, mapped.path, timestamp)) return false;
         return out.append_char('}');
+    }
+
+    // Signal K `values`: one entry per source for paths with several sources.
+    bool write_source_values(SignalKJsonStreamWriter& out,
+                             const SignalKTypedModelView<Real>& view,
+                             const char* path,
+                             const char* timestamp) const {
+        const auto& table = view.store().source_values();
+        size_t current = 0;
+        table.for_each_for(path, [&](const SourceValueEntry& entry) {
+            if (view.timestamp_current(entry.last_update_us)) ++current;
+        });
+        if (current < 2) return true;
+        if (!out.append_raw(",\"values\":{")) return false;
+        bool first = true;
+        bool ok = true;
+        table.for_each_for(path, [&](const SourceValueEntry& entry) {
+            if (!ok || !view.timestamp_current(entry.last_update_us)) return;
+            char key[24];
+            ok = view.source_key(entry.source_id, key, sizeof(key)) &&
+                 (first || out.append_char(',')) && out.append_quoted(key) &&
+                 out.append_raw(":{\"value\":") && signalk_write_source_value(out, entry) &&
+                 out.append_raw(",\"timestamp\":") && out.append_quoted(timestamp) && out.append_char('}');
+            first = false;
+        });
+        return ok && out.append_char('}');
     }
 
     bool write_self_vessel(SignalKJsonStreamWriter& out,

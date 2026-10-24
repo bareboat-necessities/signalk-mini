@@ -88,6 +88,89 @@ private:
     uint64_t coalesced_count_ = 0;
 };
 
+// Per-source values for Signal K paths reported by more than one source.
+// The typed model keeps one value per field (the latest from any source);
+// this bounded table keeps each source's latest value for multi-source paths
+// so they can be published as Signal K `values`. Entries are keyed by the
+// static Signal K path string, so fields that map to the same path share them.
+enum class SourceValueKind : uint8_t { Empty, Number, Bool, Position };
+
+struct SourceValueEntry {
+    uint64_t last_update_us = 0;
+    double a = 0.0; // number, bool (0/1) or latitude
+    double b = 0.0; // longitude
+    const char* path = nullptr;
+    SourceId source_id = 0;
+    SourceValueKind kind = SourceValueKind::Empty;
+};
+
+template<size_t Capacity>
+class SourceValueTable {
+public:
+    // Inserts or replaces (path, source); evicts the oldest entry when full.
+    void record(const SourceValueEntry& entry) {
+        SourceValueEntry* slot = nullptr;
+        for (SourceValueEntry& existing : entries_) {
+            if (existing.kind != SourceValueKind::Empty && existing.path == entry.path && existing.source_id == entry.source_id) {
+                slot = &existing;
+                break;
+            }
+        }
+        if (!slot) {
+            for (SourceValueEntry& existing : entries_) {
+                if (existing.kind == SourceValueKind::Empty) {
+                    slot = &existing;
+                    break;
+                }
+            }
+        }
+        if (!slot) {
+            slot = &entries_[0];
+            for (SourceValueEntry& existing : entries_) {
+                if (existing.last_update_us < slot->last_update_us) slot = &existing;
+            }
+            ++evicted_count_;
+        }
+        *slot = entry;
+    }
+
+    const SourceValueEntry* find(const char* path, SourceId source_id) const {
+        for (const SourceValueEntry& entry : entries_) {
+            if (entry.kind != SourceValueKind::Empty && entry.path == path && entry.source_id == source_id) return &entry;
+        }
+        return nullptr;
+    }
+
+    size_t count_for(const char* path) const {
+        size_t count = 0;
+        for (const SourceValueEntry& entry : entries_) {
+            if (entry.kind != SourceValueKind::Empty && entry.path == path) ++count;
+        }
+        return count;
+    }
+
+    template<typename Callback>
+    void for_each_for(const char* path, Callback callback) const {
+        for (const SourceValueEntry& entry : entries_) {
+            if (entry.kind != SourceValueKind::Empty && entry.path == path) callback(entry);
+        }
+    }
+
+    uint64_t evicted_count() const { return evicted_count_; }
+
+private:
+    SourceValueEntry entries_[Capacity]{};
+    uint64_t evicted_count_ = 0;
+};
+
+// Notified on every mark_changed, after the model value has been written and
+// before the change is queued.
+struct IModelMarkObserver {
+    virtual ~IModelMarkObserver() = default;
+    virtual void on_model_marked(ModelField field, SourceId source_id, SourceId previous_source_id,
+                                 bool had_value, uint64_t now_us) = 0;
+};
+
 template<typename Real, size_t QueueCapacity = DefaultModelChangeQueueCapacity>
 class ModelStore {
 public:
@@ -126,8 +209,19 @@ public:
         }
     }
 
+    using SourceValues = SourceValueTable<DefaultSourceValueCapacity>;
+    SourceValues& source_values() { return source_values_; }
+    const SourceValues& source_values() const { return source_values_; }
+    void set_mark_observer(IModelMarkObserver* observer) { mark_observer_ = observer; }
+
     void mark_changed(ModelField field, SourceId source_id, uint64_t now_us) {
         ++marked_change_count_;
+        if (mark_observer_) {
+            const size_t index = static_cast<size_t>(field);
+            const bool had_value = has_value(field);
+            const SourceId previous = index < FieldCount ? latest_source_id_[index] : 0;
+            mark_observer_->on_model_marked(field, source_id, previous, had_value, now_us);
+        }
         record_current(field, source_id);
         if (field == ModelField::AutopilotMode || field == ModelField::AutopilotEnabled) {
             autopilot_state_last_update_us_ = now_us;
@@ -146,6 +240,8 @@ private:
     SourceId autopilot_state_source_id_ = 0;
     SourceId latest_source_id_[FieldCount]{};
     uint8_t present_bits_[PresenceBytes]{};
+    SourceValues source_values_{};
+    IModelMarkObserver* mark_observer_ = nullptr;
 };
 
 } // namespace signalk_mini

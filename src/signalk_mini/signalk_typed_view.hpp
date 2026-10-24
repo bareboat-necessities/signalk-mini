@@ -21,6 +21,8 @@ public:
         : store_(store), config_(config), now_us_(now_us) {}
 
     const ship_data_model::DataModel<Real>& model() const { return store_.model(); }
+    const ModelStore<Real>& store() const { return store_; }
+    bool timestamp_current(uint64_t last_update_us) const { return timestamp_is_current(last_update_us); }
 
     bool current_value(ModelField field, SignalKMappedValue<Real>& out) const {
         if (!mapper_.map_field(store_.model(), field, out) || !out.path) return false;
@@ -32,6 +34,11 @@ public:
         if (!is_current(out)) return false;
         out.source_id = source_for(field, out);
         return true;
+    }
+
+    // current_value() restricted to the field that wins its Signal K path.
+    bool selected_current_value(ModelField field, SignalKMappedValue<Real>& out) const {
+        return current_value(field, out) && is_selected_path_candidate(static_cast<size_t>(field), out);
     }
 
     template<typename Callback>

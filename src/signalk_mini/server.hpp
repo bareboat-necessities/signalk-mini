@@ -23,6 +23,7 @@
 #include "signalk_full_model_writer.hpp"
 #include "signalk_identity.hpp"
 #include "signalk_stream_server.hpp"
+#include "source_value_recorder.hpp"
 #include "ubx_input.hpp"
 
 namespace signalk_mini {
@@ -52,7 +53,12 @@ public:
           publisher_(store_, config_),
           stream_(config_, loop_, store_, publisher_),
           publish_on_change_(stream_),
-          connectors_(config_, loop_, store_, nmea_, publish_on_change_) {}
+          connectors_(config_, loop_, store_, nmea_, publish_on_change_) {
+        store_.set_mark_observer(&source_values_);
+    }
+
+    MiniSignalKServer(const MiniSignalKServer&) = delete;
+    MiniSignalKServer& operator=(const MiniSignalKServer&) = delete;
 
     bool begin() {
         reset_startup_diagnostics();
@@ -83,6 +89,11 @@ public:
     uint64_t dropped_publish_count() const { return publisher_.dropped_publish_count(); }
     uint64_t published_delta_count() const { return publisher_.published_delta_count(); }
     uint64_t published_snapshot_count() const { return publisher_.published_snapshot_count(); }
+    uint64_t truncated_value_count() const { return publisher_.truncated_value_count(); }
+    uint32_t stream_catch_up_count() const { return stream_.catch_up_count(); }
+    uint32_t stalled_client_close_count() const { return stream_.stalled_client_close_count(); }
+    size_t catching_up_client_count() { return stream_.catching_up_client_count(); }
+    size_t resumable_rest_response_count() const { return stream_.resumable_rest_response_count(); }
     int write_full_model(char* dst, size_t dst_size) const {
         SignalKFullModelWriter<Real> writer;
         return writer.write(dst, dst_size, store_, config_, loop_.clock().micros());
@@ -256,6 +267,7 @@ private:
     SignalKMiniConfig config_;
     async_event_loop::EventLoop<> loop_;
     ModelStore<Real> store_{};
+    SourceValueRecorder<Real> source_values_{store_};
     Nmea0183Input<Real> nmea_{store_};
     SeaTalkInput<Real> seatalk_{store_};
     UbxInput<Real> ubx_{store_};

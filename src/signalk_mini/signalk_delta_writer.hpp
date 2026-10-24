@@ -50,6 +50,14 @@ public:
         return out.append_json(target);
     }
 
+    // Builds an Object-kind mapped value into `target` (for callers that need
+    // to inspect or split it before serializing).
+    bool build_object_value(const ship_data_model::DataModel<Real>& model,
+                            const SignalKMappedValue<Real>& value,
+                            JsonVariant target) const {
+        return value.kind == SignalKMappedValueKind::Object && write_complex_value(model, value.object_kind, target);
+    }
+
 private:
     JsonObject start_item(JsonDocument& doc, const char* source_label, const char* path) const {
         JsonArray updates = doc["updates"].to<JsonArray>();

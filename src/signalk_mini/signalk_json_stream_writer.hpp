@@ -26,7 +26,17 @@ public:
     }
 
     bool ok() const { return ok_; }
-    size_t size() const { return pos_; }
+    size_t size() const { return ok_ ? pos_ : 0; }
+
+    // Buffer mode only: drop everything written after `mark` (a previous size())
+    // and clear a failure caused by running out of capacity after it.
+    bool rewind(size_t mark) {
+        if (!dst_ || mark >= capacity_ || mark > pos_) return false;
+        pos_ = mark;
+        dst_[pos_] = '\0';
+        ok_ = true;
+        return true;
+    }
 
     bool append_raw(const char* text) {
         if (!text) return append_raw("");
@@ -38,9 +48,14 @@ public:
     }
 
     bool append_quoted(const char* text) {
+        return append_quoted(text, text ? strlen(text) : 0);
+    }
+
+    // Quotes at most `len` bytes of `text` (stopping early at a NUL).
+    bool append_quoted(const char* text, size_t len) {
         if (!append_char('"')) return false;
         if (text) {
-            for (const char* p = text; *p; ++p) {
+            for (const char* p = text; p < text + len && *p; ++p) {
                 const char c = *p;
                 switch (c) {
                 case '"': if (!append_raw("\\\"")) return false; break;
@@ -137,9 +152,8 @@ private:
     }
 
     bool fail() {
+        // Keep the bytes written so far so rewind() can recover a partial value.
         ok_ = false;
-        if (dst_ && capacity_ > 0) dst_[0] = '\0';
-        pos_ = 0;
         return false;
     }
 

@@ -86,6 +86,15 @@ public:
         return false;
     }
 
+    // For HTTP responses kept open with WebSocketServerHandler::hold_http_response().
+    virtual void on_http_write_ready(ITcpConnection& connection) {
+        (void)connection;
+    }
+
+    virtual void on_http_closed(ITcpConnection& connection) {
+        (void)connection;
+    }
+
     virtual bool accept_websocket_request(const websocket::HandshakeRequest& request) {
         (void)request;
         return true;
@@ -142,6 +151,10 @@ public:
             try_close_drained_http(*slot);
             return;
         }
+        if (slot->state == State::HttpStreaming) {
+            drain_input(connection);
+            return;
+        }
 
         while (connection.valid()) {
             if (slot->input_size < sizeof(slot->input) && connection.readable()) {
@@ -174,6 +187,10 @@ public:
             try_close_drained_http(*slot);
             return;
         }
+        if (slot->state == State::HttpStreaming) {
+            handler_.on_http_write_ready(connection);
+            return;
+        }
         check_backpressure(*slot);
     }
 
@@ -181,6 +198,7 @@ public:
         Slot* slot = find(connection);
         if (!slot) return;
         const bool was_open = slot->state == State::Open;
+        if (slot->state == State::HttpStreaming) handler_.on_http_closed(connection);
         release(connection);
         if (was_open) handler_.on_websocket_close(connection);
     }
@@ -189,7 +207,11 @@ public:
         (void)error_code;
         Slot* slot = find(connection);
         if (!slot) return;
-        if (slot->state != State::HttpClosing) handler_.on_websocket_error(connection, WebSocketError::ProtocolError);
+        if (slot->state == State::HttpStreaming) {
+            handler_.on_http_closed(connection);
+        } else if (slot->state != State::HttpClosing) {
+            handler_.on_websocket_error(connection, WebSocketError::ProtocolError);
+        }
         release(connection);
     }
 
@@ -199,6 +221,35 @@ public:
         size_t frame_len = 0;
         if (!websocket::encode_text_frame(text, text_len, frame, sizeof(frame), frame_len)) return false;
         return write_all(connection, frame, frame_len);
+    }
+
+    // Called from on_http_request: the handler will keep writing the response
+    // later (for example as output drains) and calls finish_http_response().
+    bool hold_http_response(ITcpConnection& connection) {
+        Slot* slot = find(connection);
+        if (!slot || slot->state != State::Handshaking) return false;
+        slot->http_hold = true;
+        return true;
+    }
+
+    // Closes a held HTTP response once its queued output has drained.
+    void finish_http_response(ITcpConnection& connection) {
+        Slot* slot = find(connection);
+        if (slot && slot->state == State::HttpStreaming) begin_http_close(*slot);
+    }
+
+    // Closes a connection owned by this handler, notifying the handler
+    // (on_websocket_close or on_http_closed) before the slot is released.
+    void close_connection(ITcpConnection& connection) {
+        Slot* slot = find(connection);
+        if (slot) close_slot(*slot, true);
+        else connection.close();
+    }
+
+    // Drops a held HTTP response immediately (on_http_closed is called).
+    void abort_http_response(ITcpConnection& connection) {
+        Slot* slot = find(connection);
+        if (slot && slot->state == State::HttpStreaming) close_slot(*slot, false);
     }
 
     bool write_close(ITcpConnection& connection) {
@@ -221,12 +272,13 @@ public:
     }
 
 private:
-    enum class State : uint8_t { Empty, Handshaking, Open, HttpClosing };
+    enum class State : uint8_t { Empty, Handshaking, Open, HttpClosing, HttpStreaming };
 
     struct Slot {
         ITcpConnection* connection = nullptr;
         TcpPeerInfo peer{};
         State state = State::Empty;
+        bool http_hold = false;
         size_t input_size = 0;
         uint8_t input[HandshakeBufferSize + ChunkSize + 16]{};
         uint8_t chunk[ChunkSize + 1]{};
@@ -280,6 +332,7 @@ private:
     }
 
     static void reset_stream_state(Slot& slot) {
+        slot.http_hold = false;
         slot.input_size = 0;
         slot.chunk_size = 0;
         slot.control_size = 0;
@@ -333,7 +386,13 @@ private:
             if (handler_.on_http_request(*slot.connection, slot.peer,
                                          reinterpret_cast<const char*>(slot.input), header_len)) {
                 consume(slot, header_len);
-                begin_http_close(slot);
+                if (slot.connection && slot.http_hold) {
+                    slot.state = State::HttpStreaming;
+                    drain_input(*slot.connection);
+                    slot.input_size = 0;
+                } else {
+                    begin_http_close(slot);
+                }
                 return slot.connection != nullptr;
             }
             fail_and_close(slot, parsed == websocket::HandshakeResult::UnsupportedVersion
@@ -570,6 +629,7 @@ private:
         ITcpConnection* connection = slot.connection;
         if (!connection) return;
         const bool was_open = slot.state == State::Open;
+        if (slot.state == State::HttpStreaming) handler_.on_http_closed(*connection);
         release(*connection);
         if (notify_close && was_open) handler_.on_websocket_close(*connection);
         connection->close();
