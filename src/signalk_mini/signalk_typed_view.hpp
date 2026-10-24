@@ -34,6 +34,11 @@ public:
         return true;
     }
 
+    // current_value() restricted to the field that wins its Signal K path.
+    bool selected_current_value(ModelField field, SignalKMappedValue<Real>& out) const {
+        return current_value(field, out) && is_selected_path_candidate(static_cast<size_t>(field), out);
+    }
+
     template<typename Callback>
     void for_each_current_value(Callback callback) const {
         const size_t count = static_cast<size_t>(ModelField::Count);
