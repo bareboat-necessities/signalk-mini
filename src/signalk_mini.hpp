@@ -20,5 +20,6 @@
 #include "signalk_mini/signalk_full_model_writer.hpp"
 #include "signalk_mini/signalk_identity.hpp"
 #include "signalk_mini/publisher.hpp"
+#include "signalk_mini/signalk_stream_command.hpp"
 #include "signalk_mini/server.hpp"
 #include "signalk_mini/app.hpp"

@@ -15,6 +15,7 @@
 #include "signalk_hello_writer.hpp"
 #include "signalk_http.hpp"
 #include "signalk_json_stream_writer.hpp"
+#include "signalk_stream_command.hpp"
 
 namespace signalk_mini {
 
@@ -91,37 +92,6 @@ private:
         async_event_loop::TcpLineServerOptions options;
         options.backpressure = signalk_backpressure_options();
         return options;
-    }
-
-    static bool is_space(char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; }
-
-    static bool line_starts_with(const char* text, const char* prefix) {
-        return text && prefix && strncmp(text, prefix, strlen(prefix)) == 0;
-    }
-
-    static bool is_subscribe_all_text(const char* source) {
-        char text[256];
-        if (!source) return false;
-        size_t n = strlen(source);
-        if (n >= sizeof(text)) n = sizeof(text) - 1;
-        memcpy(text, source, n);
-        text[n] = '\0';
-        char* begin = text;
-        while (*begin && is_space(*begin)) ++begin;
-        char* end = begin + strlen(begin);
-        while (end > begin && is_space(end[-1])) --end;
-        *end = '\0';
-
-        if (strcmp(begin, "*") == 0 || strcmp(begin, "subscribe") == 0 || strcmp(begin, "subscribe all") == 0) return true;
-        if (line_starts_with(begin, "SUBSCRIBE") || line_starts_with(begin, "Subscribe")) return true;
-        if (begin[0] == '{' && strstr(begin, "subscribe") && (strstr(begin, "all") || strstr(begin, "*") || strstr(begin, "path"))) return true;
-        return false;
-    }
-
-    static bool is_subscribe_all_line(async_event_loop::LineView line) {
-        char text[256];
-        async_event_loop::line_to_cstr(line, text);
-        return is_subscribe_all_text(text);
     }
 
     static size_t signalk_text_len(const char* json, size_t len) {
@@ -228,7 +198,10 @@ private:
         }
         void on_line(async_event_loop::ITcpConnection& connection, async_event_loop::LineView line) override {
             if (!connections.allow_rx(connection)) return;
-            if (owner.is_subscribe_all_line(line)) {
+            const SignalKStreamCommand command = signalk_stream_command(line.data, line.size);
+            if (command == SignalKStreamCommand::Unsubscribe) {
+                connections.set_allow_tx(connection, false);
+            } else if (command == SignalKStreamCommand::SubscribeAll) {
                 connections.set_allow_tx(connection, owner.config_.signalk.allow_tx);
                 if (owner.config_.signalk.allow_tx) owner.send_current_values_tcp(connection);
             }
@@ -285,11 +258,10 @@ private:
 
         void on_websocket_text(async_event_loop::ITcpConnection& connection, const char* text, size_t len) override {
             if (!connections.allow_rx(connection)) return;
-            char copy[256];
-            const size_t copy_len = len < sizeof(copy) ? len : sizeof(copy) - 1;
-            if (text && copy_len > 0) memcpy(copy, text, copy_len);
-            copy[copy_len] = '\0';
-            if (owner.is_subscribe_all_text(copy)) {
+            const SignalKStreamCommand command = signalk_stream_command(text, len);
+            if (command == SignalKStreamCommand::Unsubscribe) {
+                connections.set_allow_tx(connection, false);
+            } else if (command == SignalKStreamCommand::SubscribeAll) {
                 connections.set_allow_tx(connection, owner.config_.signalk.websocket.allow_tx);
                 if (owner.config_.signalk.websocket.allow_tx) owner.send_current_values_websocket(connection, true);
             }
