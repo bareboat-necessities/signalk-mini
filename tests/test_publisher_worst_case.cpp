@@ -31,7 +31,8 @@ std::set<std::string> check_deltas(const std::vector<std::string>& deltas) {
         REQUIRE(delta.size() < EmbeddedBuffer);
         JsonDocument doc;
         REQUIRE(!deserializeJson(doc, delta));
-        for (JsonVariantConst value : doc["updates"][0]["values"].as<JsonArrayConst>()) {
+        const JsonArrayConst values = doc["updates"][0]["values"];
+        for (JsonVariantConst value : values) {
             REQUIRE(!value["value"].isNull());
             paths.insert(value["path"] | "");
         }

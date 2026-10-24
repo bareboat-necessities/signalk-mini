@@ -45,7 +45,8 @@ std::set<std::string> paths_of(const std::vector<std::string>& deltas, size_t ma
         JsonDocument doc;
         REQUIRE(!deserializeJson(doc, delta));
         const char* context = doc["context"] | "";
-        for (JsonVariantConst value : doc["updates"][0]["values"].as<JsonArrayConst>()) {
+        const JsonArrayConst values = doc["updates"][0]["values"];
+        for (JsonVariantConst value : values) {
             REQUIRE(!value["value"].isNull());
             paths.insert(std::string(context) + "|" + (value["path"] | ""));
         }

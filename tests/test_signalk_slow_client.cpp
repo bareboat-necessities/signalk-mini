@@ -200,7 +200,8 @@ void test_slow_client_gets_whole_deltas_then_catches_up() {
         JsonDocument doc;
         REQUIRE(!deserializeJson(doc, line));
         ++lines;
-        for (JsonVariantConst value : doc["updates"][0]["values"].as<JsonArrayConst>()) {
+        const JsonArrayConst values = doc["updates"][0]["values"];
+        for (JsonVariantConst value : values) {
             if (std::strcmp(value["path"] | "", "environment.wind.speedApparent") == 0) last_speed = value["value"].as<double>();
         }
     }

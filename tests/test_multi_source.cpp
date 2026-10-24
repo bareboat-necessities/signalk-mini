@@ -110,7 +110,8 @@ void test_deltas_carry_each_sources_own_value() {
     for (const std::string& delta : sink.deltas) {
         JsonDocument doc;
         REQUIRE(!deserializeJson(doc, delta));
-        for (JsonVariantConst value : doc["updates"][0]["values"].as<JsonArrayConst>()) {
+        const JsonArrayConst values = doc["updates"][0]["values"];
+        for (JsonVariantConst value : values) {
             const char* path = value["path"] | "";
             if (std::strcmp(path, "navigation.speedOverGround") == 0) speeds.push_back(value["value"].as<double>());
             if (std::strcmp(path, "navigation.position") == 0) latitudes.push_back(value["value"]["latitude"].as<double>());
