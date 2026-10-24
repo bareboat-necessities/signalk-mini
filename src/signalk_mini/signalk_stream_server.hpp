@@ -158,7 +158,11 @@ private:
         const size_t min_queue = static_cast<size_t>(config_.publisher.json_buffer_size) + 16u;
         size_t configured = config_.signalk.max_client_queue_bytes;
         if (configured != 0 && configured < min_queue) configured = min_queue;
-        const size_t queue_limit = configured != 0 ? configured : signalk_backpressure_options().high_water_bytes;
+        // The configured limit can only lower the high-water mark: above it the
+        // WebSocket protocol handler would close the client on backpressure.
+        const size_t high_water = signalk_backpressure_options().high_water_bytes;
+        size_t queue_limit = configured != 0 ? configured : high_water;
+        if (high_water != 0 && high_water < queue_limit) queue_limit = high_water;
         if (queue_limit != 0 && queue_limit < limit) limit = queue_limit;
         const size_t used = connection.output_size();
         return used >= limit ? 0 : limit - used;

@@ -432,7 +432,7 @@ private:
             "Connection: close\r\n"
             "Access-Control-Allow-Origin: *\r\n"
             "\r\n";
-        if (control_ && count_sink.size + sizeof(ResumableHeader) > control_->room(connection) &&
+        if (control_ && count_sink.size + sizeof(ResumableHeader) - 1 > control_->room(connection) &&
             strlen(relative_path) < RestResumeJob::MaxPathLength) {
             RestResumeJob* job = find_job(nullptr);
             if (!job) {
@@ -444,7 +444,9 @@ private:
             memcpy(job->path, relative_path, strlen(relative_path) + 1);
             job->now_us = now_us;
             job->last_progress_ms = control_->now_ms();
-            pump_job(*job);
+            // The first pass runs from pump_all() or write-ready, after the
+            // connection has switched to a held response; finish() and
+            // abort() only act on held responses.
             return true;
         }
 
